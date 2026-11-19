@@ -1,8 +1,9 @@
 name: build
 
-# ponytail: private repo -> manual runs only (Actions minutes are metered).
-# When the repo goes public, restore: push (branches: [main]) and pull_request. See COMO HACER PUBLICO.md
 on:
+  push:
+    branches: [main]
+  pull_request:
   workflow_dispatch:
   workflow_call:
 
@@ -20,7 +21,7 @@ jobs:
         include:
           - { name: win-x64, os: windows-latest, platform: win }
           - { name: macos-universal, os: macos-latest, platform: mac }
-          # - { name: linux-x64, os: ubuntu-24.04, platform: linux }   # re-enable when public
+          - { name: linux-x64, os: ubuntu-24.04, platform: linux }
     defaults:
       run:
         shell: bash
