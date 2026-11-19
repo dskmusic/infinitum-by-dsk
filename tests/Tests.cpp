@@ -1,5 +1,6 @@
 // Infinitum unit tests (run with: InfinitumTool test)
 #include "Tests.h"
+#include <juce_audio_formats/juce_audio_formats.h>
 #include <set>
 
 namespace gxtest
@@ -12,14 +13,14 @@ void check (bool ok, const juce::String& what)
     if (! ok) { ++failures; std::printf ("  FAIL: %s\n", what.toRawUTF8()); }
 }
 
-Stats analyse (const juce::AudioBuffer<float>& b)
+Stats analyse (const juce::AudioBuffer<float>& b, int start, int len)
 {
     Stats s;
     double sum = 0, sq = 0;
-    const int n = b.getNumSamples();
+    const int n = len < 0 ? b.getNumSamples() - start : len;
     for (int c = 0; c < b.getNumChannels(); ++c)
     {
-        const float* d = b.getReadPointer (c);
+        const float* d = b.getReadPointer (c, start);
         for (int i = 0; i < n; ++i)
         {
             if (! std::isfinite (d[i])) { s.finite = false; continue; }
@@ -40,15 +41,22 @@ void setParam (InfinitumProcessor& p, const juce::String& id, float plain)
     if (i >= 0) p.setParamPlain (i, plain);
 }
 
-juce::AudioBuffer<float> renderNote (InfinitumProcessor& p, int note, double seconds, double releaseAt, float vel, double sr)
+void setParam (gx::Preset& p, const juce::String& id, float plain)
+{
+    const int i = gx::paramIndex (id);
+    jassert (i >= 0);
+    if (i >= 0) p.params[(size_t) i] = gx::paramDefs()[(size_t) i].range.snapToLegalValue (plain);
+}
+
+juce::AudioBuffer<float> render (const gx::Preset& p, double seconds, double sr, int bs)
 {
     juce::AudioBuffer<float> out (2, (int) (seconds * sr));
-    juce::MidiBuffer m;
-    m.addEvent (juce::MidiMessage::noteOn (1, note, vel), 0);
-    m.addEvent (juce::MidiMessage::noteOff (1, note), (int) (releaseAt * sr));
-    p.renderOffline (out, m, sr, 256);
+    out.clear();
+    gx::renderPreset (p, out, sr, bs);
     return out;
 }
+
+static float db (float x) { return 20.0f * std::log10 (juce::jmax (1.0e-9f, x)); }
 
 static void testParams()
 {
@@ -56,193 +64,230 @@ static void testParams()
     const auto& defs = gx::paramDefs();
     check ((int) defs.size() == gx::P::numParams, "param count");
     std::set<juce::String> ids;
+    bool ok = true;
     for (int i = 0; i < (int) defs.size(); ++i)
     {
-        check (defs[(size_t) i].index == i, "index filled " + juce::String (i));
-        check (ids.insert (defs[(size_t) i].id).second, "unique id " + defs[(size_t) i].id);
-        check (defs[(size_t) i].range.start <= defs[(size_t) i].def && defs[(size_t) i].def <= defs[(size_t) i].range.end, "default in range " + defs[(size_t) i].id);
+        ok &= defs[(size_t) i].index == i && defs[(size_t) i].id.isNotEmpty();
+        ok &= defs[(size_t) i].range.getRange().contains (defs[(size_t) i].def) || defs[(size_t) i].range.end == defs[(size_t) i].def;
+        ids.insert (defs[(size_t) i].id);
+        ok &= gx::paramIndex (defs[(size_t) i].id) == i;
     }
-    check ((int) gx::destDefs().size() <= gx::kMaxDests, "dest count fits");
-    InfinitumProcessor p;
-    check ((int) p.getParameters().size() == gx::P::numParams, "host-visible parameter count");
+    check (ok, "indices, defaults inside ranges, lookup");
+    check ((int) ids.size() == gx::P::numParams, "unique ids");
+    for (int s = 0; s < gx::scaleNames().size(); ++s) check (! gx::scaleSteps (s).empty() && gx::scaleSteps (s)[0] == 0, "scale " + gx::scaleNames()[s]);
 }
 
 static void testRender()
 {
     std::puts ("[render]");
-    InfinitumProcessor p;
-    auto b = renderNote (p, 60, 1.5, 1.0);
-    auto s = analyse (b);
-    check (s.finite, "default patch finite");
-    check (s.peak > 0.01f && s.peak < 1.5f, "default patch level " + juce::String (s.peak));
-    check (s.dc < 0.01f, "default patch DC " + juce::String (s.dc));
-    // release tail decays
-    const float* d = b.getReadPointer (0);
-    float tail = 0;
-    for (int i = b.getNumSamples() - 2000; i < b.getNumSamples(); ++i) tail = juce::jmax (tail, std::abs (d[i]));
-    check (tail < 0.01f, "release decays " + juce::String (tail));
+    const double sr = 48000;
+    gx::Preset p;
+    auto b = render (p, 30.0, sr);
+    const auto all = analyse (b);
+    const auto late = analyse (b, (int) (10 * sr));
+    std::printf ("    default preset: rms %.1f dB, peak %.1f dB, dc %.5f\n", db (late.rms), db (all.peak), all.dc);
+    check (all.finite, "finite");
+    check (all.peak < 1.0f, "peak below 0 dBFS");
+    check (late.rms > 0.005f, "audible after the fade-in");
+    check (all.dc < 0.01f, "no DC");
+    check (analyse (b, 0, 256).peak < 0.02f, "starts from silence (fade-in)");
 
-    auto b2 = renderNote (p, 60, 1.5, 1.0);
-    bool same = true;
-    for (int c = 0; c < 2; ++c)
-        for (int i = 0; i < b.getNumSamples(); ++i) same &= b.getSample (c, i) == b2.getSample (c, i);
-    check (same, "offline render deterministic");
-}
-
-static void testOscillators()
-{
-    std::puts ("[oscillators]");
-    for (int type = 0; type < 5; ++type)
-        for (int uni : { 1, 5 })
-        {
-            InfinitumProcessor p;
-            setParam (p, "osc1_type", (float) type);
-            setParam (p, "uni_voices", (float) uni);
-            setParam (p, "osc1_noise", 1);
-            setParam (p, "osc1_fold", 0.3f);
-            setParam (p, "osc1_sync", type == 1 ? 3.0f : 1.0f);
-            setParam (p, "osc1_fm_i3", 0.5f);
-            for (int note : { 24, 60, 100 })
-            {
-                auto s = analyse (renderNote (p, note, 0.6, 0.4));
-                const juce::String tag = "osc type " + juce::String (type) + " uni " + juce::String (uni) + " note " + juce::String (note);
-                check (s.finite, tag + " finite");
-                check (s.rms > 0.002f, tag + " audible rms=" + juce::String (s.rms));
-                check (s.peak < 2.0f, tag + " peak=" + juce::String (s.peak));
-            }
-        }
-    for (int t = 0; t < gx::numBuiltinTables(); ++t)
+    // every layer alone makes sound
+    for (int l = 0; l < gx::kNumLayers; ++l)
     {
-        InfinitumProcessor p;
-        setParam (p, "osc1_type", 0);
-        setParam (p, "osc1_table", (float) t);
-        auto s = analyse (renderNote (p, 48, 0.4, 0.3));
-        check (s.finite && s.rms > 0.002f, "wavetable " + gx::wavetableNames()[t]);
+        gx::Preset q;
+        for (int k = 0; k < gx::kNumLayers; ++k) q.params[(size_t) gx::P::layer (k, gx::P::lOn)] = k == l ? 1.0f : 0.0f;
+        q.params[(size_t) gx::P::layer (l, gx::P::lPresence)] = 1.0f;
+        q.params[(size_t) gx::P::layer (l, gx::P::lLevel)] = 0.8f;
+        if (l == gx::lyBells) q.params[(size_t) gx::P::layer (l, gx::P::lChar)] = 0.9f;
+        auto r = render (q, 20.0, sr);
+        const auto st = analyse (r, (int) (6 * sr));
+        std::printf ("    %-8s rms %.1f dB, peak %.1f dB\n", gx::layerIds()[l].toRawUTF8(), db (st.rms), db (st.peak));
+        check (st.finite && st.rms > 0.0005f && st.peak < 1.0f, "layer alone: " + gx::layerIds()[l]);
     }
+
+    // everything off -> silence
+    gx::Preset off;
+    for (int k = 0; k < gx::kNumLayers; ++k) off.params[(size_t) gx::P::layer (k, gx::P::lOn)] = 0.0f;
+    check (analyse (render (off, 5.0, sr)).peak < 1.0e-6f, "all layers off is silent");
 }
 
-static void testFilters()
+static void testDeterminism()
 {
-    std::puts ("[filters]");
-    for (int t = 0; t < 10; ++t)
-        for (float reso : { 0.0f, 0.95f })
+    std::puts ("[determinism]");
+    const double sr = 44100;
+    gx::Preset p;
+    setParam (p, "seed", 777);
+    setParam (p, "evolution", 0.9f);
+    setParam (p, "chord_rate", 1.0f);
+    setParam (p, "bells_char", 0.9f);
+    const auto a = render (p, 25.0, sr, 512), b = render (p, 25.0, sr, 333), c = render (p, 25.0, sr, 64);
+    float diff = 0, diff2 = 0;
+    for (int ch = 0; ch < 2; ++ch)
+        for (int i = 0; i < a.getNumSamples(); ++i)
         {
-            InfinitumProcessor p;
-            setParam (p, "filter1_type", (float) t);
-            setParam (p, "filter1_cutoff", 1200.0f);
-            setParam (p, "filter1_reso", reso);
-            setParam (p, "filter1_drive", 0.5f);
-            setParam (p, "filter1_env", 0.4f);
-            auto s = analyse (renderNote (p, 48, 0.6, 0.4));
-            const juce::String tag = "filter " + juce::String (t) + " reso " + juce::String (reso);
-            check (s.finite, tag + " finite");
-            check (s.rms > 0.0005f, tag + " audible");
-            check (s.peak < 3.0f, tag + " bounded " + juce::String (s.peak));
+            diff = juce::jmax (diff, std::abs (a.getSample (ch, i) - b.getSample (ch, i)));
+            diff2 = juce::jmax (diff2, std::abs (a.getSample (ch, i) - c.getSample (ch, i)));
         }
+    std::printf ("    max diff 512 vs 333: %g, 512 vs 64: %g\n", (double) diff, (double) diff2);
+    check (diff < 1.0e-5f && diff2 < 1.0e-5f, "identical output for any block size");
+
+    setParam (p, "seed", 778);
+    const auto d = render (p, 25.0, sr, 512);
+    float sep = 0;
+    for (int i = 0; i < a.getNumSamples(); ++i) sep = juce::jmax (sep, std::abs (a.getSample (0, i) - d.getSample (0, i)));
+    check (sep > 0.01f, "another seed sounds different");
 }
 
-static void testFxAndRhythm()
+static void testTransport()
 {
-    std::puts ("[fx + rhythm]");
-    InfinitumProcessor p;
-    for (auto id : { "dist_on", "chorus_on", "flanger_on", "phaser_on", "delay_on", "reverb_on", "comp_on", "eq_on", "crush_on", "wide_on", "shimmer_on", "granular_on" })
-        setParam (p, id, 1);
-    setParam (p, "eq_lo_g", 6);
-    setParam (p, "arp_on", 1);
-    setParam (p, "tg_on", 1);
-    setParam (p, "chord", 4);
-    setParam (p, "mod1_src", (float) gx::msLfo1);
-    setParam (p, "mod1_dst", (float) gx::destIndex ("filter1_cutoff"));
-    setParam (p, "mod1_amt", 0.5f);
-    setParam (p, "mod2_src", (float) gx::msStepSeq);
-    setParam (p, "mod2_dst", (float) gx::destIndex ("reverb_mix"));
-    setParam (p, "mod2_amt", 0.3f);
-    auto s = analyse (renderNote (p, 57, 3.0, 2.0));
-    check (s.finite, "all fx + arp + gate finite");
-    check (s.rms > 0.001f, "all fx audible");
-    check (s.peak < 4.01f, "all fx bounded");
-}
+    std::puts ("[transport]");
+    const double sr = 48000;
+    gx::Engine e;
+    e.prepare (sr, 512);
+    gx::Preset p;
+    p.params[(size_t) gx::P::fadeIn] = 1.0f;
+    p.params[(size_t) gx::P::fadeOut] = 2.0f;
+    juce::AudioBuffer<float> b (2, 512);
+    juce::MidiBuffer none;
+    gx::HostInfo hi;
+    auto run = [&] (double secs) { float pk = 0; for (int k = 0; k < (int) (secs * sr / 512); ++k) { e.process (b.getWritePointer (0), b.getWritePointer (1), 512, none, p.params.data(), hi); pk = juce::jmax (pk, b.getMagnitude (0, 512)); } return pk; };
+    check (run (2.0) < 1.0e-6f, "stopped: silent");
+    hi.internalPlay = true;
+    check (run (6.0) > 0.01f, "internal Play: sound");
+    check (e.tele.running.load(), "telemetry running");
+    hi.internalPlay = false;
+    float tail = 1;
+    for (int s = 0; s < 20 && tail > 1.0e-4f; ++s) tail = run (1.0);
+    if (tail > 1.0e-4f) std::printf ("    tail after 20 s: %.1f dB\n", 20.0 * std::log10 (tail));
+    check (tail < 1.0e-4f, "Stop: fades out to silence (tail < 20 s)");
 
-static void testRealtimeConditions()
-{
-    std::puts ("[realtime: sample rates / block sizes / state]");
-    InfinitumProcessor p;
-    for (double sr : { 44100.0, 48000.0, 96000.0, 192000.0 })
-        for (int bs : { 1, 7, 64, 512, 4096 })
+    // DAW transport: playing from a position resyncs; the same position gives the same audio
+    auto fromHost = [&] (int64_t start, double secs)
+    {
+        gx::Engine eng;
+        eng.prepare (sr, 512);
+        gx::HostInfo h; h.hostPlaying = true; h.hasPosition = true; h.hostSample = start;
+        juce::AudioBuffer<float> out (2, (int) (secs * sr));
+        for (int pos = 0; pos + 512 <= out.getNumSamples(); pos += 512)
         {
-            p.prepareToPlay (sr, bs);
-            juce::AudioBuffer<float> b (2, bs);
-            bool ok = true;
-            for (int k = 0; k < juce::jmax (4, 4096 / bs); ++k)
-            {
-                juce::MidiBuffer m;
-                if (k == 0) m.addEvent (juce::MidiMessage::noteOn (1, 64, 0.9f), 0);
-                p.processBlock (b, m);
-                ok &= analyse (b).finite;
-            }
-            check (ok, "sr " + juce::String (sr) + " bs " + juce::String (bs));
+            eng.process (out.getWritePointer (0, pos), out.getWritePointer (1, pos), 512, none, p.params.data(), h);
+            h.hostSample += 512;
         }
-    setParam (p, "filter1_cutoff", 777.0f);
-    setParam (p, "osc2_type", 4);
-    auto pats = p.getPatterns();
-    pats.seq[3] = 0.5f;
-    p.setPatterns (pats);
-    juce::MemoryBlock mb;
-    p.getStateInformation (mb);
-    InfinitumProcessor q;
-    q.setStateInformation (mb.getData(), (int) mb.getSize());
-    check (std::abs (q.getParam (gx::paramIndex ("filter1_cutoff")) - 777.0f) < 0.5f, "state: cutoff restored");
-    check ((int) q.getParam (gx::paramIndex ("osc2_type")) == 4, "state: osc type restored");
-    check (q.getPatterns().seq[3] == 0.5f, "state: patterns restored");
+        return out;
+    };
+    const auto h1 = fromHost (48000 * 30, 6.0), h2 = fromHost (48000 * 30, 6.0);
+    float diff = 0;
+    for (int i = 0; i < h1.getNumSamples(); ++i) diff = juce::jmax (diff, std::abs (h1.getSample (0, i) - h2.getSample (0, i)));
+    check (diff < 1.0e-6f && analyse (h1).rms > 0.001f, "DAW playback from a position is reproducible");
+
+    // session timer: 1 minute -> stops by itself
+    gx::Engine t;
+    t.prepare (sr, 512);
+    gx::Preset tp;
+    tp.params[(size_t) gx::P::timer] = 1;
+    tp.params[(size_t) gx::P::fadeOut] = 3;
+    gx::HostInfo th; th.internalPlay = true;
+    bool expired = false;
+    for (int k = 0; k < (int) (70 * sr / 512) && ! expired; ++k)
+    {
+        t.process (b.getWritePointer (0), b.getWritePointer (1), 512, none, tp.params.data(), th);
+        expired = t.tele.timerExpired.exchange (false);
+        if (expired) check (t.tele.sessionElapsed.load() > 50.0f && t.tele.sessionElapsed.load() < 60.0f, "timer fires before the end minus fade-out");
+    }
+    check (expired, "session timer expires");
+}
+
+static void testMidi()
+{
+    std::puts ("[midi]");
+    const double sr = 48000;
+    gx::Engine e;
+    e.prepare (sr, 512);
+    gx::Preset p;
+    juce::AudioBuffer<float> b (2, 512);
+    gx::HostInfo hi;
+    juce::MidiBuffer m;
+    m.addEvent (juce::MidiMessage::noteOn (1, 62, 0.9f), 100); // D
+    e.process (b.getWritePointer (0), b.getWritePointer (1), 512, m, p.params.data(), hi);
+    juce::MidiBuffer none;
+    float pk = 0;
+    for (int k = 0; k < 100; ++k) { e.process (b.getWritePointer (0), b.getWritePointer (1), 512, none, p.params.data(), hi); pk = juce::jmax (pk, b.getMagnitude (0, 512)); }
+    check (pk > 0.005f, "MIDI notes play even while stopped");
+    hi.internalPlay = true;
+    for (int k = 0; k < 10; ++k) e.process (b.getWritePointer (0), b.getWritePointer (1), 512, none, p.params.data(), hi);
+    check (e.tele.rootPc.load() == 2, "MIDI note sets the key (D)");
+}
+
+static void testExport()
+{
+    std::puts ("[export]");
+    gx::Preset p;
+    juce::AudioFormatManager fm;
+    fm.registerBasicFormats();
+    for (int f = 0; f < 3; ++f)
+    {
+        auto file = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("infinitum_export_test" + gx::exportFormatExtension (f));
+        std::atomic<float> prog { 0 };
+        const auto err = gx::exportAudio (p, file, f, 6.0, 48000.0, &prog);
+        check (err.isEmpty(), "export " + gx::exportFormatExtension (f) + " " + err);
+        std::unique_ptr<juce::AudioFormatReader> r (fm.createReaderFor (file));
+        check (r != nullptr && std::abs ((double) r->lengthInSamples - 6.0 * 48000.0) < 4096 && r->numChannels == 2, "reads back " + gx::exportFormatExtension (f));
+        check (prog.load() > 0.99f, "progress reaches 100%");
+        if (r != nullptr)
+        {
+            juce::AudioBuffer<float> b (2, (int) r->lengthInSamples);
+            r->read (&b, 0, b.getNumSamples(), 0, true, true);
+            check (analyse (b).rms > 0.001f && analyse (b, b.getNumSamples() - 64).peak < 0.01f, "audible, silent at the end " + gx::exportFormatExtension (f));
+        }
+        r.reset();
+        file.deleteFile();
+    }
 }
 
 static void testStress()
 {
-    std::puts ("[stress: note floods, modes, pedal, MPE]");
-    for (int mode = 0; mode < 3; ++mode)
+    std::puts ("[stress]");
+    const double sr = 44100;
+    juce::Random rnd (99);
+    bool ok = true;
+    for (int k = 0; k < 6; ++k)
     {
-        InfinitumProcessor p;
-        setParam (p, "play_mode", (float) mode);
-        setParam (p, "polyphony", 4);
-        setParam (p, "glide", 0.05f);
-        setParam (p, "mpe", 1);
-        setParam (p, "uni_voices", 3);
-        p.prepareToPlay (48000, 128);
-        juce::Random r (mode + 1);
-        bool ok = true;
-        juce::AudioBuffer<float> b (2, 128);
-        for (int k = 0; k < 600; ++k)
-        {
-            juce::MidiBuffer m;
-            for (int e = 0; e < 6; ++e)
-            {
-                const int pos = r.nextInt (128), note = 20 + r.nextInt (90), ch = 1 + r.nextInt (16);
-                switch (r.nextInt (6))
-                {
-                    case 0: case 1: m.addEvent (juce::MidiMessage::noteOn (ch, note, (juce::uint8) (1 + r.nextInt (127))), pos); break;
-                    case 2: m.addEvent (juce::MidiMessage::noteOff (ch, note), pos); break;
-                    case 3: m.addEvent (juce::MidiMessage::controllerEvent (1, 64, r.nextBool() ? 127 : 0), pos); break;
-                    case 4: m.addEvent (juce::MidiMessage::pitchWheel (ch, r.nextInt (16384)), pos); break;
-                    default: m.addEvent (juce::MidiMessage::channelPressureChange (ch, r.nextInt (128)), pos); break;
-                }
-            }
-            if (k == 500) m.addEvent (juce::MidiMessage::allNotesOff (1), 0);
-            p.processBlock (b, m);
-            ok &= analyse (b).finite && analyse (b).peak < 4.01f;
-        }
-        check (ok, "stress mode " + juce::String (mode));
+        gx::Preset p;
+        for (auto& d : gx::paramDefs()) p.params[(size_t) d.index] = d.range.convertFrom0to1 (rnd.nextFloat());
+        p.params[(size_t) gx::P::master] = 6.0f;
+        p.params[(size_t) gx::P::fadeIn] = 0.5f;
+        const auto b = render (p, 8.0, sr, 256);
+        const auto s = analyse (b);
+        ok &= s.finite && s.peak <= 1.0f;
+        if (! s.finite || s.peak > 1.0f) std::printf ("    random patch %d: finite %d peak %.3f\n", k, (int) s.finite, (double) s.peak);
     }
+    check (ok, "random patches stay finite and below 0 dBFS");
+}
+
+static void testCpu()
+{
+    std::puts ("[cpu]");
+    gx::Preset p;
+    for (int l = 0; l < gx::kNumLayers; ++l) { p.params[(size_t) gx::P::layer (l, gx::P::lPresence)] = 1; p.params[(size_t) gx::P::layer (l, gx::P::lLevel)] = 0.7f; }
+    p.params[(size_t) gx::P::density] = 1;
+    const auto t0 = juce::Time::getMillisecondCounterHiRes();
+    render (p, 10.0, 48000.0, 512);
+    const double ms = juce::Time::getMillisecondCounterHiRes() - t0;
+    std::printf ("    all layers at full density: %.1f%% of one core\n", ms / 100.0);
+    check (ms / 100.0 < 40.0, "CPU budget");
 }
 
 int runAll()
 {
-    testStress();
     testParams();
     testRender();
-    testOscillators();
-    testFilters();
-    testFxAndRhythm();
-    testRealtimeConditions();
+    testDeterminism();
+    testTransport();
+    testMidi();
+    testExport();
+    testStress();
+    testCpu();
     for (auto& t : extraTests()) t();
     std::printf ("%d checks, %d failures\n", checks, failures);
     return failures == 0 ? 0 : 1;

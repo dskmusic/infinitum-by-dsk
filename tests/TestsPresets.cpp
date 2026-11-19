@@ -7,18 +7,10 @@ static void testPresets()
 {
     std::puts ("[presets]");
     InfinitumProcessor p;
-    setParam (p, "osc1_type", 4);
-    setParam (p, "filter1_cutoff", 1234.0f);
-    setParam (p, "mod3_src", (float) gx::msLfo2);
-    setParam (p, "mod3_dst", (float) gx::destIndex ("osc1_morph"));
-    setParam (p, "mod3_amt", -0.25f);
-    auto pats = p.getPatterns();
-    pats.arp[2].ratchet = 3; pats.gate[5] = 0.25f; pats.fxOrder = { 5, 4, 3, 2, 1, 0, 6, 7, 8, 9, 10, 11 };
-    pats.lfoTable[1][10] = 0.5f;
-    p.setPatterns (pats);
-    std::vector<std::vector<float>> frames (4, std::vector<float> (2048));
-    for (int f = 0; f < 4; ++f) for (int i = 0; i < 2048; ++i) frames[(size_t) f][(size_t) i] = std::sin (gx::kTwoPi * (float) i / 2048 * (float) (f + 1));
-    p.setUserWavetable (1, gx::Wavetable::fromFrames (frames, "Test WT"));
+    setParam (p, "scale", 4);
+    setParam (p, "high_cut", 1234.0f);
+    setParam (p, "texture_char", 0.25f);
+    setParam (p, "seed", 4242);
 
     auto pr = gx::Preset::capture (p);
     pr.meta.name = "Round Trip"; pr.meta.tags = { "Dark", "Wide" };
@@ -30,9 +22,6 @@ static void testPresets()
     for (size_t i = 0; i < defs.size(); ++i)
         if (std::abs (back.params[i] - pr.params[i]) > 1.0e-4f * juce::jmax (1.0f, std::abs (pr.params[i]))) { same = false; std::printf ("    differs: %s\n", defs[i].id.toRawUTF8()); }
     check (same, "all params round-trip");
-    check (back.patterns.arp[2].ratchet == 3 && back.patterns.gate[5] == 0.25f && back.patterns.fxOrder[0] == 5, "patterns round-trip");
-    check (std::abs (back.patterns.lfoTable[1][10] - 0.5f) < 1e-3f, "lfo table round-trip");
-    check (back.wavetables[1].size() == 4 && back.wavetableNames[1] == "Test WT", "wavetable embedded");
     check (back.meta.name == "Round Trip" && back.meta.tags.contains ("Wide"), "meta round-trip");
     check (back.similarity (pr) > 0.999f, "similarity identical");
     check (gx::Preset().similarity (pr) < 0.999f, "similarity differs");
@@ -41,16 +30,13 @@ static void testPresets()
     juce::var v;
     juce::JSON::parse (json, v);
     v.getProperty ("params", {}).getDynamicObject()->setProperty ("future_param_xyz", 1.0);
-    v.getProperty ("params", {}).getDynamicObject()->removeProperty ("filter2_reso");
+    v.getProperty ("params", {}).getDynamicObject()->removeProperty ("high_cut");
     auto mig = gx::Preset::fromVar (v);
-    check (std::abs (mig.params[(size_t) gx::paramIndex ("filter2_reso")] - defs[(size_t) gx::paramIndex ("filter2_reso")].def) < 1e-6f, "missing param -> default");
+    check (std::abs (mig.params[(size_t) gx::paramIndex ("high_cut")] - defs[(size_t) gx::paramIndex ("high_cut")].def) < 1e-3f, "missing param -> default");
 
-    // apply to a fresh processor
     InfinitumProcessor q;
     back.applyTo (q);
-    check (std::abs (q.getParam (gx::paramIndex ("filter1_cutoff")) - 1234.0f) < 0.5f, "apply: params");
-    check (q.getUserWavetable (1) != nullptr && q.getUserWavetable (1)->numFrames() == 4, "apply: wavetable");
-    check (q.getPatterns().arp[2].ratchet == 3, "apply: patterns");
+    check ((int) q.getParam (gx::paramIndex ("seed")) == 4242, "apply: params");
 }
 
 static void testLibrary()
@@ -63,18 +49,18 @@ static void testLibrary()
         // factory bank of 3
         juce::Array<juce::var> arr;
         const char* names[] { "Deep Sub", "Glass Bell", "Warm Pad" };
-        const char* cats[] { "Bass", "Pluck", "Pad" };
+        const char* cats[] { "Dark", "Ambient", "Cinematic" };
         for (int i = 0; i < 3; ++i) { gx::Preset p; p.meta.name = names[i]; p.meta.category = cats[i]; p.meta.tags = { i == 2 ? "Warm" : "Dark" }; arr.add (p.toVar()); }
         auto* bank = new juce::DynamicObject(); bank->setProperty ("presets", arr);
         lib.setFactoryBank (juce::JSON::toString (juce::var (bank)));
         check (lib.all().size() == 3, "factory loaded");
 
-        gx::Preset u; u.meta.name = "My Lead"; u.meta.category = "Lead"; u.meta.tags = { "Bright" }; u.meta.author = "Tester";
+        gx::Preset u; u.meta.name = "My Lead"; u.meta.category = "Sci-Fi"; u.meta.tags = { "Bright" }; u.meta.author = "Tester";
         check (lib.saveUser (u), "save user");
         check (lib.all().size() == 4, "user added");
         gx::PresetFilter f; f.text = "lead tester";
         check (lib.query (f).size() == 1, "search text across fields");
-        f = {}; f.category = "Pad";
+        f = {}; f.category = "Cinematic";
         check (lib.query (f).size() == 1, "filter category");
         f = {}; f.tags = { "Dark" };
         check (lib.query (f).size() == 2, "filter tags");
@@ -93,7 +79,7 @@ static void testLibrary()
         f = {}; f.favoritesOnly = true;
         check (lib.query (f).size() == 1, "favorites");
         auto m = lib.all()[(size_t) lib.query (f)[0]];
-        m.category = "Bass"; m.folder = "Moved";
+        m.category = "Dark"; m.folder = "Moved";
         lib.createFolder ("Moved");
         check (lib.updateMeta (lib.query (f)[0], m), "move category + folder");
         f = {}; f.folder = "Moved";

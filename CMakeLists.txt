@@ -43,6 +43,9 @@ juce_add_plugin(Infinitum
 file(GLOB_RECURSE INFINITUM_SOURCES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp" "${CMAKE_CURRENT_SOURCE_DIR}/src/*.h")
 list(FILTER INFINITUM_SOURCES EXCLUDE REGEX ".*/src/PluginEntry\\.cpp$")
+if(INFINITUM_NO_UI) # ponytail: temporary engine-only build while the UI is rewritten
+    list(FILTER INFINITUM_SOURCES EXCLUDE REGEX ".*/src/(ui/.*|PluginEditor\\..*|gen/Generator\\..*)$")
+endif()
 
 file(GLOB INFINITUM_RESOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/resources/*")
 if(INFINITUM_RESOURCES)
@@ -80,6 +83,10 @@ target_link_libraries(Infinitum PRIVATE InfinitumShared)
 # ---- Tool: unit tests, offline render, preset validation, factory bank, SFZ, screenshots ----
 juce_add_console_app(InfinitumTool PRODUCT_NAME "InfinitumTool")
 file(GLOB INFINITUM_TOOL_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/tests/*.cpp" "${CMAKE_CURRENT_SOURCE_DIR}/tests/*.h")
+if(INFINITUM_NO_UI)
+    list(FILTER INFINITUM_TOOL_SOURCES EXCLUDE REGEX ".*/tests/(TestsFactory|TestsGen)\\.cpp$")
+    target_compile_definitions(InfinitumShared INTERFACE INFINITUM_NO_UI=1)
+endif()
 target_sources(InfinitumTool PRIVATE ${INFINITUM_TOOL_SOURCES})
 target_include_directories(InfinitumTool PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/tests")
 target_link_libraries(InfinitumTool PRIVATE InfinitumShared)

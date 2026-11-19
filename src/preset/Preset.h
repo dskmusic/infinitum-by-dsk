@@ -11,7 +11,7 @@ constexpr int kPresetFormatVersion = 1;
 
 struct PresetMeta
 {
-    juce::String uuid, name = "Init", category = "Lead", subcategory, author = "DSK Music", notes;
+    juce::String uuid, name = "Init", category = "Ambient", subcategory, author = "DSK Music", notes;
     juce::StringArray tags;
     bool favorite = false, factory = false;
     int rating = 0, uses = 0;
@@ -20,19 +20,15 @@ struct PresetMeta
     juce::File file;          // user preset file (empty for factory presets)
 };
 
-// Full preset content (everything needed to reproduce a sound).
+// Full preset content: metadata + every parameter (plain values, indexed like paramDefs()).
 struct Preset
 {
     PresetMeta meta;
-    std::vector<float> params;                 // plain values, indexed like paramDefs()
-    Patterns patterns;
-    std::array<std::vector<std::vector<float>>, kNumOsc> wavetables; // user tables (empty = none)
-    std::array<juce::String, kNumOsc> wavetableNames;
-    std::vector<float> sample; double sampleRate = 44100; int sampleRoot = 60; juce::String sampleName;
+    std::vector<float> params;
 
     Preset();                                   // = init patch (all defaults)
     juce::var toVar (bool includeMeta = true) const;
-    static Preset fromVar (const juce::var& v); // migrates older versions, ignores unknown ids
+    static Preset fromVar (const juce::var& v); // ignores unknown ids, missing ones keep their default
     juce::String toJson() const;
     static bool fromJson (const juce::String& json, Preset& out);
     bool saveTo (const juce::File& f) const;
@@ -41,12 +37,13 @@ struct Preset
     static Preset capture (InfinitumProcessor& p);
     void applyTo (InfinitumProcessor& p) const;
 
-    // structural similarity 0..1 (1 = identical), used for duplicate detection
-    float similarity (const Preset& other) const;
+    float similarity (const Preset& other) const; // 0..1 (1 = identical), duplicate detection
+    float get (int index) const { return params[(size_t) index]; }
 };
 
-// Category tree shared by the generator, the manager and the factory bank.
+// Moods (categories) shared by the generator, the browser and the factory bank.
 const juce::StringArray& categories();
 const juce::StringArray& subcategories (const juce::String& category);
 const juce::StringArray& characterTags();
+juce::String categoryLabel (const juce::String& category); // localized
 }

@@ -1,6 +1,7 @@
 #include "PluginProcessor.h"
-#include "PluginEditor.h"
-#include "preset/Render.h"
+#if ! INFINITUM_NO_UI
+ #include "PluginEditor.h"
+#endif
 
 InfinitumProcessor::InfinitumProcessor()
     : AudioProcessor (BusesProperties().withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
@@ -13,8 +14,6 @@ InfinitumProcessor::InfinitumProcessor()
     }
     clearMidiLearn();
     snapshot.assign (raw.size(), 0.0f);
-    for (auto& t : userTables) t.store (nullptr);
-    sharedPatterns.write (patterns);
 }
 
 InfinitumProcessor::~InfinitumProcessor() = default;
@@ -33,13 +32,14 @@ bool InfinitumProcessor::isBusesLayoutSupported (const BusesLayout& l) const
 void InfinitumProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
 {
     juce::ScopedNoDenormals nd;
+    for (int c = 2; c < buffer.getNumChannels(); ++c) buffer.clear (c, 0, buffer.getNumSamples());
     keyboardState.processNextMidiBuffer (midi, 0, buffer.getNumSamples(), true);
     for (const auto meta : midi)
     {
         const auto m = meta.getMessage();
         if (! m.isController()) continue;
         const int cc = m.getControllerNumber();
-        if (cc == 1 || cc == 64 || cc == 74 || cc >= 120) continue; // reserved controllers
+        if (cc == 64 || cc >= 120) continue; // reserved controllers
         if (const int lp = learnParam.exchange (-1); lp >= 0)
         {
             for (auto& c : ccMap) if (c.load() == lp) c.store (-1);
@@ -49,31 +49,29 @@ void InfinitumProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::M
             paramPtrs[(size_t) pi]->setValueNotifyingHost ((float) m.getControllerValue() / 127.0f);
     }
     for (size_t i = 0; i < raw.size(); ++i) snapshot[i] = raw[i]->load (std::memory_order_relaxed);
-    sharedPatterns.read (audioPatterns);
 
-    gx::Transport tr;
+    gx::HostInfo hi;
+    hi.internalPlay = playRequested.load();
     if (auto* ph = getPlayHead())
         if (auto pos = ph->getPosition())
         {
-            if (auto bpm = pos->getBpm()) tr.bpm = *bpm;
-            if (auto ppq = pos->getPpqPosition()) tr.ppq = *ppq;
-            tr.playing = pos->getIsPlaying() && pos->getPpqPosition().hasValue();
+            hi.hostPlaying = pos->getIsPlaying();
+            if (auto t = pos->getTimeInSamples()) { hi.hasPosition = true; hi.hostSample = *t; }
         }
+    hostPlaying.store (hi.hostPlaying);
 
-    std::array<const gx::Wavetable*, gx::kNumOsc> ut {};
-    for (int i = 0; i < gx::kNumOsc; ++i) ut[(size_t) i] = userTables[(size_t) i].load (std::memory_order_acquire);
-
-    const int total = buffer.getNumSamples();
-    engine.process (buffer, midi, snapshot.data(), audioPatterns, tr, ut, samplePtr.load (std::memory_order_acquire));
+    const int n = buffer.getNumSamples();
+    engine.process (buffer.getWritePointer (0), buffer.getWritePointer (1), n, midi, snapshot.data(), hi);
+    if (engine.tele.timerExpired.exchange (false)) playRequested.store (false); // session timer: fade out and stop
 
     const float* L = buffer.getReadPointer (0);
     const float* R = buffer.getReadPointer (1);
     float pl = 0, pr = 0, sq = 0;
-    for (int i = 0; i < total; ++i) { pl = juce::jmax (pl, std::abs (L[i])); pr = juce::jmax (pr, std::abs (R[i])); sq += L[i] * L[i] + R[i] * R[i]; }
+    for (int i = 0; i < n; ++i) { pl = juce::jmax (pl, std::abs (L[i])); pr = juce::jmax (pr, std::abs (R[i])); sq += L[i] * L[i] + R[i] * R[i]; }
     peakL.store (juce::jmax (pl, peakL.load() * 0.9f));
     peakR.store (juce::jmax (pr, peakR.load() * 0.9f));
-    rms.store (std::sqrt (sq / juce::jmax (1, total * 2)));
-    pushScope (L, R, total);
+    rms.store (std::sqrt (sq / (float) juce::jmax (1, n * 2)));
+    pushScope (L, R, n);
 }
 
 void InfinitumProcessor::pushScope (const float* L, const float* R, int n)
@@ -93,37 +91,15 @@ int InfinitumProcessor::readScope (float* dest, int maxSamples)
 
 void InfinitumProcessor::setParamPlain (int index, float plain)
 {
-    if (auto* prm = apvts.getParameter (gx::paramDefs()[(size_t) index].id))
+    if (auto* prm = paramPtrs[(size_t) index])
         prm->setValueNotifyingHost (prm->convertTo0to1 (plain));
 }
 
-void InfinitumProcessor::setUserWavetable (int osc, std::unique_ptr<gx::Wavetable> t)
-{
-    userTables[(size_t) osc].store (t.get(), std::memory_order_release);
-    if (t) tableStore.push_back (std::move (t));
-    // ponytail: keep the last 12 tables alive; the audio thread only holds a pointer for one block.
-    while (tableStore.size() > 12)
-    {
-        bool inUse = false;
-        for (auto& u : userTables) inUse |= u.load() == tableStore.front().get();
-        if (inUse) break;
-        tableStore.erase (tableStore.begin());
-    }
-}
-
-void InfinitumProcessor::setSample (std::unique_ptr<gx::SampleData> s)
-{
-    samplePtr.store (s.get(), std::memory_order_release);
-    if (s) sampleStore.push_back (std::move (s));
-    while (sampleStore.size() > 4 && sampleStore.front().get() != samplePtr.load()) sampleStore.erase (sampleStore.begin());
-}
-
-void InfinitumProcessor::renderOffline (juce::AudioBuffer<float>& out, const juce::MidiBuffer& midi, double sampleRate, int blockSize)
-{
-    gx::renderPreset (gx::Preset::capture (*this), midi, sampleRate, blockSize, out);
-}
-
+#if INFINITUM_NO_UI
+juce::AudioProcessorEditor* InfinitumProcessor::createEditor() { return new juce::GenericAudioProcessorEditor (*this); }
+#else
 juce::AudioProcessorEditor* InfinitumProcessor::createEditor() { return new InfinitumEditor (*this); }
+#endif
 
 void InfinitumProcessor::getStateInformation (juce::MemoryBlock& mb)
 {

@@ -24,8 +24,7 @@ public:
     bool acceptsMidi() const override { return true; }
     bool producesMidi() const override { return false; }
     bool isMidiEffect() const override { return false; }
-    double getTailLengthSeconds() const override { return 4.0; }
-    bool supportsMPE() const override { return true; }
+    double getTailLengthSeconds() const override { return 12.0; }
 
     int getNumPrograms() override { return 1; }
     int getCurrentProgram() override { return 0; }
@@ -38,22 +37,18 @@ public:
 
     // ---- message-thread API
     juce::AudioProcessorValueTreeState apvts;
-    const gx::Patterns& getPatterns() const { return patterns; }
-    void setPatterns (const gx::Patterns& p) { patterns = p; sharedPatterns.write (patterns); }
-    void setUserWavetable (int osc, std::unique_ptr<gx::Wavetable> t);
-    const gx::Wavetable* getUserWavetable (int osc) const { return userTables[(size_t) osc].load(); }
-    void setSample (std::unique_ptr<gx::SampleData> s);
-    const gx::SampleData* getSample() const { return samplePtr.load(); }
     float getParam (int index) const { return raw[(size_t) index]->load (std::memory_order_relaxed); }
     void setParamPlain (int index, float plainValue); // notifies host
     gx::Telemetry& telemetry() { return engine.tele; }
-    gx::PresetMeta currentMeta;          // metadata of the loaded preset
-    std::atomic<int> presetGeneration { 0 }; // bumped whenever a full state/preset is applied (UI polls)
-    gx::GenHistory genHistory { 200 };      // generator ◀ ▶ history: current session only (UI thread)
+    gx::PresetMeta currentMeta;               // metadata of the loaded preset
+    std::atomic<int> presetGeneration { 0 };  // bumped whenever a full state/preset is applied (UI polls)
+    gx::GenHistory genHistory { 200 };         // generator history: current session only (UI thread)
 
-    // Offline rendering helper (tool/tests/SFZ export): resets voices, deterministic.
-    void renderOffline (juce::AudioBuffer<float>& out, const juce::MidiBuffer& midi, double sampleRate, int blockSize);
-    void resetEngine() { engine.reset(); }
+    // Internal Play/Stop (runtime only, never saved: a project must not start playing on load).
+    // The DAW transport also starts the engine; either one is enough.
+    void setPlaying (bool b) { playRequested.store (b); }
+    bool isPlayingInternal() const { return playRequested.load(); }
+    bool isHostPlaying() const { return hostPlaying.load(); }
 
     // Scope / meter feed (lock-free SPSC)
     int readScope (float* dest, int maxSamples);
@@ -72,15 +67,9 @@ private:
     std::vector<std::atomic<float>*> raw;
     std::vector<juce::RangedAudioParameter*> paramPtrs;
     std::vector<float> snapshot;
-    gx::Patterns patterns, audioPatterns;
-    gx::SharedPatterns sharedPatterns;
-    std::array<std::atomic<const gx::Wavetable*>, gx::kNumOsc> userTables {};
-    std::vector<std::unique_ptr<gx::Wavetable>> tableStore; // ownership (message thread)
-    std::atomic<const gx::SampleData*> samplePtr { nullptr };
-    std::vector<std::unique_ptr<gx::SampleData>> sampleStore;
+    std::atomic<bool> playRequested { false }, hostPlaying { false };
     juce::AbstractFifo scopeFifo { 32768 };
     std::vector<float> scopeBuf = std::vector<float> (32768, 0.0f);
-    double internalPpq = 0.0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (InfinitumProcessor)
 };

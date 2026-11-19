@@ -1,150 +1,150 @@
 #pragma once
 #include "Common.h"
-#include "Envelope.h"
 #include "Filters.h"
-#include "Wavetable.h"
-#include "Rhythm.h"
-#include "Effects.h"
+#include "Space.h"
+#include "Genome.h"
 #include <juce_dsp/juce_dsp.h>
-#include <vector>
 
+// Infinitum engine: six self-playing layers whose presence, timbre and harmony evolve slowly.
+// Determinism: every control decision happens on an absolute 32-sample tick grid and every random
+// choice comes from (seed, time slot) hashes or RNGs reseeded on reset, so the output does not depend
+// on the host block size and a DAW bounce matches playback (the engine resets when the transport starts
+// or jumps).
 namespace gx
 {
-struct SampleData
+constexpr int kCtrl = 32, kMutPeriod = 1024, kMutTable = 512;
+constexpr int kChordVoices = 5, kMidiVoices = 6, kPadVoices = kChordVoices + kMidiVoices, kGrains = 40, kBellVoices = 12;
+
+struct HostInfo
 {
-    std::vector<float> data; // mono
-    double sampleRate = 44100.0;
-    int rootNote = 60;
-    juce::String name;
+    bool hostPlaying = false, hasPosition = false, internalPlay = false;
+    int64_t hostSample = 0;
 };
 
-struct Transport
-{
-    double bpm = 120.0, ppq = 0.0;
-    bool playing = false;
-};
-
-// Values published to the UI (relaxed atomics, written once per block).
+// Values published to the UI (relaxed atomics, written once per control tick / block).
 struct Telemetry
 {
-    std::atomic<uint32_t> voiceMask { 0 };
-    std::atomic<int> activeVoices { 0 }, lastNote { -1 }, arpStep { -1 }, gateStep { -1 }, seqStep { -1 };
-    std::atomic<float> lastVelocity { 0 }, gateLevel { 1 }, seqValue { 0 };
-    std::array<std::atomic<float>, kNumEnv> env {};
-    std::array<std::atomic<float>, kNumLfo> lfo {};
-    std::array<std::atomic<float>, kNumOsc> oscMorph {};
-    std::array<std::atomic<float>, kNumFilters> cutoff {};
-    std::array<std::atomic<int>, kMaxVoices> voiceNote {};
-    std::array<std::atomic<float>, kMaxVoices> voiceLevel {};
-    std::array<std::atomic<float>, kNumMacros> macro {};
+    std::array<std::atomic<float>, kNumLayers> presence {}, energy {};
+    std::array<std::atomic<int>, kChordVoices> chordNotes {};
+    std::atomic<int> rootPc { 9 }, chordDegree { 0 }, bellCount { 0 }, lastBellNote { 72 };
+    std::atomic<float> runGain { 0 }, evoTime { 0 }, musTime { 0 }, sessionElapsed { 0 }, lastBellPan { 0 }, energyAll { 0 };
+    std::atomic<bool> running { false }, timerExpired { false };
 };
 
-constexpr int kMaxDests = 256, kFxBlock = 512;
-
-struct MutationState
+struct MutOsc
 {
-    float table[2][513] {};
-    int cur = 0, counter = 0;
+    float table[2][kMutTable + 1] {};
+    int cur = 0, counter = kMutPeriod;
     float dom[kGenomeHarm] {}, target[kGenomeHarm] {}, speed[kGenomeHarm] {}, phase[kGenomeHarm] {};
     Rng rng { 99 };
 };
 
-struct OscRuntime
+struct PadVoice
 {
-    float ph[kMaxUnison] {}, mph[kMaxUnison] {}, prev[kMaxUnison] {};
-    float fm[kMaxUnison][4] {}, fb[kMaxUnison] {};
-    float smp[kMaxUnison] {};
-    float pink[7] {}, brown = 0, color = 0, crackle = 0, digVal = 0, digPh = 0;
-    MutationState mut;
+    float note = 60, target = 60, gain = 0, gainTarget = 0, attackCoef = 0, releaseCoef = 0, pan = 0;
+    float ph[4] {}, inc[4] {};
+    Svf f[2];
+    bool midi = false;
+    int midiNote = -1, age = 0;
 };
 
-class Engine;
+struct Grain { bool on = false; float pos = 0, inc = 1, len = 0, t = 0, panL = 1, panR = 1; };
 
-struct Voice
+struct Bell
 {
-    bool active = false, released = false, sustained = false;
-    int note = 60, channel = 1, age = 0;
-    float velocity = 1, curNote = 60, targetNote = 60, randomVal = 0, pressure = 0, slide = 0, bend = 0;
-    float timeOn = 0, ampPrev = 0;
-    std::array<Envelope, kNumEnv> env;
-    std::array<LfoState, kNumLfo> lfo;
-    std::array<OscRuntime, kNumOsc> osc;
-    std::array<std::array<FilterChannel, 2>, kNumFilters> filt;
-    std::array<float, kNumFilters> cutoffSmooth {};
-    float modN[kMaxDests] {}; // normalized modulation per destination index
-    std::array<float, kNumLfo> lastLfo {};
-    Rng rng { 1 };
+    bool on = false;
+    float ph = 0, mph = 0, inc = 0, minc = 0, idx = 0, idxCoef = 0, amp = 0, ampCoef = 0, panL = 1, panR = 1;
 };
 
 class Engine
 {
 public:
-    Engine();
     void prepare (double sampleRate, int maxBlock);
-    void reset();
-    void process (juce::AudioBuffer<float>& out, const juce::MidiBuffer& midi, const float* params,
-                  const Patterns& pat, const Transport& tr, const std::array<const Wavetable*, kNumOsc>& userTables,
-                  const SampleData* sample);
-    void allNotesOff();
+    void reset (uint32_t seed);                    // full state reset (fresh, deterministic)
+    void process (float* L, float* R, int n, const juce::MidiBuffer& midi, const float* params, const HostInfo& host);
     Telemetry tele;
     double getSampleRate() const { return sr; }
 
-    // note pipeline entry points (used by Rhythm)
-    void voiceNoteOn (int note, float vel, int channel);
-    void voiceNoteOff (int note, int channel);
-
 private:
-    friend class Rhythm;
+    void control();                                // once per absolute kCtrl tick
+    void renderChunk (float* L, float* R, int n);
     void handleMidi (const juce::MidiMessage& m);
-    void inputNoteOn (int note, float vel, int channel);
-    void inputNoteOff (int note, int channel);
-    void startVoice (Voice& v, int note, float vel, int channel, bool legato);
-    void renderVoice (Voice& v, float* L, float* R, int n);
-    void computeMods (Voice& v, int n);
-    float pv (const Voice& v, int param) const; // modulated plain value
-    void rebuildMutation (Voice& v, int o, float f0, float morph, float chaos, float rate, bool both);
-    void updateGlobalLfos (int n, double beat);
+    void updateChord (bool force);
+    int chordDegreeFor (int64_t slot) const;
+    int degreeRaw (int64_t slot) const;
+    float evoNoise (int channel, double t) const;  // 0..1, smooth, never-repeating (incommensurate sines)
+    float pv (int index) const { return p[index]; }
+    float lp (int layer, int field) const { return p[P::layer (layer, field)]; }
+    void rebuildMutation (float f0, float morph, float chaos, float rate, float tilt);
+    void triggerBell (int64_t slot);
+    void spawnGrain();
 
     double sr = 48000.0;
     int maxBlock = 512;
-    std::vector<Voice> voices;
-    std::vector<float> busL, busR;
     const float* p = nullptr;
-    const Patterns* pat = nullptr;
-    std::array<const Wavetable*, kNumOsc> tables {};
-    const SampleData* sample = nullptr;
+    uint32_t seed = 1;
 
-    // global controller state
-    float modWheel = 0, aftertouch = 0, pitchBend = 0, slideGlobal = 0;
-    bool sustainPedal = false;
-    int ageCounter = 0;
-    float lastPlayedNote = -1;
-    std::array<int, 64> monoStack {};
-    int monoCount = 0;
+    // clocks
+    int ctrlLeft = 0;                 // samples left in the current control tick (0 = tick due)
+    double musT = 0, evoT = 0;        // musical time (seconds) and evolution time (frozen by Freeze)
+    double sessionT = 0;
+    int64_t expectedHost = 0;
+    bool wasHost = false, wasInternal = false, running = false, idle = true;
+    float runGain = 0, runInc = 0;
+    double silentFor = 0;
 
-    // mod matrix per block
-    std::array<int, kNumModSlots> slotSrc {}, slotDst {};
-    std::array<float, kNumModSlots> slotAmt {};
-    std::vector<float> normBase;     // per destination
-    std::vector<int> destOfParam;    // param -> dest index
-    std::vector<int> activeDests;
-    std::array<float, kNumLfo> globalLfo {};
-    std::array<LfoState, kNumLfo> globalLfoState {};
-    float globalSrc[msNumSources] {};
-    std::vector<float> gp;           // globally-modulated parameter view (FX, rhythm)
-    int numDests = 1, destDefsFirstVirtual = 1;
-    double curBpm = 120.0;
-    float lastVelocity = 0.8f;
-    bool nanReset = false;
-    float dcL = 0, dcR = 0, dcXL = 0, dcXR = 0;
+    // evolution
+    std::array<float, kNumLayers * 4 * 3> evoFreq {}, evoPhase {};
+    std::array<float, kNumLayers> presence {}, gainNow {}, gainInc {}, toneEff {}, energyAcc {};
 
+    // harmony
+    int keyOverride = -1, rootPc = 9, curDegree = -1, curRoot = -1;
+    int64_t chordSlot = -1, bellSlot = -1;
+    std::array<int, kChordVoices> chordNotes {};
+    float a4 = 440.0f, lightMul = 1.0f;
+
+    // drone
+    MutOsc mut;
     juce::dsp::FFT mutFft { 9 };
     std::vector<float> fftBuf;
-    Rng rng { 4242 };
+    float dronePh[5] {}, droneInc[5] {};
+    Svf droneF[2];
+    float droneBreath = 1;
 
-    Rhythm rhythm;
-    Effects fx;
-    Smooth masterGain;
-    float gateGain = 1;
+    // pad
+    std::array<PadVoice, kPadVoices> pad;
+    int padAge = 0;
+
+    // texture (granular)
+    DelayLine grnBuf[2];
+    std::array<Grain, kGrains> grains {};
+    float grnTimer = 0, grnInterval = 2000, grnLen = 8000, grnTone = 0.5f, grnChar = 0.5f;
+    bool grnRecord = true;
+    Rng grnRng { 555 };
+
+    // shimmer
+    Fdn shm;
+    PitchShifter shift[2][2];
+    float shmFb[2] {}, shmBlend = 0, shmGainFb = 0.5f;
+    Biquad shmDamp[2];
+
+    // wind
+    float pink[2][3] {};
+    Svf windF[2][2];
+    Rng windRng { 31337 };
+    float windGust = 0;
+
+    // bells
+    std::array<Bell, kBellVoices> bells {};
+    Rng bellRng { 7 };
+
+    // master
+    DelayLine dly[2];
+    float dlyLp[2] {}, dlySamples = 20000;
+    Fdn rev;
+    Biquad lowCutF[2], highCutF[2], tiltF[2];
+    float cacheLow = -1, cacheHigh = -1, cacheTilt = -100, cacheRev = -1, cacheDamp = -1, cacheFreeze = -1;
+    float dcX[2] {}, dcY[2] {}, limGain = 1, limRel = 0.999f, masterNow = 0.5f;
+    Smooth widthS, warmthS, dlyMixS, revMixS, masterS;
 };
 }
