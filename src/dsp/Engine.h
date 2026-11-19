@@ -61,6 +61,7 @@ class Engine
 public:
     void prepare (double sampleRate, int maxBlock);
     void reset (uint32_t seed);                    // full state reset (fresh, deterministic)
+    void reseed (uint32_t seed);                   // live seed change: keeps voices and tails
     void process (float* L, float* R, int n, const juce::MidiBuffer& midi, const float* params, const HostInfo& host);
     Telemetry tele;
     double getSampleRate() const { return sr; }
@@ -98,7 +99,8 @@ private:
     std::array<float, kNumLayers> presence {}, gainNow {}, gainInc {}, toneEff {}, energyAcc {};
 
     // harmony
-    int keyOverride = -1, rootPc = 9, curDegree = -1, curRoot = -1;
+    int keyOverride = -1, rootPc = 9, curDegree = -1, curRoot = -1, curScale = -1, curOct = -1;
+    float curHarm = -1.0f;
     int64_t chordSlot = -1, bellSlot = -1;
     std::array<int, kChordVoices> chordNotes {};
     float a4 = 440.0f, lightMul = 1.0f;

@@ -198,6 +198,41 @@ static void testTransport()
     check (expired, "session timer expires");
 }
 
+// Changing the sound while it plays (preset browsing, new seed) must take effect at once, without a Stop.
+static void testLiveChanges()
+{
+    std::puts ("[live changes]");
+    const double sr = 48000;
+    juce::AudioBuffer<float> b (2, 512);
+    juce::MidiBuffer none;
+    gx::HostInfo hi; hi.internalPlay = true;
+    auto run = [&] (gx::Engine& e, const gx::Preset& p, double secs) { for (int k = 0; k < (int) (secs * sr / 512); ++k) e.process (b.getWritePointer (0), b.getWritePointer (1), 512, none, p.params.data(), hi); };
+    gx::Preset a, c;
+    setParam (a, "seed", 11); setParam (a, "scale", 0); setParam (a, "octave", 2); setParam (a, "harmony", 0.6f);
+    c = a;
+    setParam (c, "seed", 12345); setParam (c, "scale", 1); setParam (c, "octave", 3);
+    gx::Engine e1, e2;
+    e1.prepare (sr, 512); e2.prepare (sr, 512);
+    run (e1, a, 5.0); run (e2, a, 5.0);
+    run (e1, c, 1.0); run (e2, a, 1.0);
+    // B: C minor-ish chord notes one octave up (pad base = 12 * (octave + 2) + root)
+    const int base = 12 * (3 + 2) + (int) c.get (gx::P::key);
+    bool inRange = true, inScale = true;
+    for (int i = 0; i < gx::kChordVoices; ++i)
+    {
+        const int n = e1.tele.chordNotes[(size_t) i].load();
+        inRange &= n >= base && n <= base + 26;
+        const auto& st = gx::scaleSteps (1);
+        inScale &= std::find (st.begin(), st.end(), ((n - (int) c.get (gx::P::key)) % 12 + 12) % 12) != st.end();
+    }
+    check (inRange && inScale, "new scale / octave apply while playing");
+    run (e1, c, 20.0); run (e2, a, 20.0);
+    float diff = 0;
+    for (int l = 0; l < gx::kNumLayers; ++l) diff += std::abs (e1.tele.presence[(size_t) l].load() - e2.tele.presence[(size_t) l].load());
+    check (diff > 0.01f || e1.tele.chordDegree.load() != e2.tele.chordDegree.load(), "new seed changes the journey while playing");
+    check (e1.tele.running.load() && e1.tele.runGain.load() > 0.99f, "no stop / fade on a live change");
+}
+
 static void testMidi()
 {
     std::puts ("[midi]");
@@ -284,6 +319,7 @@ int runAll()
     testRender();
     testDeterminism();
     testTransport();
+    testLiveChanges();
     testMidi();
     testExport();
     testStress();

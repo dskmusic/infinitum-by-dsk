@@ -57,6 +57,23 @@ void Engine::prepare (double sampleRate, int mb)
     reset (seed);
 }
 
+// New seed while playing: new evolution curves, RNGs and chord path; audio state (voices, tails) untouched.
+void Engine::reseed (uint32_t s)
+{
+    seed = s == 0 ? 1u : s;
+    for (size_t i = 0; i < evoFreq.size(); ++i)
+    {
+        static const float mult[3] { 1.0f, 1.6180339f, 2.6457513f };
+        evoFreq[i] = (1.0f / 120.0f) * mult[i % 3] * (0.72f + 0.56f * hashUni (seed, (uint32_t) i * 3 + 1));
+        evoPhase[i] = kTwoPi * hashUni (seed, (uint32_t) i * 3 + 2);
+    }
+    mut.rng = Rng (seed * 7919u + 3u);
+    grnRng = Rng (seed * 31u + 555u);
+    windRng = Rng (seed * 13u + 31337u);
+    bellRng = Rng (seed * 17u + 7u);
+    chordSlot = -1; // forces a chord update (the pad glides to it)
+}
+
 void Engine::reset (uint32_t s)
 {
     seed = s == 0 ? 1u : s;
@@ -166,9 +183,11 @@ void Engine::updateChord (bool force)
     const double period = 6.0 * std::pow (8.0, 1.0 - (double) pv (P::chordRate));
     const int64_t slot = (int64_t) std::floor (musT / period);
     rootPc = keyOverride >= 0 ? keyOverride : (int) pv (P::key);
-    if (! force && slot == chordSlot && rootPc == curRoot) return;
+    const int scaleNow = (int) pv (P::scale), octNow = (int) pv (P::octave);
+    const float harmNow = pv (P::harmony);
+    if (! force && slot == chordSlot && rootPc == curRoot && scaleNow == curScale && octNow == curOct && harmNow == curHarm) return;
     chordSlot = slot;
-    curRoot = rootPc;
+    curRoot = rootPc; curScale = scaleNow; curOct = octNow; curHarm = harmNow;
     const auto& s = scaleSteps ((int) pv (P::scale));
     const float harmony = pv (P::harmony);
     const int d = chordDegreeFor (slot);
@@ -692,8 +711,11 @@ void Engine::process (float* L, float* R, int n, const juce::MidiBuffer& midi, c
         }
         expectedHost = pos + n;
     }
-    else if (s != seed && ! running && runGain <= 0.0f)
-        reset (s);
+    else if (s != seed)
+    {
+        if (! running && runGain <= 0.0f) reset (s);
+        else reseed (s); // live: a new journey without cutting the sound
+    }
     if (host.internalPlay && ! wasInternal && ! host.hostPlaying) sessionT = 0;
     wasHost = host.hostPlaying;
     wasInternal = host.internalPlay;

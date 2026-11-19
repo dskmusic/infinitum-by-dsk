@@ -286,14 +286,14 @@ void Landscape::paint (juce::Graphics& g)
         g.drawText (chordName (f.rootPc, f.scale, f.degree, f.harmony), r.removeFromTop (30), juce::Justification::topLeft);
         g.setFont (font (12.5f, true));
         g.setColour (juce::Colours::white.withAlpha (0.65f));
-        g.drawText (keyNames()[(int) f.rootPc % 12] + " " + scaleNames()[f.scale] + "   ·   " + L ("semilla ", "seed ") + juce::String (f.seed),
+        g.drawText (keyNames()[(int) f.rootPc % 12] + " " + scaleNames()[f.scale] + juce::String::fromUTF8 ("   ·   ") + L ("semilla ", "seed ") + juce::String (f.seed),
                     r.removeFromTop (18), juce::Justification::topLeft);
         auto mmss = [] (float s) { const int v = (int) s; return juce::String (v / 60).paddedLeft ('0', 2) + ":" + juce::String (v % 60).paddedLeft ('0', 2); };
         auto top = b.reduced (16, 12);
         g.setFont (techFont (18.0f));
         g.setColour (juce::Colours::white.withAlpha (0.85f));
         juce::String clock = mmss (f.hostPlaying ? f.musTime : f.elapsed);
-        if (f.timerMin > 0 && ! f.hostPlaying) clock = mmss (juce::jmax (0.0f, (float) f.timerMin * 60.0f - f.elapsed)) + "  ⏲";
+        if (f.timerMin > 0 && ! f.hostPlaying) clock = L ("quedan ", "") + mmss (juce::jmax (0.0f, (float) f.timerMin * 60.0f - f.elapsed)) + L ("", " left");
         g.drawText (clock, top.removeFromTop (26), juce::Justification::topRight);
         g.setFont (font (11.5f, true));
         g.setColour (juce::Colours::white.withAlpha (0.6f));

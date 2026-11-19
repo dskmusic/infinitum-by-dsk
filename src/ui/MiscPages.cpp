@@ -66,7 +66,7 @@ void Logo::paint (juce::Graphics& g)
 PlayButton::PlayButton (InfinitumProcessor& p) : proc (p)
 {
     setMouseCursor (juce::MouseCursor::PointingHandCursor);
-    setTooltip (L ("Play / Stop (barra espaciadora). También arranca con el Play de tu DAW.", "Play / Stop (space bar). Your DAW's Play starts it too."));
+    setTooltip (L ("Play / Stop (barra espaciadora en el Standalone). También arranca con el Play de tu DAW.", "Play / Stop (space bar in the Standalone). Your DAW's Play starts it too."));
 }
 
 void PlayButton::mouseUp (const juce::MouseEvent& e)
@@ -335,7 +335,7 @@ void ExportPage::timerCallback()
         const double el = juce::Time::getMillisecondCounterHiRes() * 0.001 - startedAt;
         const float p = progress.load();
         juce::String eta;
-        if (p > 0.02f) { const int left = (int) (el / p * (1.0 - p)); eta = "  ·  " + L ("quedan ", "") + juce::String (left / 60) + ":" + juce::String (left % 60).paddedLeft ('0', 2) + L ("", " left"); }
+        if (p > 0.02f) { const int left = (int) (el / p * (1.0 - p)); eta = juce::String::fromUTF8 ("  ·  ") + L ("quedan ", "") + juce::String (left / 60) + ":" + juce::String (left % 60).paddedLeft ('0', 2) + L ("", " left"); }
         status = L ("Renderizando… ", "Rendering… ") + juce::String ((int) (p * 100)) + " %" + eta;
     }
     repaint();
@@ -450,8 +450,8 @@ void SettingsPage::paint (juce::Graphics& g)
     rows.removeFromTop (70);
     g.setColour (col::textDim);
     g.setFont (font (12.0f));
-    g.drawFittedText (L ("Consejo: clic derecho en cualquier mando para asignarlo a tu controlador (MIDI Learn). Barra espaciadora: Play / Stop.",
-                         "Tip: right-click any knob to map it to your controller (MIDI Learn). Space bar: Play / Stop."),
+    g.drawFittedText (L ("Consejo: clic derecho en cualquier mando para asignarlo a tu controlador (MIDI Learn). En el Standalone, barra espaciadora: Play / Stop.",
+                         "Tip: right-click any knob to map it to your controller (MIDI Learn). In the Standalone, space bar: Play / Stop."),
                       rows.removeFromTop (40), juce::Justification::topLeft, 2);
 }
 
