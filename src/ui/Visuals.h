@@ -13,15 +13,13 @@ struct Frame
     float peakL = 0, peakR = 0, rms = 0;
     double time = 0;                         // seconds since editor open
     float energy = 0;                        // smoothed rms, drives "aliveness"
-    uint32_t voiceMask = 0;
-    int activeVoices = 0, lastNote = -1, arpStep = -1, gateStep = -1, seqStep = -1;
-    float lastVelocity = 0, gateLevel = 1, seqValue = 0;
-    std::array<float, kNumEnv> env {};
-    std::array<float, kNumLfo> lfo {};
-    std::array<float, kNumOsc> morph {};
-    std::array<float, kNumFilters> cutoff {};
-    std::array<float, kMaxVoices> voiceLevel {};
-    std::array<float, kNumMacros> macro {};
+    // engine state
+    std::array<float, kNumLayers> presence {}, layerEnergy {};
+    std::array<int, kChordVoices> chord {};
+    int rootPc = 9, degree = 0, bellCount = 0, lastBellNote = 72, seed = 1;
+    float runGain = 0, evoTime = 0, musTime = 0, elapsed = 0, lastBellPan = 0, light = 0.5f, space = 0.5f, harmony = 0.5f;
+    int scale = 1, timerMin = 0;
+    bool running = false, frozen = false, playButton = false, hostPlaying = false;
     bool reduced = false;                    // reduced animation mode
 };
 
@@ -56,7 +54,7 @@ private:
     juce::Image trail;
     std::array<float, 512> trace {};
     float energy = 0; double t = 0;
-    float dispPeak = 0.0f, levelDb = -90.0f;   // smoothed display peak (AGC) and real output level
+    float dispPeak = 0.0f, levelDb = -90.0f;
 };
 
 class Spectrum : public juce::Component, public Animated
@@ -77,107 +75,28 @@ private:
     float l = 0, r = 0, hl = 0, hr = 0;
 };
 
-// LED matrix: voices, arp/gate/seq steps, envelopes, LFOs.
-class LedMatrix : public juce::Component, public Animated
+// Generative landscape: sky (Light), sun/moon on the evolution clock, aurora (Shimmer), mountain ranges
+// (Drone, Pad), drifting mist (Wind), grain dust (Texture) and rising sparks for every bell.
+class Landscape : public juce::Component, public Animated
 {
 public:
+    Landscape();
     void tick (const Frame&) override;
     void paint (juce::Graphics&) override;
-private:
-    Frame f;
-    double t = 0;
-};
-
-// Decorative circuit traces with pulses whose speed and brightness follow the audio.
-class CircuitBus : public juce::Component, public Animated
-{
-public:
-    CircuitBus();
-    void tick (const Frame&) override;
-    void paint (juce::Graphics&) override;
-    void resized() override;
-private:
-    struct Trace { juce::Path path; float length = 1, phase = 0, speed = 1; juce::Colour colour; };
-    std::vector<Trace> traces;
-    float energy = 0;
-    juce::Random rng { 7 };
-};
-
-// Oscillator waveform preview (follows modulated morph).
-class OscView : public juce::Component, public Animated, private juce::Timer
-{
-public:
-    OscView (InfinitumProcessor& p, int osc);
-    void tick (const Frame&) override;
-    void paint (juce::Graphics&) override;
-    void mouseDown (const juce::MouseEvent&) override { if (onClick) onClick(); }
+    bool showOverlay = true;                 // chord / key / clock texts
     std::function<void()> onClick;
+    void mouseUp (const juce::MouseEvent& e) override { if (onClick && e.mouseWasClicked()) onClick(); }
 private:
-    void timerCallback() override { rebuild (lastMorph); }
-    void rebuild (float morph);
-    InfinitumProcessor& proc;
-    int osc;
-    float lastMorph = -1;
-    std::array<float, 256> wave {};
+    struct Spark { float x, y, vy, life, size; juce::Colour c; };
+    Frame f;
+    std::vector<Spark> sparks;
+    std::array<juce::Point<float>, 140> stars {};
+    std::array<float, 140> twinkle {};
+    std::array<float, kNumLayers> pres {}, glow {};
+    int lastBells = -1;
+    double lastT = 0;
+    juce::Random rng { 1234 };
 };
 
-class FilterView : public juce::Component, public Animated
-{
-public:
-    FilterView (InfinitumProcessor& p) : proc (p) {}
-    void tick (const Frame&) override;
-    void paint (juce::Graphics&) override;
-private:
-    InfinitumProcessor& proc;
-    std::array<float, kNumFilters> cut { -1, -1 };
-};
-
-class EnvView : public juce::Component, public Animated
-{
-public:
-    EnvView (InfinitumProcessor& p, int env) : proc (p), e (env) {}
-    void tick (const Frame&) override;
-    void paint (juce::Graphics&) override;
-private:
-    InfinitumProcessor& proc;
-    int e;
-    float level = 0;
-};
-
-// LFO display; with shape = Custom it can be drawn with the mouse.
-class LfoView : public juce::Component, public Animated
-{
-public:
-    LfoView (InfinitumProcessor& p, int lfo) : proc (p), l (lfo) {}
-    void tick (const Frame&) override;
-    void paint (juce::Graphics&) override;
-    void mouseDown (const juce::MouseEvent& e) override { lastX = -1; draw (e); }
-    void mouseDrag (const juce::MouseEvent& e) override { draw (e); }
-private:
-    void draw (const juce::MouseEvent&);
-    InfinitumProcessor& proc;
-    int l, lastX = -1;
-    float value = 0;
-};
-
-// Generic bar-step editor bound to a slice of Patterns.
-class StepGrid : public juce::Component, public Animated
-{
-public:
-    using Getter = std::function<float& (Patterns&, int)>;
-    StepGrid (InfinitumProcessor& p, Getter g, int maxSteps, float lo, float hi, int stepsParam, int playIndexKind);
-    void tick (const Frame&) override;
-    void paint (juce::Graphics&) override;
-    void mouseDown (const juce::MouseEvent& e) override { edit (e); }
-    void mouseDrag (const juce::MouseEvent& e) override { edit (e); }
-    juce::Colour colour = col::accent;
-    bool quantize = false;  // integer values (ratchet/transpose)
-    juce::String label;
-private:
-    void edit (const juce::MouseEvent&);
-    InfinitumProcessor& proc;
-    Getter get;
-    int maxSteps, stepsParam, kind, play = -1;
-    float lo, hi;
-};
+juce::String chordName (int rootPc, int scale, int degree, float harmony); // "Am7", "Fmaj9"...
 }

@@ -95,20 +95,19 @@ private:
     juce::StringArray sliderNames;
     juce::TextButton resetChar;          // "Reset" next to the CHARACTER title
     juce::OwnedArray<juce::ToggleButton> locks;
-    juce::String category = "Lead";
+    juce::String category = "Ambient";
     // centre
     GenerateButton genButton;
     AiConsole console;
     ResolveGrid grid;
-    juce::TextButton mutateBtn { L ("Mutar", "Mutate") }, blendBtn { L ("Mezclar", "Blend") }, saveBtn { L ("Guardar", "Save") }, exportBtn { L ("Exportar", "Export") }, editorBtn { L ("Pasar a Editor", "Go to Editor") };
+    juce::TextButton mutateBtn { L ("Mutar", "Mutate") }, blendBtn { L ("Mezclar", "Blend") }, saveBtn { L ("Guardar", "Save") }, exportBtn { L ("Exportar", "Export") }, editorBtn { L ("Ir a Sonido", "Go to Sound") };
     juce::TextButton backBtn { "<" }, fwdBtn { ">" };
     juce::Label histLabel;
     // right
     Scope scope;
     Spectrum spectrum;
-    LedMatrix leds;
+    Landscape view;
     VuMeter vu;
-    CircuitBus bus;
     Box macros;
 
     GenHistory* history = nullptr; // owned by the processor (survives closing the editor, not the session)
@@ -121,5 +120,4 @@ private:
     float energy = 0;
 };
 
-std::unique_ptr<juce::Component> makeSfzPanel (Context& c);
 }

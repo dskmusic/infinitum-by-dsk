@@ -18,13 +18,16 @@ public:
     void setAiMessages (bool b) { props->setValue ("aiMessages", b); props->saveIfNeeded(); }
     int historyLimit() const { return props->getIntValue ("historyLimit", 200); }
     void setHistoryLimit (int n) { props->setValue ("historyLimit", juce::jlimit (10, 2000, n)); props->saveIfNeeded(); }
-    // UI + AI-message language. First run: follows the OS language (Spanish -> "es", anything else -> "en").
-    juce::String messageLanguage() const
+    // UI language setting: "auto" (follows the OS: Spanish -> "es", anything else -> "en"), "en" or "es".
+    juce::String languageSetting() const { return props->getValue ("uiLang", "auto"); }
+    void setLanguageSetting (const juce::String& l) { props->setValue ("uiLang", l); props->saveIfNeeded(); }
+    juce::String messageLanguage() const // effective language
     {
         if (forcedLanguage().isNotEmpty()) return forcedLanguage();
-        return props->getValue ("msgLang", juce::SystemStats::getUserLanguage().startsWithIgnoreCase ("es") ? "es" : "en");
+        const auto s = languageSetting();
+        if (s == "en" || s == "es") return s;
+        return juce::SystemStats::getUserLanguage().startsWithIgnoreCase ("es") || juce::SystemStats::getDisplayLanguage().startsWithIgnoreCase ("es") ? "es" : "en";
     }
-    void setMessageLanguage (const juce::String& l) { props->setValue ("msgLang", l); props->saveIfNeeded(); }
     bool previewOnSelect() const { return props->getBoolValue ("preview", true); }
     void setPreviewOnSelect (bool b) { props->setValue ("preview", b); props->saveIfNeeded(); }
     juce::PropertiesFile& file() { return *props; }
@@ -33,7 +36,7 @@ private:
     std::unique_ptr<juce::PropertiesFile> props;
 };
 
-// Snapshot-based undo/redo (params + patterns), driven by polling for changes.
+// Snapshot-based undo/redo (all parameters), driven by polling for changes.
 class UndoStack
 {
 public:
@@ -65,28 +68,24 @@ struct Context
 };
 
 // ---------------------------------------------------------------- controls
-class ParamKnob : public juce::Component, public juce::DragAndDropTarget, private juce::Timer
+class ParamKnob : public juce::Component
 {
 public:
-    ParamKnob (Context& c, int paramIndex, const juce::String& label = {});
+    ParamKnob (Context& c, int paramIndex, const juce::String& label = {}, const juce::String& tooltip = {});
     void resized() override;
     void paint (juce::Graphics&) override;
-    bool isInterestedInDragSource (const SourceDetails&) override;
-    void itemDragEnter (const SourceDetails&) override { dropHover = true; repaint(); }
-    void itemDragExit (const SourceDetails&) override { dropHover = false; repaint(); }
-    void itemDropped (const SourceDetails&) override;
     void mouseDown (const juce::MouseEvent&) override;
     int param() const { return index; }
+    void setAccent (juce::Colour c) { slider.getProperties().set ("arc", (juce::int64) c.getARGB()); slider.repaint(); }
     juce::Slider slider;
+    float labelSize = 10.5f;
 
 private:
-    void timerCallback() override; // refresh modulation ring
     void showMenu();
     Context& ctx;
     int index;
     juce::String name;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> att;
-    bool dropHover = false;
 };
 
 class ParamToggle : public juce::ToggleButton
@@ -144,18 +143,6 @@ inline void gridKnobs (std::vector<juce::Component*> ks, juce::Rectangle<int> r,
     for (size_t i = 0; i < ks.size(); ++i)
         ks[i]->setBounds (r.getX() + (int) (i % (size_t) cols) * cw, r.getY() + (int) (i / (size_t) cols) * ch, cw, ch);
 }
-
-// Draggable modulation source chip.
-class SourceChip : public juce::Component
-{
-public:
-    SourceChip (int sourceIndex) : src (sourceIndex) { setMouseCursor (juce::MouseCursor::DraggingHandCursor); }
-    void paint (juce::Graphics&) override;
-    void mouseDrag (const juce::MouseEvent&) override;
-    void setLevel (float l) { if (std::abs (l - level) > 0.01f) { level = l; repaint(); } }
-    int src;
-    float level = 0;
-};
 
 // Lays out every parameter of a group automatically (knobs for floats/ints, combos, toggles).
 class AutoPanel : public Section

@@ -137,7 +137,6 @@ std::vector<ParamDef> build()
         b.add (layer (l, lTone), id + "_tone", nm + " Tone", lin (0, 1), defs[l][2]);
         b.add (layer (l, lChar), id + "_char", nm + " Character", lin (0, 1), defs[l][3]);
     }
-    for (auto& d : b.defs) jassert (d.index >= 0); // every slot filled
     return b.defs;
 }
 } // namespace

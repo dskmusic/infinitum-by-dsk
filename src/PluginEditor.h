@@ -23,7 +23,6 @@ public:
 
     static constexpr int kDesignW = 1280, kDesignH = 800;
     void showPage (int index);
-    void showEditorSub (int index);
     void setUiScale (float s);
     void toast (const juce::String& msg);
     void advanceFrames (double dt);   // used by the screenshot tool
@@ -50,9 +49,10 @@ private:
     gx::ui::Context ctx;
     Root root;
     std::unique_ptr<gx::ui::Header> header;
+    std::unique_ptr<gx::ui::LandscapePage> landscapePage;
+    std::unique_ptr<gx::ui::SoundPage> soundPage;
     std::unique_ptr<gx::ui::GeneratorPage> generator;
     std::unique_ptr<gx::ui::PresetsPage> presets;
-    std::unique_ptr<gx::ui::EditorPage> editorPage;
     std::unique_ptr<gx::ui::ExportPage> exportPage;
     std::unique_ptr<gx::ui::SettingsPage> settingsPage;
     std::unique_ptr<gx::ui::AboutOverlay> about;

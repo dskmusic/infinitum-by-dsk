@@ -194,25 +194,22 @@ void AiConsole::paint (juce::Graphics& g)
 // ================================================================ ResolveGrid
 void ResolveGrid::setTarget (const Preset& p)
 {
-    auto v = [&] (const char* id) { return p.params[(size_t) paramIndex (id)]; };
-    auto choice = [&] (const char* id) { const auto& d = paramDefs()[(size_t) paramIndex (id)]; return d.choices[(int) v (id)]; };
-    auto secs = [] (float s) { return s < 1 ? juce::String ((int) std::lround (s * 1000)) + " ms" : juce::String (s, 2) + " s"; };
-    int fxCount = 0;
-    for (auto id : { "dist_on", "chorus_on", "flanger_on", "phaser_on", "delay_on", "reverb_on", "comp_on", "eq_on", "crush_on", "wide_on", "shimmer_on", "granular_on" }) fxCount += v (id) > 0.5f;
-    int mods = 0;
-    for (int s = 0; s < kNumModSlots; ++s) mods += p.params[(size_t) P::mod (s, P::mSrc)] > 0;
-    cells = { { { "OSC A", v ("osc1_on") > 0.5f ? choice ("osc1_type") : juce::String ("-") },
-                { "OSC B", v ("osc2_on") > 0.5f ? choice ("osc2_type") : juce::String ("-") },
-                { L ("FILTRO", "FILTER"), v ("filter1_on") > 0.5f ? choice ("filter1_type") : juce::String ("bypass") },
-                { "CUTOFF", juce::String (v ("filter1_cutoff") / 1000.0f, 2) + " kHz" },
-                { "RESO", juce::String ((int) (v ("filter1_reso") * 100)) + " %" },
-                { L ("ATAQUE", "ATTACK"), secs (v ("env1_attack")) },
-                { "RELEASE", secs (v ("env1_release")) },
-                { "UNISON", juce::String ((int) v ("uni_voices")) + " v" },
-                { "MOD", juce::String (mods) + L (" rutas", " routes") },
-                { "FX", juce::String (fxCount) + L (" activos", " active") },
-                { L ("RITMO", "RHYTHM"), v ("arp_on") > 0.5f ? juce::String ("ARP ") + choice ("arp_mode") : (v ("tg_on") > 0.5f ? juce::String ("GATE") : juce::String ("-")) },
-                { L ("NIVEL", "LEVEL"), juce::String (v ("master"), 1) + " dB" } } };
+    auto v = [&] (int i) { return p.params[(size_t) i]; };
+    auto pct = [] (float x) { return juce::String ((int) std::lround (x * 100)) + " %"; };
+    int layers = 0;
+    for (int l = 0; l < kNumLayers; ++l) layers += v (P::layer (l, P::lOn)) > 0.5f;
+    cells = { { { L ("TONALIDAD", "KEY"), keyNames()[(int) v (P::key)] },
+                { L ("ESCALA", "SCALE"), scaleNames()[(int) v (P::scale)] },
+                { L ("ARMONÍA", "HARMONY"), pct (v (P::harmony)) },
+                { L ("CAPAS", "LAYERS"), juce::String (layers) + " / 6" },
+                { L ("EVOLUCIÓN", "EVOLUTION"), pct (v (P::evolution)) },
+                { L ("DENSIDAD", "DENSITY"), pct (v (P::density)) },
+                { L ("LUZ", "LIGHT"), pct (v (P::light)) },
+                { L ("ESPACIO", "SPACE"), pct (v (P::space)) },
+                { "SHIMMER", pct (v (P::layer (lyShimmer, P::lLevel))) },
+                { L ("TEXTURA", "TEXTURE"), pct (v (P::layer (lyTexture, P::lLevel))) },
+                { L ("SEMILLA", "SEED"), juce::String ((int) v (P::seed)) },
+                { L ("AFINACIÓN", "TUNING"), (int) v (P::tuning) == 1 ? juce::String ("432 Hz") : juce::String ("440 Hz") } } };
     repaint();
 }
 
@@ -266,7 +263,7 @@ GeneratorPage::UiState GeneratorPage::uiState() const
 void GeneratorPage::setUiState (const UiState& s)
 {
     category = s.category;
-    for (auto* b : catButtons) b->setToggleState (b->getButtonText() == category, juce::dontSendNotification);
+    for (auto* b : catButtons) b->setToggleState (b->getProperties()["cat"].toString() == category, juce::dontSendNotification);
     for (int i = 0; i < juce::jmin (sliders.size(), (int) s.sliders.size()); ++i) sliders[i]->setValue (s.sliders[(size_t) i], juce::dontSendNotification);
     for (int i = 0; i < juce::jmin (locks.size(), (int) s.locks.size()); ++i) locks[i]->setToggleState (s.locks[(size_t) i], juce::dontSendNotification);
     repaint();
@@ -276,19 +273,18 @@ GeneratorPage::GeneratorPage (Context& c) : Page (c), macros (c, "Macros", "macr
 {
     history = &ctx.proc.genHistory;
     history->setLimit (ctx.settings.historyLimit());
-    Library::defaultRoot().getChildFile ("history.json").deleteFile(); // left over by v1.0.0, which persisted history
-    addAndMakeVisible (bus);
     for (auto& cat : categories())
     {
-        auto* b = catButtons.add (new juce::TextButton (cat));
+        auto* b = catButtons.add (new juce::TextButton (categoryLabel (cat)));
+        b->getProperties().set ("cat", cat);
         b->setRadioGroupId (101);
         b->setClickingTogglesState (true);
         b->onClick = [this, cat] { category = cat; };
         b->setToggleState (cat == category, juce::dontSendNotification);
         addAndMakeVisible (b);
     }
-    sliderNames = { L ("Brillo", "Brightness"), L ("Movimiento", "Movement"), L ("Agresividad", "Aggression"), L ("Espacio", "Space"), L ("Rareza", "Weirdness") };
-    const float defaults[] { 0.5f, 0.5f, 0.35f, 0.4f, 0.2f };
+    sliderNames = { L ("Luz", "Light"), L ("Movimiento", "Movement"), L ("Densidad", "Density"), L ("Espacio", "Space"), L ("Misterio", "Mystery") };
+    const float defaults[] { 0.5f, 0.5f, 0.5f, 0.6f, 0.25f };
     for (int i = 0; i < sliderNames.size(); ++i)
     {
         auto* s = sliders.add (new juce::Slider (juce::Slider::LinearVertical, juce::Slider::NoTextBox));
@@ -297,7 +293,7 @@ GeneratorPage::GeneratorPage (Context& c) : Page (c), macros (c, "Macros", "macr
         s->setPopupDisplayEnabled (true, true, nullptr);
         s->setTooltip (sliderNames[i] + L (" (doble clic: valor de fábrica)", " (double-click: factory value)"));
         s->setDoubleClickReturnValue (true, defaults[i]);
-        s->getProperties().set ("arc", (juce::int64) (i == 4 ? col::accent3 : i == 2 ? col::danger : col::accent).getARGB());
+        s->getProperties().set ("arc", (juce::int64) (i == 4 ? col::accent3 : i == 0 ? col::accent2 : col::accent).getARGB());
         addAndMakeVisible (s);
     }
     resetChar.setButtonText (L ("Restablecer", "Reset"));
@@ -307,9 +303,9 @@ GeneratorPage::GeneratorPage (Context& c) : Page (c), macros (c, "Macros", "macr
         for (int i = 0; i < sliders.size(); ++i) sliders[i]->setValue (defaults[i], juce::sendNotificationSync);
     };
     addAndMakeVisible (resetChar);
-    const juce::String lockNames[] { "OSC", L ("FILTRO", "FILTER"), "ENV", "MOD", "FX", L ("RITMO", "RHYTHM") };
-    const char* lockIds[] { "osc", "filter", "env", "mod", "fx", "rhythm" };
-    for (int i = 0; i < 6; ++i)
+    const juce::String lockNames[] { L ("ARMONÍA", "HARMONY"), L ("CAPAS", "LAYERS"), "FX" };
+    const char* lockIds[] { "harmony", "layers", "fx" };
+    for (int i = 0; i < 3; ++i)
     {
         auto* t = locks.add (new juce::ToggleButton (lockNames[i]));
         t->getProperties().set ("lock", lockIds[i]);
@@ -336,20 +332,22 @@ GeneratorPage::GeneratorPage (Context& c) : Page (c), macros (c, "Macros", "macr
     histLabel.setFont (monoFont (13.0f));
     histLabel.setColour (juce::Label::textColourId, col::phosphor);
     addAndMakeVisible (histLabel);
-    for (auto* comp : std::initializer_list<juce::Component*> { &scope, &spectrum, &leds, &vu }) addAndMakeVisible (comp);
+    view.showOverlay = false;
+    for (auto* comp : std::initializer_list<juce::Component*> { &scope, &spectrum, &view, &vu }) addAndMakeVisible (comp);
     macros.accent = col::accent3;
     std::vector<juce::Component*> mk;
-    for (int m = 0; m < kNumMacros; ++m)
+    const juce::String names[] { L ("EVOLUCIÓN", "EVOLUTION"), L ("DENSIDAD", "DENSITY"), L ("LUZ", "LIGHT"), L ("ESPACIO", "SPACE") };
+    const int ids[] { P::evolution, P::density, P::light, P::space };
+    for (int m = 0; m < 4; ++m)
     {
-        const juce::String names[] { L ("BRILLO", "BRIGHT"), "TIMBRE", L ("ESPACIO", "SPACE"), L ("CARÁCTER", "CHARACTER"), "MACRO 5", "MACRO 6", "MACRO 7", "MACRO 8" };
-        auto* k = &macros.add<ParamKnob> (c, P::macro1 + m, names[m]);
-        k->slider.getProperties().set ("arc", (juce::int64) col::accent3.getARGB());
+        auto* k = &macros.add<ParamKnob> (c, ids[m], names[m]);
+        k->setAccent (col::accent3);
         mk.push_back (k);
     }
     macros.layout = [mk] (juce::Rectangle<int> r) { gridKnobs (mk, r, 4); };
     addAndMakeVisible (macros);
     grid.setTarget (Preset::capture (ctx.proc));
-    console.showIdle (L ("Listo. Elige una categoría y pulsa GENERAR.", "Ready. Pick a category and press GENERATE."));
+    console.showIdle (L ("Listo. Elige un estado de ánimo y pulsa GENERAR.", "Ready. Pick a mood and press GENERATE."));
     updateHistoryLabel();
     startTimerHz (30);
 }
@@ -364,11 +362,11 @@ GenRequest GeneratorPage::makeRequest() const
 {
     GenRequest r;
     r.category = category;
-    r.brightness = (float) sliders[0]->getValue();
+    r.light = (float) sliders[0]->getValue();
     r.movement = (float) sliders[1]->getValue();
-    r.aggression = (float) sliders[2]->getValue();
+    r.density = (float) sliders[2]->getValue();
     r.space = (float) sliders[3]->getValue();
-    r.weirdness = (float) sliders[4]->getValue();
+    r.mystery = (float) sliders[4]->getValue();
     r.seed = forcedSeed() != 0 ? forcedSeed()++ : (uint32_t) juce::Random::getSystemRandom().nextInt() ^ (uint32_t) juce::Time::currentTimeMillis();
     for (auto* l : locks) if (l->getToggleState()) r.locks.insert (l->getProperties()["lock"].toString());
     return r;
@@ -435,11 +433,9 @@ void GeneratorPage::finishJob()
     assembleStart = nowSec();
     busy = false;
     updateHistoryLabel();
-    if (! ctx.settings.aiMessages()) console.showIdle (result.meta.name + "  [" + result.meta.category + " / " + result.meta.subcategory + "]");
+    if (! ctx.settings.aiMessages()) console.showIdle (result.meta.name + "  [" + categoryLabel (result.meta.category) + " / " + result.meta.subcategory + "]");
     if (onPresetChanged) onPresetChanged();
-    ctx.proc.keyboardState.noteOn (1, Generator::testNote (result.meta.category), 0.8f);
-    juce::Timer::callAfterDelay (650, [sp = juce::Component::SafePointer<GeneratorPage> (this), n = Generator::testNote (result.meta.category)]
-    { if (sp) sp->ctx.proc.keyboardState.noteOff (1, n, 0.0f); });
+    if (! ctx.proc.isHostPlaying()) ctx.proc.setPlaying (true); // hear it right away
 }
 
 void GeneratorPage::historyStep (int dir)
@@ -451,7 +447,7 @@ void GeneratorPage::historyStep (int dir)
     grid.setTarget (*p);
     assembleStart = nowSec();
     updateHistoryLabel();
-    console.showIdle (p->meta.name + "  [" + p->meta.category + " / " + p->meta.subcategory + "]");
+    console.showIdle (p->meta.name + "  [" + categoryLabel (p->meta.category) + " / " + p->meta.subcategory + "]");
     if (onPresetChanged) onPresetChanged();
 }
 
@@ -564,7 +560,7 @@ void GeneratorPage::paint (juce::Graphics& g)
     g.setColour (col::text);
     g.setFont (font (12.0f, true));
     auto l = left.reduced (12, 8);
-    g.drawText (L ("CATEGORÍA", "CATEGORY"), l.removeFromTop (16), juce::Justification::centredLeft);
+    g.drawText (L ("ESTADO DE ÁNIMO", "MOOD"), l.removeFromTop (16), juce::Justification::centredLeft);
     l.removeFromTop (6 * 30 + 8);
     g.drawText (L ("CARÁCTER", "CHARACTER"), l.removeFromTop (16), juce::Justification::centredLeft);
     auto sl = l.removeFromTop (230);
@@ -572,7 +568,7 @@ void GeneratorPage::paint (juce::Graphics& g)
     g.setColour (col::textDim);
     const int sw = sl.getWidth() / sliderNames.size();
     for (int i = 0; i < sliderNames.size(); ++i)
-        g.drawFittedText (juce::StringArray { L ("BRILLO", "BRIGHT"), L ("MOVIM.", "MOVEM."), L ("AGRES.", "AGGR."), L ("ESPACIO", "SPACE"), L ("RAREZA", "WEIRD") }[i], sl.getX() + i * sw, sl.getBottom() - 16, sw, 16, juce::Justification::centred, 1, 0.6f);
+        g.drawFittedText (juce::StringArray { L ("LUZ", "LIGHT"), L ("MOVIM.", "MOVEM."), L ("DENSID.", "DENSITY"), L ("ESPACIO", "SPACE"), L ("MISTERIO", "MYSTERY") }[i], sl.getX() + i * sw, sl.getBottom() - 16, sw, 16, juce::Justification::centred, 1, 0.6f);
     g.setColour (col::text);
     g.setFont (font (12.0f, true));
     l.removeFromTop (8);
@@ -581,13 +577,12 @@ void GeneratorPage::paint (juce::Graphics& g)
 
 void GeneratorPage::resized()
 {
-    bus.setBounds (getLocalBounds());
     auto r = getLocalBounds().reduced (8);
     auto left = r.removeFromLeft (290).reduced (12, 8);
     left.removeFromTop (20);
     auto cats = left.removeFromTop (6 * 30);
     for (int i = 0; i < catButtons.size(); ++i)
-        catButtons[i]->setBounds (juce::Rectangle<int> (cats.getX() + (i % 2) * cats.getWidth() / 2, cats.getY() + (i / 2) * 30, cats.getWidth() / 2, 30).reduced (2));
+        catButtons[i]->setBounds (juce::Rectangle<int> (cats.getX(), cats.getY() + i * 36, cats.getWidth(), 36).reduced (2));
     {
         auto title = left.removeFromTop (8 + 18).withTrimmedTop (4);   // same row as the CHARACTER label
         resetChar.setBounds (title.removeFromRight (78).withSizeKeepingCentre (78, 20));
@@ -597,7 +592,7 @@ void GeneratorPage::resized()
     for (int i = 0; i < sliders.size(); ++i) sliders[i]->setBounds (sl.getX() + i * sw, sl.getY(), sw, sl.getHeight());
     left.removeFromTop (8 + 18);
     for (int i = 0; i < locks.size(); ++i)
-        locks[i]->setBounds (juce::Rectangle<int> (left.getX() + (i % 3) * left.getWidth() / 3, left.getY() + (i / 3) * 26, left.getWidth() / 3, 26));
+        locks[i]->setBounds (juce::Rectangle<int> (left.getX() + i * left.getWidth() / 3, left.getY(), left.getWidth() / 3, 26));
 
     r.removeFromLeft (8);
     auto right = r.removeFromRight (370);
@@ -624,7 +619,7 @@ void GeneratorPage::resized()
     right.removeFromTop (6);
     spectrum.setBounds (right.removeFromTop (110).reduced (2, 0));
     right.removeFromTop (6);
-    leds.setBounds (right.removeFromTop (150).reduced (2, 0));
+    view.setBounds (right.removeFromTop (150).reduced (2, 0));
     right.removeFromTop (6);
     macros.setBounds (right.reduced (2, 0));
 }

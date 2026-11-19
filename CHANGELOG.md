@@ -1,4 +1,13 @@
 # Changelog
 
 ## [Unreleased]
-- Project scaffold derived from Genesix by DSK (GPLv3).
+
+### Added
+- Living landscape engine: six self-playing layers (Drone, Pad, Texture, Shimmer, Wind, Bells) with Level, Presence, Tone and Character.
+- Seed + timeline driven evolution: identical output for any host block size; DAW bounces match playback.
+- Play / Stop button that also follows the DAW transport; session timer; fade-in / fade-out; Freeze.
+- Harmony: 12 scales, key, octave, harmony amount (open fifths to 9th chords), automatic chord motion; 432 Hz tuning.
+- MIDI: set the key, play notes on top, or both.
+- Long audio export (1 min to 3 h) to WAV, FLAC or OGG, streamed to disk.
+- Mood generator (Cinematic, Ambient, Meditation, Dark, Sci-Fi) with validation and level matching; mutate, blend, history.
+- 75 factory presets; generative landscape visual; bilingual UI (automatic or manual language).

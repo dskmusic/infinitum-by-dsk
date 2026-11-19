@@ -13,23 +13,26 @@ inline uint32_t& forcedSeed() { static uint32_t s = 0; return s; }
 // Central look: every colour, radius and font lives here.
 namespace col
 {
-    const juce::Colour bg        { 0xff1b1e21 };
-    const juce::Colour bgDeep    { 0xff131517 };
-    const juce::Colour panel     { 0xff2a2e33 };
-    const juce::Colour panelHi   { 0xff353a40 };
-    const juce::Colour panelLo   { 0xff22262a };
-    const juce::Colour bevelHi   { 0x33ffffff };
+    const juce::Colour bg        { 0xff0d1020 };  // deep night indigo
+    const juce::Colour bgDeep    { 0xff080a16 };
+    const juce::Colour panel     { 0xff181d33 };
+    const juce::Colour panelHi   { 0xff222944 };
+    const juce::Colour panelLo   { 0xff12162a };
+    const juce::Colour bevelHi   { 0x26ffffff };
     const juce::Colour bevelLo   { 0x66000000 };
-    const juce::Colour text      { 0xffd8dde2 };
-    const juce::Colour textDim   { 0xff8a939c };
-    const juce::Colour accent    { 0xffff8a1f }; // orange
-    const juce::Colour accent2   { 0xff8fd65a }; // green
-    const juce::Colour accent3   { 0xff4fc3f7 }; // cyan (modulation)
-    const juce::Colour danger    { 0xffff5252 };
-    const juce::Colour knobBody  { 0xff3c4248 };
-    const juce::Colour screen    { 0xff0c1412 };
-    const juce::Colour phosphor  { 0xff7dffb0 };
-    const juce::Colour grid      { 0xff1d2b27 };
+    const juce::Colour text      { 0xffe2e6f2 };
+    const juce::Colour textDim   { 0xff8790ad };
+    const juce::Colour accent    { 0xff4fe3c1 }; // aurora teal
+    const juce::Colour accent2   { 0xffffcf6e }; // horizon gold
+    const juce::Colour accent3   { 0xffa68cff }; // violet
+    const juce::Colour danger    { 0xffff6b81 };
+    const juce::Colour knobBody  { 0xff262d4a };
+    const juce::Colour screen    { 0xff070915 };
+    const juce::Colour phosphor  { 0xff8ff5dd };
+    const juce::Colour grid      { 0xff141a33 };
+    // one colour per layer (landscape, layer strips)
+    const juce::Colour layer[6] { juce::Colour (0xff6f8cff), juce::Colour (0xffa68cff), juce::Colour (0xffffcf6e),
+                                  juce::Colour (0xff4fe3c1), juce::Colour (0xff9fb7c9), juce::Colour (0xffffe9a8) };
 }
 
 juce::Font font (float size, bool bold = false);

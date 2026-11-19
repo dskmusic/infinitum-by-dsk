@@ -22,7 +22,7 @@ bool UndoStack::differs (const Preset& a) const
 {
     for (int i = 0; i < P::numParams; ++i)
         if (a.params[(size_t) i] != proc.getParam (i)) return true;
-    return std::memcmp (&a.patterns, &proc.getPatterns(), sizeof (Patterns)) != 0;
+    return false;
 }
 
 void UndoStack::poll (bool dragging)
@@ -87,56 +87,35 @@ bool pasteSection (InfinitumProcessor& p, const juce::String& group)
 }
 
 // ---------------------------------------------------------------- ParamKnob
-ParamKnob::ParamKnob (Context& c, int i, const juce::String& label) : ctx (c), index (i)
+ParamKnob::ParamKnob (Context& c, int i, const juce::String& label, const juce::String& tip) : ctx (c), index (i)
 {
     const auto& d = paramDefs()[(size_t) i];
-    static const std::map<juce::String, juce::String> shortNames {
-        { "uni_voices", "VOICES" }, { "uni_detune", "DETUNE" }, { "uni_spread", "SPREAD" }, { "uni_blend", "BLEND" },
-        { "bend_range", "BEND" }, { "vel_sens", "VEL SENS" }, { "eq_lo_f", "LOW F" }, { "eq_lo_g", "LOW G" },
-        { "eq_m1_f", "MID1 F" }, { "eq_m1_g", "MID1 G" }, { "eq_m2_f", "MID2 F" }, { "eq_m2_g", "MID2 G" },
-        { "eq_hi_f", "HIGH F" }, { "eq_hi_g", "HIGH G" }, { "eq_q", "MID Q" }, { "tg_steps", "STEPS" }, { "tg_depth", "DEPTH" },
-        { "tg_attack", "ATTACK" }, { "tg_release", "RELEASE" }, { "arp_oct", "OCTAVES" }, { "arp_gate", "GATE" },
-        { "arp_swing", "SWING" }, { "arp_steps", "STEPS" }, { "seq_steps", "STEPS" }, { "seq_glide", "GLIDE" },
-        { "comp_thresh", "THRESH" }, { "comp_attack", "ATTACK" }, { "comp_release", "RELEASE" }, { "comp_makeup", "MAKEUP" },
-        { "granular_pitch", "JITTER" }, { "wide_bass", "MONO <" }, { "crush_rate", "RATE" } };
-    name = label;
-    if (name.isEmpty())
-        if (auto it = shortNames.find (d.id); it != shortNames.end()) name = it->second;
-    for (auto suf : { "_a_curve", "_d_curve", "_r_curve" })
-        if (label.isEmpty() && d.id.endsWith (suf)) name = juce::String (suf).substring (1, 2).toUpperCase() + " CURVE";
-    if (name.isEmpty())
-    {
-        name = d.name;
-        for (auto pre : { "osc", "filter", "env", "lfo" })
-            if (d.group.startsWith (pre)) name = d.name.fromFirstOccurrenceOf (" ", false, false).fromFirstOccurrenceOf (" ", false, false);
-        if (d.group.startsWith ("fx.") && d.name.containsChar (' ')) name = d.name.fromFirstOccurrenceOf (" ", false, false);
-        if (name.isEmpty()) name = d.name;
-    }
+    name = label.isNotEmpty() ? label : d.name;
     slider.setSliderStyle (juce::Slider::RotaryHorizontalVerticalDrag);
     slider.setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
     slider.setPopupDisplayEnabled (true, true, nullptr, 2000);
     slider.setDoubleClickReturnValue (true, (double) d.def);
-    slider.setTooltip (d.name);
+    slider.setTooltip (tip.isNotEmpty() ? tip : d.name);
     slider.getProperties().set ("bipolar", d.range.start < 0 && d.range.end > 0);
     addAndMakeVisible (slider);
     att = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (ctx.proc.apvts, d.id, slider);
     slider.textFromValueFunction = [d] (double v)
     {
         if (d.unit == "Hz") return v >= 1000 ? juce::String (v / 1000.0, 2) + " kHz" : (v < 100 ? juce::String (v, 1) : juce::String ((int) std::lround (v))) + " Hz";
-        if (d.unit == "s") return v < 1 ? juce::String ((int) std::lround (v * 1000.0)) + " ms" : juce::String (v, 2) + " s";
+        if (d.unit == "s") return v < 1 ? juce::String ((int) std::lround (v * 1000.0)) + " ms" : juce::String (v, 1) + " s";
+        if (d.unit == "ms") return juce::String ((int) std::lround (v)) + " ms";
         if (d.unit == "dB") return juce::String (v, 1) + " dB";
         if (d.kind == pkInt) return juce::String ((int) std::lround (v)) + (d.unit.isNotEmpty() ? " " + d.unit : juce::String());
-        if (d.range.start == 0 && d.range.end == 1 && d.unit.isEmpty()) return juce::String ((int) std::lround (v * 100.0)) + " %";
+        if (d.range.start == 0 && d.range.end <= 1.5f && d.unit.isEmpty()) return juce::String ((int) std::lround (v * 100.0)) + " %";
         return juce::String (v, 2) + (d.unit.isNotEmpty() ? " " + d.unit : juce::String());
     };
     slider.updateText();
-    if (d.destIndex > 0) startTimerHz (10);
 }
 
 void ParamKnob::resized()
 {
     auto r = getLocalBounds();
-    r.removeFromBottom (14);
+    r.removeFromBottom ((int) (labelSize + 4));
     const int s = juce::jmin (r.getWidth(), r.getHeight());
     slider.setBounds (r.withSizeKeepingCentre (s, s));
 }
@@ -144,50 +123,8 @@ void ParamKnob::resized()
 void ParamKnob::paint (juce::Graphics& g)
 {
     g.setColour (col::textDim);
-    g.setFont (font (10.5f, true));
-    g.drawFittedText (name.toUpperCase(), getLocalBounds().removeFromBottom (14), juce::Justification::centred, 1, 0.7f);
-    if (dropHover)
-    {
-        g.setColour (col::accent3.withAlpha (0.35f));
-        g.fillRoundedRectangle (getLocalBounds().toFloat(), 6.0f);
-    }
-}
-
-void ParamKnob::timerCallback()
-{
-    const int dest = paramDefs()[(size_t) index].destIndex;
-    float sum = 0;
-    for (int s = 0; s < kNumModSlots; ++s)
-        if ((int) ctx.proc.getParam (P::mod (s, P::mDst)) == dest && (int) ctx.proc.getParam (P::mod (s, P::mSrc)) > 0)
-            sum += ctx.proc.getParam (P::mod (s, P::mAmt));
-    const float prev = (float) (double) slider.getProperties().getWithDefault ("mod", 0.0);
-    if (std::abs (prev - sum) > 1.0e-4f) { slider.getProperties().set ("mod", sum); slider.repaint(); }
-}
-
-bool ParamKnob::isInterestedInDragSource (const SourceDetails& d)
-{
-    return paramDefs()[(size_t) index].destIndex > 0 && d.description.toString().startsWith ("modsrc:");
-}
-
-void ParamKnob::itemDropped (const SourceDetails& d)
-{
-    dropHover = false;
-    repaint();
-    const int src = d.description.toString().fromFirstOccurrenceOf (":", false, false).getIntValue();
-    const int dest = paramDefs()[(size_t) index].destIndex;
-    for (int s = 0; s < kNumModSlots; ++s)
-    {
-        const int cs = (int) ctx.proc.getParam (P::mod (s, P::mSrc)), cd = (int) ctx.proc.getParam (P::mod (s, P::mDst));
-        if ((cs == src && cd == dest) || cs == 0 || cd == 0)
-        {
-            ctx.proc.setParamPlain (P::mod (s, P::mSrc), (float) src);
-            ctx.proc.setParamPlain (P::mod (s, P::mDst), (float) dest);
-            if (cs != src || cd != dest) ctx.proc.setParamPlain (P::mod (s, P::mAmt), 0.35f);
-            if (ctx.toast) ctx.toast (sourceNames()[src] + " -> " + paramDefs()[(size_t) index].name + " (slot " + juce::String (s + 1) + ")");
-            return;
-        }
-    }
-    if (ctx.toast) ctx.toast (L ("Matriz llena: libera un slot", "Matrix full: free a slot"));
+    g.setFont (font (labelSize, true));
+    g.drawFittedText (name.toUpperCase(), getLocalBounds().removeFromBottom ((int) (labelSize + 4)), juce::Justification::centred, 1, 0.7f);
 }
 
 void ParamKnob::mouseDown (const juce::MouseEvent& e)
@@ -202,19 +139,10 @@ void ParamKnob::showMenu()
     m.addSectionHeader (d.name);
     m.addItem (1, "MIDI Learn");
     m.addItem (2, L ("Valor por defecto", "Default value"));
-    if (d.destIndex > 0) m.addItem (3, L ("Quitar modulaciones", "Remove modulations"));
-    m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this), [this, dest = d.destIndex, def = d.def] (int r)
+    m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (this), [this, def = d.def] (int r)
     {
         if (r == 1 && ctx.startMidiLearn) ctx.startMidiLearn (index);
         if (r == 2) ctx.proc.setParamPlain (index, def);
-        if (r == 3)
-            for (int s = 0; s < kNumModSlots; ++s)
-                if ((int) ctx.proc.getParam (P::mod (s, P::mDst)) == dest)
-                {
-                    ctx.proc.setParamPlain (P::mod (s, P::mSrc), 0);
-                    ctx.proc.setParamPlain (P::mod (s, P::mDst), 0);
-                    ctx.proc.setParamPlain (P::mod (s, P::mAmt), 0);
-                }
     });
 }
 
@@ -261,26 +189,6 @@ void Section::mouseDown (const juce::MouseEvent& e)
         if (r == 1) { copySection (ctx.proc, group); if (ctx.toast) ctx.toast (title + L (" copiado", " copied")); }
         if (r == 2 && ! pasteSection (ctx.proc, group) && ctx.toast) ctx.toast (L ("El portapapeles no es compatible con ", "Clipboard is not compatible with ") + title);
     });
-}
-
-// ---------------------------------------------------------------- SourceChip
-void SourceChip::paint (juce::Graphics& g)
-{
-    auto r = getLocalBounds().toFloat().reduced (1);
-    g.setColour (col::bgDeep);
-    g.fillRoundedRectangle (r, 4);
-    g.setColour (col::accent3.withAlpha (0.25f + 0.75f * juce::jlimit (0.0f, 1.0f, std::abs (level))));
-    g.drawRoundedRectangle (r, 4, 1.2f);
-    g.fillRoundedRectangle (r.removeFromLeft (4).reduced (0, 3), 2);
-    g.setColour (col::text);
-    g.setFont (font (11.0f, true));
-    g.drawFittedText (sourceNames()[src], getLocalBounds().reduced (6, 0), juce::Justification::centred, 1);
-}
-
-void SourceChip::mouseDrag (const juce::MouseEvent&)
-{
-    if (auto* c = juce::DragAndDropContainer::findParentDragContainerFor (this))
-        if (! c->isDragAndDropActive()) c->startDragging ("modsrc:" + juce::String (src), this);
 }
 
 // ---------------------------------------------------------------- AutoPanel

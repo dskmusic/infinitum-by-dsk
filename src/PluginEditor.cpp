@@ -65,15 +65,14 @@ InfinitumEditor::InfinitumEditor (InfinitumProcessor& p)
 void InfinitumEditor::buildUi()
 {
     header = std::make_unique<gx::ui::Header> (ctx, [this] (int t) { showPage (t); });
+    landscapePage = std::make_unique<gx::ui::LandscapePage> (ctx);
+    soundPage = std::make_unique<gx::ui::SoundPage> (ctx);
     generator = std::make_unique<gx::ui::GeneratorPage> (ctx);
     presets = std::make_unique<gx::ui::PresetsPage> (ctx);
-    editorPage = std::make_unique<gx::ui::EditorPage> (ctx);
     exportPage = std::make_unique<gx::ui::ExportPage> (ctx);
     settingsPage = std::make_unique<gx::ui::SettingsPage> (ctx, [this] (float s) { setUiScale (s); }, [this] { about->setVisible (true); about->toFront (false); });
     about = std::make_unique<gx::ui::AboutOverlay>();
-    exportPage->sfzPanel = gx::ui::makeSfzPanel (ctx);
-    if (exportPage->sfzPanel) exportPage->addAndMakeVisible (*exportPage->sfzPanel);
-    pages = { generator.get(), presets.get(), editorPage.get(), exportPage.get(), settingsPage.get() };
+    pages = { landscapePage.get(), soundPage.get(), generator.get(), presets.get(), exportPage.get(), settingsPage.get() };
     root.addAndMakeVisible (*header);
     for (auto* pg : pages) root.addChildComponent (pg);
     root.addChildComponent (*about);
@@ -87,9 +86,9 @@ void InfinitumEditor::buildUi()
     header->abButton.setButtonText (abActive == 0 ? "A" : "B");
     presets->onLoaded = [this] (const gx::Preset& pr) { header->setPresetName (pr.meta.name); generator->presetLoaded(); };
     generator->onPresetChanged = [this] { header->setPresetName (proc.currentMeta.name); undo.reset(); };
-    generator->openEditor = [this] { showPage (2); };
-    generator->openExport = [this] { showPage (3); };
-    generator->openPresets = [this] { showPage (1); };
+    generator->openEditor = [this] { showPage (1); };
+    generator->openExport = [this] { showPage (4); };
+    generator->openPresets = [this] { showPage (3); };
 }
 
 // Language switch: recreate every page so all labels, menus and tooltips change at once.
@@ -98,12 +97,11 @@ void InfinitumEditor::rebuildUi()
     pendingRebuild = false;
     gx::uiEnglish() = settings.messageLanguage() == "en";
     const auto genState = generator->uiState();
-    const int page = currentPage, sub = editorPage->currentSub();
+    const int page = currentPage;
     pages.clear();
-    header.reset(); generator.reset(); presets.reset(); editorPage.reset(); exportPage.reset(); settingsPage.reset(); about.reset();
+    header.reset(); landscapePage.reset(); soundPage.reset(); generator.reset(); presets.reset(); exportPage.reset(); settingsPage.reset(); about.reset();
     buildUi();
     generator->setUiState (genState);
-    editorPage->showSub (sub);
     resized();
     header->setPresetName (proc.currentMeta.name);
     showPage (page);
@@ -147,7 +145,6 @@ void InfinitumEditor::showPage (int index)
     pages[(size_t) currentPage]->pageShown();
 }
 
-void InfinitumEditor::showEditorSub (int index) { editorPage->showSub (index); }
 
 void InfinitumEditor::toast (const juce::String& msg)
 {
@@ -207,7 +204,7 @@ void InfinitumEditor::timerCallback()
         if (const int g = proc.presetGeneration.load(); g != lastPresetGen) { lastPresetGen = g; refreshAll(); }
     }
     if (toastLabel.isVisible() && now > toastUntil) toastLabel.setVisible (false);
-    if (pendingRebuild && ! generator->isBusy()) rebuildUi(); // waits for a running generation to finish
+    if (pendingRebuild && ! generator->isBusy() && ! exportPage->isBusy()) rebuildUi(); // waits for a running generation / export
 }
 
 bool InfinitumEditor::keyPressed (const juce::KeyPress& k)
@@ -215,6 +212,7 @@ bool InfinitumEditor::keyPressed (const juce::KeyPress& k)
     const auto mods = k.getModifiers();
     if (mods.isCommandDown() && k.getKeyCode() == 'Z' && ! mods.isShiftDown()) { undo.performUndo(); refreshAll(); return true; }
     if (mods.isCommandDown() && (k.getKeyCode() == 'Y' || (k.getKeyCode() == 'Z' && mods.isShiftDown()))) { undo.performRedo(); refreshAll(); return true; }
-    if (currentPage == 0 && generator->handleKey (k)) return true;
+    if (k.getKeyCode() == juce::KeyPress::spaceKey && ! mods.isAnyModifierKeyDown()) { proc.setPlaying (! proc.isPlayingInternal()); return true; }
+    if (currentPage == 2 && generator->handleKey (k)) return true;
     return false;
 }

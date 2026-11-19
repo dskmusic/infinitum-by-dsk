@@ -104,7 +104,7 @@ void Engine::reset (uint32_t s)
     grnRng = Rng (seed * 31u + 555u);
     // shimmer
     shm.clear();
-    for (auto& c : shift) for (auto& s : c) s.clear();
+    for (auto& c : shift) for (auto& ps : c) ps.clear();
     shmFb[0] = shmFb[1] = 0;
     for (auto& b : shmDamp) b.reset();
     // wind

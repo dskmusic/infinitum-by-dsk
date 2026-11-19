@@ -11,7 +11,7 @@ public:
     InfinitumProcessor();
     ~InfinitumProcessor() override;
 
-    void prepareToPlay (double sampleRate, int blockSize) override;
+    void prepareToPlay (double sampleRate, int maxBlock) override;
     void releaseResources() override {}
     bool isBusesLayoutSupported (const BusesLayout&) const override;
     void processBlock (juce::AudioBuffer<float>&, juce::MidiBuffer&) override;

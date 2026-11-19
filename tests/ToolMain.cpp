@@ -1,7 +1,7 @@
 #include "Tests.h"
 #include <juce_audio_formats/juce_audio_formats.h>
 
-int runToolExtras (const juce::String& cmd, int argc, char** argv); // ToolUi.cpp (UI build only)
+int runToolExtras (const juce::String& cmd, int argc, char** argv); // ToolUi.cpp
 
 int main (int argc, char** argv)
 {
@@ -23,9 +23,7 @@ int main (int argc, char** argv)
         std::printf ("%s\n", err.isEmpty() ? out.getFullPathName().toRawUTF8() : err.toRawUTF8());
         return err.isEmpty() ? 0 : 1;
     }
-#if ! INFINITUM_NO_UI
     if (const int r = runToolExtras (cmd, argc, argv); r != -1) return r;
-#endif
-    std::fprintf (stderr, "usage: InfinitumTool test | render <out.wav> [seconds] [preset|seed]\n");
+    std::fprintf (stderr, "usage: InfinitumTool test | render <out.wav> [seconds] [preset|seed] | factory | gen-report | icon | screenshot | demos\n");
     return 2;
 }

@@ -7,10 +7,11 @@ static juce::String localisedNotes (juce::String n)
 {
     if (uiEnglish()) return n;
     const char* pairs[][2] {
-        { "Macros: 1 Brightness, 2 Timbre, 3 Space, 4 Character. Mod wheel opens the filter.", "Macros: 1 Brillo, 2 Timbre, 3 Espacio, 4 Carácter. Mod wheel abre el filtro." },
-        { "Hold a chord: the arpeggiator does the rest.", "Mantén un acorde: el arpegiador hace el resto." },
-        { "Trance gate synced to tempo.", "Trance gate sincronizado al tempo." },
-        { "Step sequencer modulating the timbre.", "Step sequencer modulando el timbre." } };
+        { "Press Play and let it evolve.", "Pulsa Play y deja que evolucione." },
+        { "Tuned to A4 = 432 Hz.", "Afinado a La4 = 432 Hz." },
+        { "Try the session timer for a meditation with a gentle fade-out.", "Prueba el temporizador para una meditación con fundido suave." },
+        { "Fast evolution: try Freeze when you hear a moment you love.", "Evolución rápida: pulsa Congelar cuando oigas un momento que te guste." },
+        { "Turn Evolution and Light to move the landscape.", "Gira Evolución y Luz para mover el paisaje." } };
     for (auto& p : pairs) n = n.replace (p[0], juce::String::fromUTF8 (p[1]));
     return n;
 }
@@ -174,7 +175,7 @@ void PresetsPage::paintListBoxItem (int row, juce::Graphics& g, int w, int h, bo
     g.drawText (m.name, 28, 0, w / 3, h, juce::Justification::centredLeft);
     g.setColour (col::textDim);
     g.setFont (font (11.5f));
-    g.drawText (m.category + (m.subcategory.isNotEmpty() ? " / " + m.subcategory : juce::String()), 28 + w / 3, 0, w / 5, h, juce::Justification::centredLeft);
+    g.drawText (categoryLabel (m.category) + (m.subcategory.isNotEmpty() ? " / " + m.subcategory : juce::String()), 28 + w / 3, 0, w / 5, h, juce::Justification::centredLeft);
     g.drawFittedText (m.tags.joinIntoString (", "), 28 + w / 3 + w / 5, 0, w - 160 - (28 + w / 3 + w / 5), h, juce::Justification::centredLeft, 1, 0.8f);
     juce::String stars;
     for (int i = 0; i < 5; ++i) stars << (i < m.rating ? juce::String::fromUTF8 ("\xe2\x98\x85") : juce::String::fromUTF8 ("\xc2\xb7"));
@@ -197,11 +198,7 @@ void PresetsPage::loadRow (int row)
     const auto& m = ctx.library.all()[(size_t) idx];
     info.setText (m.name + "\n" + m.category + " / " + m.subcategory + L ("\nAutor: ", "\nAuthor: ") + m.author + "\nTags: " + m.tags.joinIntoString (", ")
                   + L ("\nUsos: ", "\nUses: ") + juce::String (m.uses) + "\n\n" + localisedNotes (m.notes), juce::dontSendNotification);
-    if (ctx.settings.previewOnSelect())
-    {
-        ctx.proc.keyboardState.noteOn (1, 60, 0.75f);
-        juce::Timer::callAfterDelay (700, [sp = juce::Component::SafePointer<PresetsPage> (this)] { if (sp) sp->ctx.proc.keyboardState.noteOff (1, 60, 0.0f); });
-    }
+    if (ctx.settings.previewOnSelect() && ! ctx.proc.isHostPlaying()) ctx.proc.setPlaying (true);
 }
 
 void PresetsPage::selectedRowsChanged (int row) { if (! syncingSelection) loadRow (row); }
@@ -335,7 +332,7 @@ void PresetsPage::paint (juce::Graphics& g)
     drawPanel (g, r.removeFromRight (330).toFloat());
     g.setColour (col::textDim);
     g.setFont (font (11.0f, true));
-    g.drawText (L ("CATEGORÍA", "CATEGORY"), 20, 12, 160, 16, juce::Justification::centredLeft);
+    g.drawText (L ("ESTADO DE ÁNIMO", "MOOD"), 20, 12, 160, 16, juce::Justification::centredLeft);
 }
 
 void PresetsPage::resized()

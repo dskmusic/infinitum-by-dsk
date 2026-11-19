@@ -1,7 +1,5 @@
 #include "PluginProcessor.h"
-#if ! INFINITUM_NO_UI
- #include "PluginEditor.h"
-#endif
+#include "PluginEditor.h"
 
 InfinitumProcessor::InfinitumProcessor()
     : AudioProcessor (BusesProperties().withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
@@ -18,9 +16,9 @@ InfinitumProcessor::InfinitumProcessor()
 
 InfinitumProcessor::~InfinitumProcessor() = default;
 
-void InfinitumProcessor::prepareToPlay (double sampleRate, int blockSize)
+void InfinitumProcessor::prepareToPlay (double sampleRate, int maxBlock)
 {
-    engine.prepare (sampleRate, juce::jmax (blockSize, 16));
+    engine.prepare (sampleRate, juce::jmax (maxBlock, 16));
     keyboardState.reset();
 }
 
@@ -95,11 +93,7 @@ void InfinitumProcessor::setParamPlain (int index, float plain)
         prm->setValueNotifyingHost (prm->convertTo0to1 (plain));
 }
 
-#if INFINITUM_NO_UI
-juce::AudioProcessorEditor* InfinitumProcessor::createEditor() { return new juce::GenericAudioProcessorEditor (*this); }
-#else
 juce::AudioProcessorEditor* InfinitumProcessor::createEditor() { return new InfinitumEditor (*this); }
-#endif
 
 void InfinitumProcessor::getStateInformation (juce::MemoryBlock& mb)
 {
