@@ -141,7 +141,8 @@ private:
     std::atomic<int> framesDrawn { 0 };
     double fpsT0 = 0; float fps = 0;
     void paintFps (juce::Graphics&, juce::Rectangle<float>);
-    std::unique_ptr<juce::Button> shotButton;
+    std::unique_ptr<juce::Button> shotButton, variantButton;
+    int shownSeed = 1;
     juce::String shotMsg; double shotMsgAt = -100;
     juce::File lastShot;
     juce::SpinLock ulock;
@@ -156,4 +157,5 @@ juce::String chordName (int rootPc, int scale, int degree, float harmony); // "A
 // Visual intensity of the stars that appear with the notes (Settings, 0..1)
 inline float& noteStarIntensity() { static float v = 0.3f; return v; }
 inline bool& showFps() { static bool v = false; return v; }
+inline int& landscapeVariant() { static int v = 0; return v; }   // scenery variation (button under the chord)
 }

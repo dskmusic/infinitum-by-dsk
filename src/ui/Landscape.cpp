@@ -107,9 +107,11 @@ Landscape::Landscape()
 {
     setInterceptsMouseClicks (true, true);   // children: the scene buttons
     // small camera button (bottom-left): saves the landscape as a clean, branded picture
-    struct ShotButton : juce::Button
+    // small glass icon buttons over the landscape: picture (bottom-left) and new landscape variation (under the chord)
+    struct GlassButton : juce::Button
     {
-        ShotButton() : juce::Button ("shot") { setMouseCursor (juce::MouseCursor::PointingHandCursor); setTooltip (L ("Guardar una captura del paisaje", "Save a picture of the landscape")); }
+        int kind;
+        GlassButton (int k, const juce::String& tip) : juce::Button ("glass"), kind (k) { setMouseCursor (juce::MouseCursor::PointingHandCursor); setTooltip (tip); setWantsKeyboardFocus (false); }
         void paintButton (juce::Graphics& g, bool over, bool down) override
         {
             auto r = getLocalBounds().toFloat().reduced (1.0f);
@@ -117,19 +119,36 @@ Landscape::Landscape()
             g.fillRoundedRectangle (r, 5.0f);
             g.setColour (juce::Colours::white.withAlpha (over ? 0.35f : 0.18f));
             g.drawRoundedRectangle (r, 5.0f, 1.0f);
-            const auto c = over ? col::accent : juce::Colours::white.withAlpha (0.7f);
-            auto body = r.reduced (r.getWidth() * 0.22f, r.getHeight() * 0.27f).translated (0, 1.0f + (down ? 0.5f : 0.0f));
-            juce::Path p;
-            p.addRoundedRectangle (body, 2.0f);
-            g.setColour (c);
-            g.strokePath (p, juce::PathStrokeType (1.2f));
-            g.drawLine (body.getX() + body.getWidth() * 0.3f, body.getY() - 1.6f, body.getX() + body.getWidth() * 0.55f, body.getY() - 1.6f, 1.2f);
-            g.drawEllipse (juce::Rectangle<float> (body.getHeight() * 0.62f, body.getHeight() * 0.62f).withCentre (body.getCentre()), 1.2f);
+            g.setColour (over ? col::accent : juce::Colours::white.withAlpha (0.7f));
+            const auto c = r.getCentre().translated (0, down ? 0.5f : 0.0f);
+            if (kind == 0)
+            {
+                auto body = r.reduced (r.getWidth() * 0.22f, r.getHeight() * 0.27f).translated (0, 1.0f + (down ? 0.5f : 0.0f));
+                juce::Path p;
+                p.addRoundedRectangle (body, 2.0f);
+                g.strokePath (p, juce::PathStrokeType (1.2f));
+                g.drawLine (body.getX() + body.getWidth() * 0.3f, body.getY() - 1.6f, body.getX() + body.getWidth() * 0.55f, body.getY() - 1.6f, 1.2f);
+                g.drawEllipse (juce::Rectangle<float> (body.getHeight() * 0.62f, body.getHeight() * 0.62f).withCentre (body.getCentre()), 1.2f);
+            }
+            else
+            {
+                const float rad = r.getHeight() * 0.28f;
+                juce::Path p;
+                p.addCentredArc (c.x, c.y, rad, rad, 0.0f, 0.5f, 5.6f, true);
+                g.strokePath (p, juce::PathStrokeType (1.2f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+                const auto tip = c.translated (rad * std::sin (5.6f), -rad * std::cos (5.6f));
+                juce::Path head;
+                head.addTriangle (tip.translated (-3.2f, -1.6f), tip.translated (1.2f, -3.4f), tip.translated (0.6f, 1.6f));
+                g.fillPath (head);
+            }
         }
     };
-    shotButton = std::make_unique<ShotButton>();
+    shotButton = std::make_unique<GlassButton> (0, L ("Captura del paisaje (vista previa)", "Landscape picture (preview)"));
     shotButton->onClick = [this] { takeScreenshot(); };
     addChildComponent (*shotButton);
+    variantButton = std::make_unique<GlassButton> (1, L ("Nueva variación de este paisaje (el sonido no cambia)", "New variation of this landscape (the sound does not change)"));
+    variantButton->onClick = [] { ++landscapeVariant(); };
+    addChildComponent (*variantButton);
     for (size_t i = 0; i < stars.size(); ++i)
     {
         stars[i] = { rng.nextFloat(), rng.nextFloat() };
@@ -255,7 +274,8 @@ void Landscape::rebuildCache()
 
 void Landscape::tick (const Frame& fr)
 {
-    if (getWidth() > 0 && lastT > 0 && (fr.scene != f.scene || fr.seed != f.seed) && ! f.reduced && ! glOk.load() && ! external.isValid())
+    const int visSeed = fr.seed + landscapeVariant() * 7919;   // the variation button changes the scenery, not the sound
+    if (getWidth() > 0 && lastT > 0 && (fr.scene != f.scene || visSeed != f.seed) && ! f.reduced && ! glOk.load() && ! external.isValid())
     {
         const bool ov = showOverlay;
         showOverlay = false;
@@ -266,6 +286,8 @@ void Landscape::tick (const Frame& fr)
     const double dt = juce::jlimit (0.0, 0.2, fr.time - lastT);
     lastT = fr.time;
     f = fr;
+    shownSeed = fr.seed;
+    f.seed = visSeed;
     for (int l = 0; l < kNumLayers; ++l)
     {
         pres[(size_t) l] += (f.presence[(size_t) l] - pres[(size_t) l]) * (float) juce::jmin (1.0, dt * 1.5);
@@ -379,6 +401,69 @@ void Landscape::resized()
     cacheKey = {};
 }
 
+namespace
+{
+// preview of the picture with Save... (choose where) / Cancel
+struct ShotPreview : juce::Component
+{
+    juce::Image img;
+    juce::TextButton save { L ("Guardar...", "Save...") }, cancel { L ("Cancelar", "Cancel") };
+    std::unique_ptr<juce::FileChooser> chooser;
+    explicit ShotPreview (const juce::Image& i) : img (i)
+    {
+        addAndMakeVisible (save);
+        addAndMakeVisible (cancel);
+        cancel.onClick = [this] { close(); };
+        save.onClick = [this]
+        {
+            auto dir = juce::File::getSpecialLocation (juce::File::userPicturesDirectory);
+            const auto name = "Infinitum " + juce::Time::getCurrentTime().formatted ("%Y-%m-%d %H-%M-%S");
+            chooser = std::make_unique<juce::FileChooser> (L ("Guardar captura", "Save picture"), dir.getNonexistentChildFile (name, ".png"), "*.png");
+            chooser->launchAsync (juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles | juce::FileBrowserComponent::warnAboutOverwriting,
+                                  [this] (const juce::FileChooser& fc)
+            {
+                auto f = fc.getResult();
+                if (f == juce::File()) return;
+                f = f.withFileExtension ("png");
+                f.deleteFile();
+                bool ok = false;
+                if (auto out = f.createOutputStream()) { juce::PNGImageFormat png; ok = png.writeImageToStream (img, *out); }
+                if (ok) close();
+                else juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::WarningIcon, "Infinitum", L ("No se pudo guardar la captura en:\n", "The picture could not be saved to:\n") + f.getFullPathName());
+            });
+        };
+        const int w = 960;
+        setSize (w, juce::roundToInt ((float) w * (float) img.getHeight() / (float) img.getWidth()) + 70);
+    }
+    void close() { if (auto* dw = findParentComponentOfClass<juce::DialogWindow>()) dw->exitModalState (0); }
+    void paint (juce::Graphics& g) override
+    {
+        g.fillAll (col::bg);
+        g.drawImage (img, getLocalBounds().withTrimmedBottom (60).reduced (12).toFloat(), juce::RectanglePlacement::centred);
+    }
+    void resized() override
+    {
+        auto r = getLocalBounds().removeFromBottom (60).reduced (12, 14);
+        cancel.setBounds (r.removeFromRight (120));
+        r.removeFromRight (10);
+        save.setBounds (r.removeFromRight (150));
+    }
+};
+
+void showShotPreview (const juce::Image& img, juce::Component* around)
+{
+    juce::DialogWindow::LaunchOptions o;
+    o.content.setOwned (new ShotPreview (img));
+    o.dialogTitle = L ("Captura del paisaje", "Landscape picture");
+    o.dialogBackgroundColour = col::bg;
+    o.useNativeTitleBar = true;
+    o.resizable = false;
+    o.escapeKeyTriggersCloseButton = true;
+    o.componentToCentreAround = around;
+    if (auto* dw = o.launchAsync()) dw->setAlwaysOnTop (true);   // stays above a DAW or the full-screen view
+}
+}
+
 void Landscape::takeScreenshot()
 {
     const float k = 2.0f;   // twice the on-screen size
@@ -435,15 +520,7 @@ void Landscape::takeScreenshot()
         g.setColour (juce::Colours::white.withAlpha (0.75f));
         g.drawText (credit, foot, juce::Justification::centred);
     }
-    auto dir = juce::File::getSpecialLocation (juce::File::userPicturesDirectory).getChildFile ("Infinitum");
-    dir.createDirectory();
-    auto file = dir.getNonexistentChildFile ("Infinitum " + juce::Time::getCurrentTime().formatted ("%Y-%m-%d %H-%M-%S"), ".png");
-    bool ok = false;
-    if (auto out = file.createOutputStream()) { juce::PNGImageFormat png; ok = png.writeImageToStream (img, *out); }
-    shotMsg = ok ? L ("Captura guardada en Imágenes\\Infinitum", "Picture saved to Pictures\\Infinitum") : L ("No se pudo guardar la captura", "The picture could not be saved");
-    shotMsgAt = juce::Time::getMillisecondCounterHiRes() * 0.001;
-    lastShot = ok ? file : juce::File();
-    repaint();
+    showShotPreview (img, this);
 }
 
 void Landscape::paintFps (juce::Graphics& g, juce::Rectangle<float> b)
@@ -452,6 +529,8 @@ void Landscape::paintFps (juce::Graphics& g, juce::Rectangle<float> b)
     {
         shotButton->setBounds (12, getHeight() - (fullBleed ? 34 : 58), 26, 20);
         shotButton->setVisible (showOverlay && ! external.isValid());
+        variantButton->setBounds (16, 70, 26, 20);
+        variantButton->setVisible (showOverlay && ! external.isValid());
     }
     const double age = juce::Time::getMillisecondCounterHiRes() * 0.001 - shotMsgAt;
     if (age < 3.0 && ! external.isValid())
@@ -1205,7 +1284,7 @@ void Landscape::paintOverlay (juce::Graphics& g, juce::Rectangle<float> b)
     g.drawText (chordName (f.rootPc, f.scale, f.degree, f.harmony), r.removeFromTop (30), juce::Justification::topLeft);
     g.setFont (font (12.5f, true));
     g.setColour (juce::Colours::white.withAlpha (0.65f));
-    g.drawText (keyNames()[(int) f.rootPc % 12] + " " + scaleNames()[f.scale] + juce::String::fromUTF8 ("   ·   ") + L ("semilla ", "seed ") + juce::String (f.seed),
+    g.drawText (keyNames()[(int) f.rootPc % 12] + " " + scaleNames()[f.scale] + juce::String::fromUTF8 ("   ·   ") + L ("semilla ", "seed ") + juce::String (shownSeed),
                 r.removeFromTop (18), juce::Justification::topLeft);
     auto mmss = [] (float s) { const int v = (int) s; return juce::String (v / 60).paddedLeft ('0', 2) + ":" + juce::String (v % 60).paddedLeft ('0', 2); };
     auto top = b.reduced (16, 12);

@@ -333,6 +333,7 @@ GeneratorPage::GeneratorPage (Context& c) : Page (c), macros (c, "Macros", "macr
     histLabel.setColour (juce::Label::textColourId, col::phosphor);
     addAndMakeVisible (histLabel);
     view.showOverlay = false;
+    view.setGpu (c.settings.gpu());
     for (auto* comp : std::initializer_list<juce::Component*> { &scope, &spectrum, &view, &vu }) addAndMakeVisible (comp);
     macros.accent = col::accent3;
     std::vector<juce::Component*> mk;

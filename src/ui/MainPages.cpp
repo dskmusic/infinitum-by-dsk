@@ -364,7 +364,7 @@ FullscreenView::FullscreenView (Context& c, std::function<void()> onClose) : ctx
 {
     setOpaque (true);
     setWantsKeyboardFocus (true);
-    view.setInterceptsMouseClicks (false, false);
+    view.setInterceptsMouseClicks (false, true);   // the picture / variation buttons stay clickable
     view.fullBleed = true;
     addAndMakeVisible (view);
     view.setGpu (c.settings.gpu());

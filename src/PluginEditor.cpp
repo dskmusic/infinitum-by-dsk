@@ -247,18 +247,18 @@ void InfinitumEditor::openFullscreen()
     fullscreenView->addToDesktop (juce::ComponentPeer::windowAppearsOnTaskbar);
     fullscreenView->setBounds (juce::Desktop::getInstance().getDisplays().getDisplayForRect (getScreenBounds())->totalArea);
     fullscreenView->setVisible (true);
-    juce::Desktop::getInstance().setKioskModeComponent (fullscreenView.get(), false);
-    fullscreenView->toFront (true);
+    fullscreenView->toFront (true);   // a borderless window covering the screen; no kiosk mode (it minimises / restores on focus changes)
     fullscreenView->grabKeyboardFocus();
 }
 
 void InfinitumEditor::closeFullscreen()
 {
     if (! fullscreenView) return;
-    if (juce::Desktop::getInstance().getKioskModeComponent() == fullscreenView.get()) juce::Desktop::getInstance().setKioskModeComponent (nullptr, false);
     fullscreenView->removeFromDesktop();
     fullscreenView->setLookAndFeel (nullptr);
     fullscreenView.reset();
+    if (auto* peer = getPeer()) peer->getComponent().repaint();   // the main window comes back fully painted
+    repaint();
 }
 
 void InfinitumEditor::timerCallback()
