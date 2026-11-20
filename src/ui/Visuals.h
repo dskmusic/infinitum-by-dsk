@@ -98,6 +98,7 @@ public:
     bool showOverlay = true;                 // chord / key / clock texts
     bool fullBleed = false;                  // no rounded corners (full screen, video)
     std::function<void()> onClick;
+    std::function<void (juce::Graphics&)> paintExtra;   // drawn last, on top (works over the GPU landscape too)
     void mouseUp (const juce::MouseEvent& e) override { if (onClick && e.mouseWasClicked()) onClick(); }
 private:
     struct Spark { float x, y, vx, vy, life, size; juce::Colour c; int kind; };

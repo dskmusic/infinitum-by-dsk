@@ -368,6 +368,7 @@ FullscreenView::FullscreenView (Context& c, std::function<void()> onClose) : ctx
     view.fullBleed = true;
     addAndMakeVisible (view);
     view.setGpu (c.settings.gpu());
+    view.paintExtra = [this] (juce::Graphics& g) { paintHud (g); };   // shortcuts box + value toasts, over the landscape
 }
 
 void FullscreenView::tick (const Frame& f)
@@ -426,7 +427,7 @@ bool FullscreenView::keyPressed (const juce::KeyPress& k)
     }
 }
 
-void FullscreenView::paintOverChildren (juce::Graphics& g)
+void FullscreenView::paintHud (juce::Graphics& g)
 {
     const auto b = getLocalBounds().toFloat();
     if (lastT < toastUntil)

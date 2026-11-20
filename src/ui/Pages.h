@@ -124,7 +124,7 @@ public:
     FullscreenView (Context& c, std::function<void()> onClose);
     void tick (const Frame&) override;
     void resized() override { view.setBounds (getLocalBounds()); }
-    void paintOverChildren (juce::Graphics&) override;
+    void paintHud (juce::Graphics&);
     bool keyPressed (const juce::KeyPress&) override;
     void mouseMove (const juce::MouseEvent&) override { helpUntil = juce::jmax (helpUntil, lastT + 2.5); }
 private:

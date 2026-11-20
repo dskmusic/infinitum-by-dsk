@@ -350,6 +350,7 @@ void Landscape::paint (juce::Graphics& g)
         }
         if (showOverlay) paintOverlay (g, b);
         paintFps (g, b);
+        if (paintExtra) paintExtra (g);
         return;
     }
     g.saveState();
@@ -394,6 +395,7 @@ void Landscape::paint (juce::Graphics& g)
     if (showOverlay) paintOverlay (g, b);
     ++framesDrawn;
     paintFps (g, b);
+    if (paintExtra) paintExtra (g);
 }
 
 void Landscape::resized()
@@ -527,7 +529,7 @@ void Landscape::paintFps (juce::Graphics& g, juce::Rectangle<float> b)
 {
     if (shotButton != nullptr)   // placed here, not in resized(): full screen / page mode can change without a resize
     {
-        shotButton->setBounds (12, getHeight() - (fullBleed ? 34 : 58), 26, 20);
+        shotButton->setBounds (12, getHeight() - 58, 26, 20);
         shotButton->setVisible (showOverlay && ! external.isValid());
         variantButton->setBounds (16, 70, 26, 20);
         variantButton->setVisible (showOverlay && ! external.isValid());
@@ -537,11 +539,11 @@ void Landscape::paintFps (juce::Graphics& g, juce::Rectangle<float> b)
     {
         g.setColour (juce::Colours::white.withAlpha (0.85f * (float) juce::jmin (1.0, (3.0 - age) * 2.0)));
         g.setFont (font (11.5f, true));
-        g.drawText (shotMsg, juce::Rectangle<float> (b.getX() + 44.0f, b.getBottom() - (fullBleed ? 34.0f : 58.0f), 400.0f, 20.0f), juce::Justification::centredLeft);
+        g.drawText (shotMsg, juce::Rectangle<float> (b.getX() + 44.0f, b.getBottom() - 58.0f, 400.0f, 20.0f), juce::Justification::centredLeft);
         return;
     }
-    if (! showFps() || external.isValid()) return;   // never in exported videos or screenshots
-    const auto r = juce::Rectangle<float> (b.getX() + 44.0f, b.getBottom() - (fullBleed ? 32.0f : 56.0f), 80.0f, 16.0f);
+    if (! showFps() || ! showOverlay || external.isValid()) return;   // only on the landscape views (not in the generator preview, videos or pictures)   // never in exported videos or screenshots
+    const auto r = juce::Rectangle<float> (b.getX() + 44.0f, b.getBottom() - 56.0f, 80.0f, 16.0f);
     g.setColour (juce::Colours::white.withAlpha (0.45f));
     g.setFont (juce::FontOptions (11.0f));
     g.drawText (juce::String (juce::roundToInt (fps)) + " FPS" + (glOk.load() ? " GPU" : ""), r, juce::Justification::centredLeft);

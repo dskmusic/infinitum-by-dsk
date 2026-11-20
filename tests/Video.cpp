@@ -205,6 +205,18 @@ public:
     std::unique_ptr<Landscape> relaxView;
     FrameSource relaxFs { proc };
     Frame relaxFrame;
+    // trailer: every shot fades from / to black, cinema bars, thin centred lines instead of caption boxes
+    bool trailerMode = false, comingSoon = false;
+    double shotStart = -1, shotEnd = -1;
+    juce::String teaserEn, teaserEs; double teaserStart = 0, teaserEnd = 0;
+    void teaser (const char* en, const char* es, double from, double to) { teaserEn = juce::String::fromUTF8 (en); teaserEs = juce::String::fromUTF8 (es); teaserStart = vt + from; teaserEnd = vt + to; }
+    void shot (int scene, double seconds)
+    {
+        proc.setParamPlain (gx::P::scene, (float) scene);
+        shotStart = vt; shotEnd = vt + seconds;
+        relax (seconds);
+        shotStart = shotEnd = -1;
+    }
     void relax (double seconds)
     {
         relaxView = std::make_unique<Landscape>();
@@ -287,9 +299,15 @@ private:
                 auto ui = ed->createComponentSnapshot (ed->getLocalBounds(), true, kUiScale);
                 g.drawImageAt (ui, kUiX, 0);
             }
-            drawCaption (g);
-            drawCursor (g);
+            if (trailerMode && relaxView != nullptr && shotStart >= 0)
+            {
+                const double k = juce::jmin (1.0, (vt - shotStart) / 0.9, (shotEnd - vt) / 0.9);
+                if (k < 1.0) g.fillAll (juce::Colours::black.withAlpha ((float) (1.0 - juce::jmax (0.0, k))));
+            }
+            if (trailerMode) drawTeaser (g);
+            else { drawCaption (g); drawCursor (g); }
             drawCard (g);
+            if (trailerMode) { g.setColour (juce::Colours::black); g.fillRect (0, 0, kW, 132); g.fillRect (0, kH - 132, kW, 132); }   // 2.39:1
         }
         auto f = out.getChildFile ("frames").getChildFile ("f" + juce::String (frameNo++).paddedLeft ('0', 5) + ".jpg");
         juce::FileOutputStream os (f);
@@ -366,6 +384,22 @@ private:
         }
     }
 
+    void drawTeaser (juce::Graphics& g)
+    {
+        if (teaserEn.isEmpty() || vt < teaserStart || vt > teaserEnd) return;
+        const float a = (float) juce::jlimit (0.0, 1.0, juce::jmin ((vt - teaserStart) / 0.8, (teaserEnd - vt) / 0.8));
+        const float rise = (1.0f - a) * 10.0f;
+        auto line = [&] (const juce::String& t, const juce::Font& f, juce::Colour c, int y, int h)
+        {
+            g.setFont (f);
+            for (int k = 1; k <= 3; ++k) { g.setColour (juce::Colours::black.withAlpha (0.3f * a)); g.drawText (t, k - 1, y + k, kW, h, juce::Justification::centred); }   // soft shadow
+            g.setColour (c.withMultipliedAlpha (a));
+            g.drawText (t, 0, y, kW, h, juce::Justification::centred);
+        };
+        line (teaserEn, techFont (56.0f), juce::Colours::white, (int) (kH * 0.5f - 52 + rise), 64);
+        if (gBilingual && teaserEs.isNotEmpty()) line (teaserEs, font (30.0f, true), col::accent2, (int) (kH * 0.5f + 20 + rise), 40);
+    }
+
     void drawCard (juce::Graphics& g)
     {
         if (cardFrom < 0) return;
@@ -380,6 +414,27 @@ private:
             lg.setGradientFill (juce::ColourGradient (juce::Colour (0xff1b1544), kW * 0.5f, kH * 0.75f, juce::Colour (0xff03040c), kW * 0.5f, 0, true));
             lg.fillAll();
             const float t = (float) (vt - cardFrom);
+            if (comingSoon)
+            {
+                // the mark draws itself in (slow zoom, spark running round the loop), then the name, then the promise
+                const float z = 0.82f + 0.18f * (1.0f - std::exp (-t * 1.4f));
+                const float ta = juce::jlimit (0.0f, 1.0f, (t - 0.9f) / 1.0f), sa = juce::jlimit (0.0f, 1.0f, (t - 2.0f) / 1.0f);
+                Logo::drawMark (lg, juce::Rectangle<float> (420.0f * z, 220.0f * z).withCentre ({ kW * 0.5f, 360.0f }), 0.5f + 0.5f * std::sin (t * 1.6f), t * 0.32f);
+                lg.setColour (juce::Colours::white.withAlpha (ta));
+                lg.setFont (techFont (110.0f));
+                lg.drawText ("INFINITUM", 0, 490, kW, 120, juce::Justification::centred);
+                lg.setColour (col::textDim.withAlpha (ta));
+                lg.setFont (font (32.0f, true));
+                lg.drawText ("by DSK Music", 0, 605, kW, 44, juce::Justification::centred);
+                lg.setColour (col::accent.withAlpha (sa));
+                lg.setFont (techFont (40.0f));
+                lg.drawText (gBilingual ? juce::String::fromUTF8 ("COMING SOON  ·  MUY PRONTO") : juce::String ("COMING SOON"), 0, 690, kW, 54, juce::Justification::centred);
+                lg.setColour (col::text.withAlpha (sa * 0.8f));
+                lg.setFont (font (28.0f));
+                lg.drawText ("dskmusic.com/infinitum", 0, 760, kW, 40, juce::Justification::centred);
+                g.drawImageAt (layer, 0, 0);
+                return;
+            }
             Logo::drawMark (lg, juce::Rectangle<float> (kW * 0.5f - 210.0f, (endCard ? 170.0f : 220.0f), 420.0f, 220.0f), 0.7f + 0.3f * std::sin (t * 2.0f), t * 0.25f);
             lg.setColour (juce::Colours::white);
             lg.setFont (techFont (110.0f));
@@ -441,8 +496,8 @@ int runVideo (int argc, char** argv)
     d.card (false, 0.0, 3.4, 0.9);
 
     // ---- landscape + macros
-    d.caption ("A landscape of sound that never repeats", "Seven layers drift in and out on their own",
-               "Un paisaje sonoro que nunca se repite", "siete capas que entran y salen solas");
+    d.caption ("A landscape of sound that never repeats", "Eight layers drift in and out on their own",
+               "Un paisaje sonoro que nunca se repite", "ocho capas que entran y salen solas");
     d.wait (3.0);
     d.caption ("Light: from deep night to midday", "", "Luz: de noche cerrada a mediodía");
     d.turn (P::light, 0.85f, 2.2);
@@ -466,6 +521,20 @@ int runVideo (int argc, char** argv)
     d.load ("Neo-Noir");
     d.click (d.button ("Neon Rain"), 6.0);
 
+    // ---- new: melodic moods with a composed melody layer
+    d.caption ("New: melodic moods", "Fairytale and Film Score: themes that repeat, answer and resolve", "Nuevo: estados de ánimo melódicos", "Cuento y Banda sonora: temas que se repiten, se responden y resuelven");
+    d.load ("Music Box");
+    d.click (d.button ("Aurora"), 7.0);
+    d.caption ("Film Score", "A lyrical lead over lush chords and a bass line", "Banda sonora", "una melodía lírica sobre acordes amplios y un bajo");
+    d.load ("Main Theme");
+    d.click (d.button ("Valley"), 6.5);
+    d.caption ("One click: a new variation of the landscape", "Same sound, new scenery", "Un clic: una nueva variación del paisaje", "mismo sonido, otro paisaje");
+    if (auto* vb = d.find<juce::Button> (d.ed.get(), [] (juce::Button* b) { return b->getTooltip().startsWith ("New variation"); }))
+    {
+        d.click (vb, 1.8);
+        d.click (vb, 1.8);
+    }
+
     // ---- derelict
     d.caption ("Or a derelict ship in deep space...", "", "O una nave abandonada en el espacio...");
     d.load ("Derelict");
@@ -483,18 +552,18 @@ int runVideo (int argc, char** argv)
     d.relax (5.5);
 
     // ---- sound page
-    d.caption ("Drone · Pad · Texture · Shimmer · Wind · Bells · Bass", "Noise generator: pink, brown, white, ocean waves, vinyl",
-               "Drone · Pad · Textura · Shimmer · Viento · Campanas · Bajo", "generador de ruido: rosa, marrón, blanco, olas, vinilo");
+    d.caption ("Drone · Pad · Texture · Shimmer · Wind · Bells · Bass · Melody", "Noise generator: pink, brown, white, ocean waves, vinyl",
+               "Drone · Pad · Textura · Shimmer · Viento · Campanas · Bajo · Melodía", "generador de ruido: rosa, marrón, blanco, olas, vinilo");
     d.load ("Glow");
     d.click (d.button ("SOUND"), 4.0);
 
     // ---- generator
-    d.caption ("12 moods, 256 presets", "Epic · Forest · Desert · Sleep · Ethereal · Oceanic · Nostalgia...", "12 estados de ánimo, 256 presets", "Épico · Bosque · Desierto · Dormir · Etéreo · Océano · Nostalgia...");
+    d.caption ("14 moods, 292 presets", "Fairytale · Film Score · Epic · Forest · Desert · Sleep · Ethereal...", "14 estados de ánimo, 292 presets", "Cuento · Banda sonora · Épico · Bosque · Desierto · Dormir · Etéreo...");
     d.click (d.button ("GENERATOR"), 0.4);
     d.click (d.button ("Epic", &d.ed->generatorPage()), 0.3);
     d.generate();
     d.wait (3.0);
-    d.click (d.button ("Forest", &d.ed->generatorPage()), 0.3);
+    d.click (d.button ("Fairytale", &d.ed->generatorPage()), 0.3);
     d.generate();
     d.wait (3.0);
 
@@ -516,5 +585,37 @@ int runVideo (int argc, char** argv)
 
     d.finishAudio();
     std::printf ("video frames written to %s\n", dir.getChildFile ("frames").getFullPathName().toRawUTF8());
+    return 0;
+}
+
+// Short "coming soon" teaser: a few full-frame landscape shots under one melodic preset, three lines, the logo.
+int runTrailer (int argc, char** argv)
+{
+    const juce::File dir = juce::File::getCurrentWorkingDirectory().getChildFile (argc > 2 ? argv[2] : "trailer");
+    dir.createDirectory();
+    for (int a = 3; a < argc; ++a) gBilingual |= juce::String (argv[a]) == "bi";
+    Director d (dir);
+    using namespace gx;
+    d.trailerMode = true;
+    d.load ("Main Theme");
+    d.proc.setParamPlain (P::fadeIn, 3.0f);
+    d.proc.setPlaying (true);
+    d.ed->showPage (0);
+    d.wait (0.6);                                       // black, the music starts
+    d.teaser ("Some landscapes never end", "Hay paisajes que nunca terminan", 1.0, 4.2);
+    d.shot (scAurora, 5.0);
+    d.shot (scUnderwater, 4.2);
+    d.teaser ("Sound that paints itself", "Sonido que se pinta solo", 1.0, 4.0);
+    d.shot (scNeon, 4.6);
+    d.shot (scStarfield, 4.2);
+    d.teaser ("Infinite. Generative. Yours.", "Infinito. Generativo. Tuyo.", 1.0, 4.2);
+    d.shot (scValley, 5.0);
+    d.proc.setParamPlain (P::fadeOut, 6.0f);
+    d.comingSoon = true;
+    d.card (true, 1.2, 4.6, 0.0);
+    d.proc.setPlaying (false);
+    d.card (true, 0.0, 1.6, 0.0);
+    d.finishAudio();
+    std::printf ("trailer frames written to %s\n", dir.getChildFile ("frames").getFullPathName().toRawUTF8());
     return 0;
 }

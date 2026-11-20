@@ -245,7 +245,9 @@ void InfinitumEditor::openFullscreen()
     });
     fullscreenView->setLookAndFeel (&lnf);
     fullscreenView->addToDesktop (juce::ComponentPeer::windowAppearsOnTaskbar);
-    fullscreenView->setBounds (juce::Desktop::getInstance().getDisplays().getDisplayForRect (getScreenBounds())->totalArea);
+    // one pixel taller than the screen: Windows then keeps it a normal composited window instead of switching the
+    // OpenGL surface to exclusive full screen (that switch is what made the screen flicker / minimise on some PCs)
+    fullscreenView->setBounds (juce::Desktop::getInstance().getDisplays().getDisplayForRect (getScreenBounds())->totalArea.withTrimmedBottom (-1));
     fullscreenView->setVisible (true);
     fullscreenView->toFront (true);   // a borderless window covering the screen; no kiosk mode (it minimises / restores on focus changes)
     fullscreenView->grabKeyboardFocus();

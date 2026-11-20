@@ -271,28 +271,86 @@ float caustic (vec2 p, float t)
     c = 1.17 - pow (c, 1.4);
     return clamp (pow (abs (c), 8.0), 0.0, 1.0);
 }
+// organic web of refracted light (caustics): bright where two slow noise fields cross their middle value
+float web (vec2 q)
+{
+    return smoothstep (0.07, 0.0, abs (fbm3 (q) - 0.5)) * 0.7 + smoothstep (0.05, 0.0, abs (fbm3 (q * 1.7 + 3.1) - 0.5)) * 0.5;
+}
+// a layer of giant kelp: olive-golden stipes with alternating blades, rounded shading, back-lit translucent edges,
+// fogged by distance (layer 0 far ... 2 near)
+void kelp (inout vec3 col, vec2 p, vec2 uv, float layer, float bed, float asp, float L)
+{
+    float scale = 0.5 + 0.25 * layer;
+    float fog = 0.78 - 0.32 * layer;
+    for (int k = 0; k < 7; k++)
+    {
+        float fk = float (k) + layer * 13.0;
+        if (hash12 (S + vec2 (fk, 9.0)) < 0.25) continue;
+        float x0 = ((float (k) + 0.15 + 0.7 * hash12 (S + vec2 (fk, 1.0))) / 7.0 * 1.1 - 0.05) * asp;
+        float hk = (0.4 + 0.5 * hash12 (S + vec2 (fk, 2.0))) * (0.55 + 0.55 * uPres[1]) * (0.55 + 0.45 * scale);
+        float base = bed + 0.03 * (2.0 - layer);
+        float yy = (uv.y - base) / hk;
+        if (yy < 0.0 || yy > 1.0) continue;
+        float sway = (sin (uTime * 0.45 + fk * 1.3 + yy * 2.2) * 0.05 + sin (uTime * 0.21 + fk) * 0.025) * yy * yy;
+        float wdt = (0.004 + 0.006 * scale) * (1.0 - 0.45 * yy);
+        float leaf = 0.5 + 0.5 * smoothstep (-0.6, 0.9, sin (yy * (16.0 + 5.0 * hash12 (vec2 (fk, 4.0))) + fk * 3.0));   // smooth blades
+        float side = sin (yy * 11.0 + fk);                              // blades lean to alternate sides, smoothly
+        float w = wdt * (0.8 + 2.2 * leaf);
+        float dx = p.x - x0 - sway - side * w * 0.35 * leaf;
+        float aa = 1.5 / uRes.y;   // anti-aliased edge, whatever the resolution
+        float a = smoothstep (w + aa, w - aa, abs (dx)) * smoothstep (1.0, 0.92, yy);
+        if (a <= 0.0) continue;
+        float across = clamp (dx / w, -1.0, 1.0);
+        float shade = 0.5 + 0.5 * sqrt (1.0 - across * across);
+        float back = smoothstep (0.55, 1.0, abs (across));
+        vec3 c = mix (vec3 (0.06, 0.09, 0.04), vec3 (0.3, 0.36, 0.13), 0.25 + 0.75 * yy) * shade;
+        c += vec3 (0.22, 0.42, 0.14) * back * (0.3 + 0.7 * uv.y) * (0.4 + 0.6 * L);
+        c *= (0.45 + 0.75 * uv.y) * (0.55 + 0.6 * L);
+        col = mix (col, mix (c, col, fog), a);
+    }
+}
 vec3 scene (vec2 uv)
 {
     float L = uLight, asp = uRes.x / uRes.y;
     vec2 p = vec2 (uv.x * asp, uv.y);
-    vec3 deep = vec3 (0.004, 0.03, 0.06), mid = mix (vec3 (0.02, 0.17, 0.25), vec3 (0.05, 0.33, 0.42), L), top = mix (vec3 (0.06, 0.38, 0.48), vec3 (0.25, 0.7, 0.8), L);
-    vec3 col = mix (deep, mid, smoothstep (0.0, 0.6, uv.y));
-    col = mix (col, top, smoothstep (0.55, 1.0, uv.y));
-    // the surface seen from below
-    float surf = 0.965 + 0.012 * sin (p.x * 9.0 + uTime * 1.1) + 0.008 * sin (p.x * 23.0 - uTime * 0.7);
-    if (uv.y > surf) col = mix (col, vec3 (0.75, 0.95, 1.0), 0.45 + 0.3 * L);
-    // volumetric light rays (Shimmer), slanted, shimmering
-    float xs = p.x + (1.0 - uv.y) * 0.45;
-    float rays = pow (noise (vec2 (xs * 5.0 + S.x, uTime * 0.12)), 3.0) + 0.6 * pow (noise (vec2 (xs * 11.0 - S.y, uTime * 0.2)), 4.0);
-    col += vec3 (0.55, 0.9, 1.0) * rays * pow (uv.y, 1.6) * (0.18 + 0.45 * uPres[3]) * (0.6 + 0.6 * L);
-    // shimmering light near the surface
-    col += vec3 (0.6, 0.95, 1.0) * pow (noise (vec2 (p.x * 14.0 + uTime * 0.4, uv.y * 30.0 - uTime * 0.3)), 6.0) * smoothstep (0.7, 1.0, uv.y) * 0.35;
-    // suspended particles drifting (Texture)
+    vec3 deep = vec3 (0.003, 0.025, 0.05), mid = mix (vec3 (0.015, 0.13, 0.2), vec3 (0.04, 0.3, 0.4), L), top = mix (vec3 (0.05, 0.32, 0.42), vec3 (0.22, 0.66, 0.76), L);
+    vec3 col = mix (deep, mid, smoothstep (0.0, 0.65, uv.y));
+    col = mix (col, top, smoothstep (0.5, 1.0, uv.y));
+    col *= 0.85 + 0.3 * fbm3 (vec2 (p.x * 1.5 + uTime * 0.01, uv.y * 2.0) + S);           // light scattered in the water
+    // the surface from below: a bright, rippling window with a web of refracted light
+    float sy = smoothstep (0.84, 1.0, uv.y);
+    float sw = web (vec2 (p.x * 5.0, (1.0 - uv.y) * 22.0) + vec2 (uTime * 0.15, uTime * 0.25));
+    float window = exp (-pow ((uv.x - 0.5 - 0.15 * sin (uTime * 0.03)) * 1.7, 2.0));
+    col += mix (top, vec3 (0.85, 1.0, 1.0), 0.6) * sy * sy * (0.35 + 0.65 * window) * (0.25 + 0.9 * sw) * (0.5 + 0.6 * L);
+    // volumetric light rays (Shimmer)
+    float xs = p.x + (1.0 - uv.y) * 0.35;
+    float rays = pow (noise (vec2 (xs * 4.0 + S.x, uTime * 0.1)), 3.0) + 0.6 * pow (noise (vec2 (xs * 9.0 - S.y, uTime * 0.17)), 4.0);
+    col += vec3 (0.5, 0.88, 1.0) * rays * pow (uv.y, 1.3) * (0.16 + 0.42 * uPres[3]) * (0.5 + 0.7 * L);
+    float bed = 0.21 + 0.05 * fbm3 (vec2 (p.x * 1.6 + S.x, 0.3)) + 0.015 * sin (p.x * 2.7);
+    kelp (col, p, uv, 0.0, bed, asp, L);
+    // a school of small fish far away, drifting across (Bass moves it)
+    {
+        vec2 sc = vec2 (fract (uMus * 0.003 + hash12 (S + 4.0)) * (asp + 0.8) - 0.4, 0.5 + 0.12 * sin (uTime * 0.05 + S.x));
+        float fish = 0.0;
+        for (int f = 0; f < 24; f++)
+        {
+            float ff = float (f);
+            vec2 o = (vec2 (hash12 (vec2 (ff, 1.3)), hash12 (vec2 (ff, 7.1))) - 0.5) * vec2 (0.3, 0.09);
+            o += 0.008 * vec2 (sin (uTime * 0.6 + ff), cos (uTime * 0.8 + ff * 1.7));
+            vec2 q = p - sc - o;
+            float body = length (q / vec2 (0.013, 0.0045));
+            float tail = length ((q + vec2 (0.016, 0.0)) / vec2 (0.005, 0.005 + 0.004 * sin (uTime * 6.0 + ff)));
+            fish = max (fish, max (smoothstep (1.0, 0.6, body), smoothstep (1.0, 0.6, tail) * step (q.x, -0.011)));
+        }
+        col = mix (col, col * 0.5 + vec3 (0.02, 0.05, 0.06) * L, fish * (0.45 + 0.3 * uPres[6]));
+    }
+    kelp (col, p, uv, 1.0, bed, asp, L);
+    // marine snow drifting (Texture)
     for (int i = 0; i < 2; i++)
     {
         float fi = float (i);
         vec2 q = (p + vec2 (uMus * 0.004 * (1.0 + fi), -uTime * 0.006 * (1.0 + fi))) * (40.0 + 30.0 * fi) + S;
-        col += vec3 (0.6, 1.0, 0.9) * stars (q, 0.12, 0.06) * (0.12 + 0.35 * uPres[2]) * (0.6 + 0.4 * uGlow[2]);
+        col += vec3 (0.6, 0.95, 0.9) * stars (q, 0.12, 0.06) * (0.1 + 0.3 * uPres[2]) * (0.6 + 0.4 * uGlow[2]);
     }
     // jellyfish (Drone pulses, Pad tints): translucent glowing bells with trailing tentacles
     for (int j = 0; j < 4; j++)
@@ -336,32 +394,35 @@ vec3 scene (vec2 uv)
         vec3 light = jcol * (edge * 0.9 + inBell * 0.07 + canals + gonads * 0.45 + marginGlow * 0.5 + arms * 0.4 + ten * 0.35 + halo);
         col += light * vis * (0.7 + 0.5 * uGlow[0]) * (0.75 + 0.35 * beat);
     }
-    // seabed: dunes with caustic light, kelp forest swaying (Pad = height)
-    float bed = 0.11 + 0.05 * fbm3 (vec2 (p.x * 2.0 + S.x, 0.0)) + 0.02 * sin (p.x * 3.0);
-    for (int k = 0; k < 14; k++)
+    // seabed: rippled sand, dark rocks, a caustic web dancing on it, melting into the water far away
     {
-        float fk = float (k);
-        float x0 = hash12 (S + vec2 (fk, 1.0)) * asp;
-        float hk = (0.25 + 0.35 * hash12 (S + vec2 (fk, 2.0))) * (0.55 + 0.6 * uPres[1]);
-        float yy = (uv.y - bed) / hk;
-        if (yy > 0.0 && yy < 1.0)
+        float a = smoothstep (0.0, 0.012, bed - uv.y);
+        if (a > 0.0)
         {
-            float sway = sin (uTime * 0.55 + fk * 1.3 + yy * 2.5) * 0.04 * yy;
-            float wdt = 0.012 * (1.0 - 0.6 * yy) * (0.8 + 0.6 * hash12 (vec2 (fk, 3.0)));
-            float kd = abs (p.x - x0 - sway);
-            float kelp = smoothstep (wdt, wdt * 0.5, kd);
-            vec3 kc = mix (vec3 (0.02, 0.12, 0.08), vec3 (0.15, 0.55, 0.35), 0.4 + 0.6 * yy) * (0.6 + 0.8 * uv.y);
-            col = mix (col, mix (kc, mid, 0.35), kelp * 0.9);
+            float d = clamp ((bed - uv.y) / bed, 0.0, 1.0);
+            vec2 sp2 = vec2 (p.x * (3.0 + 6.0 * d), uv.y * 40.0);
+            float ripple = 0.5 + 0.5 * sin (sp2.y * 1.2 + fbm3 (sp2 * 0.3) * 6.0 + p.x * 4.0);
+            vec3 sand = mix (vec3 (0.08, 0.16, 0.16), vec3 (0.34, 0.42, 0.35), 0.3 + 0.35 * fbm (p * vec2 (10.0, 30.0) + S) + 0.25 * ripple * d);
+            float rock = smoothstep (0.58, 0.64, fbm3 (vec2 (p.x * 3.0, uv.y * 9.0) + S * 2.0));
+            sand = mix (sand, vec3 (0.03, 0.06, 0.07) * (0.6 + 0.6 * fbm (p * 20.0)), rock * 0.85);
+            float cw = web (vec2 (p.x * 7.0, uv.y * 18.0) + vec2 (uTime * 0.12, -uTime * 0.09));
+            sand += vec3 (0.35, 0.75, 0.75) * cw * (0.22 + 0.4 * L) * (1.0 - rock * 0.7) * (0.4 + 0.6 * d);
+            sand *= 0.55 + 0.6 * L;
+            col = mix (col, mix (sand, col, (1.0 - d) * 0.7 + 0.08), a);
         }
     }
-    if (uv.y < bed)
+    kelp (col, p, uv, 2.0, bed - 0.05, asp, L);
+    // out-of-focus specks right in front of the camera
     {
-        vec3 sand = mix (vec3 (0.05, 0.15, 0.17), vec3 (0.2, 0.35, 0.33), fbm (p * 8.0 + S));
-        sand += vec3 (0.4, 0.8, 0.8) * caustic (p * 6.0, uTime * 0.4) * 0.35 * (0.4 + L);
-        col = mix (sand, deep, 0.3);
+        vec2 bq = (p + vec2 (uTime * 0.004, -uTime * 0.012)) * 5.0;
+        vec2 id = floor (bq), fq = fract (bq) - 0.5;
+        if (hash12 (id + S) > 0.8)
+        {
+            vec2 o = (hash22 (id) - 0.5) * 0.6;
+            col += vec3 (0.55, 0.85, 0.9) * smoothstep (0.13, 0.02, length (fq - o)) * 0.05 * (0.5 + L);
+        }
     }
-    // depth haze
-    col = mix (col, deep, (1.0 - uv.y) * 0.25);
+    col = mix (col, deep, (1.0 - uv.y) * 0.2);
     return col;
 }
 )GLSL";

@@ -32,10 +32,12 @@ static void feedGpuLandscapes (juce::Component* c, float scale)
 }
 
 int runVideo (int argc, char** argv); // Video.cpp
+int runTrailer (int argc, char** argv); // Video.cpp
 
 int runToolExtras (const juce::String& cmd, int argc, char** argv)
 {
     if (cmd == "video") return runVideo (argc, argv);
+    if (cmd == "trailer") return runTrailer (argc, argv);
     if (cmd == "landscape-video")
     {
         // InfinitumTool landscape-video <out.mp4> [seconds] [scene]: tests the in-plugin MP4 export (needs ffmpeg)
