@@ -529,6 +529,18 @@ void Landscape::paintStarfield (juce::Graphics& g, juce::Rectangle<float> b)
             g.setColour (col::layer[lyWind].withAlpha (0.12f * pres[lyWind] * (0.5f + glow[lyWind])));
             g.drawLine (x, y, x + 40.0f, y, 0.8f);
         }
+    // asteroid dust (Texture)
+    {
+        const float a = pres[lyTexture] * (0.3f + glow[lyTexture] * 1.5f);
+        for (int i = 0; i < 50 && a > 0.01f; ++i)
+        {
+            const float x = std::fmod (w * hashF ((uint32_t) i, 501) + mt * (8.0f + 6.0f * hashF ((uint32_t) i, 502)), w);
+            const float y = h * (0.55f + 0.4f * hashF ((uint32_t) i, 503)) + std::sin (t * 0.4f + (float) i) * 3.0f;
+            g.setColour (juce::Colour (0xffb7a99a).withAlpha (juce::jlimit (0.0f, 0.8f, a * 0.8f)));
+            const float s = 1.5f + 2.5f * hashF ((uint32_t) i, 504);
+            g.fillEllipse (x, y, s, s * 0.8f);
+        }
+    }
     // planet (Drone) with atmosphere and optional rings
     {
         const float r = planetR, gl = r * (1.15f + 0.1f * glow[lyDrone] + 0.05f * pres[lyDrone]);
@@ -576,18 +588,6 @@ void Landscape::paintStarfield (juce::Graphics& g, juce::Rectangle<float> b)
         g.setColour (juce::Colours::black.withAlpha (0.12f));
         g.fillEllipse (mx - mr * 0.3f, my - mr * 0.1f, mr * 0.35f, mr * 0.3f);
         g.fillEllipse (mx + mr * 0.2f, my + mr * 0.3f, mr * 0.25f, mr * 0.2f);
-    }
-    // asteroid dust (Texture)
-    {
-        const float a = pres[lyTexture] * (0.3f + glow[lyTexture] * 1.5f);
-        for (int i = 0; i < 50 && a > 0.01f; ++i)
-        {
-            const float x = std::fmod (w * hashF ((uint32_t) i, 501) + mt * (8.0f + 6.0f * hashF ((uint32_t) i, 502)), w);
-            const float y = h * (0.55f + 0.4f * hashF ((uint32_t) i, 503)) + std::sin (t * 0.4f + (float) i) * 3.0f;
-            g.setColour (juce::Colour (0xffb7a99a).withAlpha (juce::jlimit (0.0f, 0.8f, a * 0.8f)));
-            const float s = 1.5f + 2.5f * hashF ((uint32_t) i, 504);
-            g.fillEllipse (x, y, s, s * 0.8f);
-        }
     }
 }
 
@@ -670,30 +670,75 @@ void Landscape::paintUnderwater (juce::Graphics& g, juce::Rectangle<float> b)
             g.fillPath (fish);
         }
     }
-    // jellyfish (Drone pulses them, Pad tints them)
+    // jellyfish (Drone pulses them, Pad tints them): the bell contracts, the tentacles trail behind
     for (int k = 0; k < 4; ++k)
     {
         const float sp = 6.0f + 4.0f * hashF ((uint32_t) f.seed, (uint32_t) k + 2300);
         const float x = w * (0.12f + 0.25f * (float) k) + std::sin (t * 0.12f + (float) k * 2.0f) * 30.0f;
         const float y = h * 1.1f - std::fmod (mt * sp + h * hashF ((uint32_t) f.seed, (uint32_t) k + 2310), h * 1.3f);
-        const float pulse = 0.5f + 0.5f * std::sin (t * (1.2f + 0.3f * (float) k) + (float) k);
-        const float r = (22.0f + 16.0f * hashF ((uint32_t) k, 2320)) * (h / 400.0f) * (1.0f + 0.12f * pulse) * (0.8f + 0.4f * pres[lyDrone]);
-        const auto jc = (k % 3 == 0 ? juce::Colour (0xffff7ad9) : k % 3 == 1 ? col::accent : col::accent3).withMultipliedBrightness (0.8f + 0.4f * glow[lyDrone]);
-        softBlob (g, x, y, r * 2.4f, r * 1.8f, jc.withAlpha (0.18f + 0.15f * pres[lyDrone]));
-        juce::Path dome;
-        dome.addCentredArc (x, y, r, r * (0.75f - 0.1f * pulse), 0, -kPi * 0.5f, kPi * 0.5f, true);
-        dome.closeSubPath();
-        g.setColour (jc.withAlpha (0.55f));
-        g.fillPath (dome);
-        g.setColour (jc.withAlpha (0.4f));
-        for (int tn = 0; tn < 5; ++tn)
+        const float beat = std::sin (t * (1.1f + 0.25f * (float) k) + (float) k * 1.7f);
+        const float pulse = 0.5f + 0.5f * beat;
+        const float r = (22.0f + 16.0f * hashF ((uint32_t) k, 2320)) * (h / 400.0f) * (0.8f + 0.4f * pres[lyDrone]);
+        const float bw = r * (1.0f - 0.12f * pulse), bh = r * (0.72f + 0.12f * pulse);   // contracting bell
+        const auto jc = (k % 3 == 0 ? juce::Colour (0xffff7ad9) : k % 3 == 1 ? juce::Colour (0xff7ff0e0) : juce::Colour (0xffb9a2ff))
+                            .withMultipliedBrightness (0.85f + 0.35f * glow[lyDrone]);
+        softBlob (g, x, y - bh * 0.3f, r * 2.6f, r * 2.0f, jc.withAlpha (0.10f + 0.12f * pres[lyDrone]));
+        // tentacles: long, thin, tapered, swaying with a delay along their length
+        for (int tn = 0; tn < 9; ++tn)
         {
+            const float u0 = ((float) tn / 8.0f - 0.5f) * 1.7f;
+            const float len = r * (2.4f + 1.4f * hashF ((uint32_t) (k * 31 + tn), 2330));
             juce::Path ten;
-            const float tx = x - r * 0.7f + r * 0.35f * (float) tn;
-            ten.startNewSubPath (tx, y);
-            for (int s = 1; s <= 6; ++s)
-                ten.lineTo (tx + std::sin (t * 1.5f + (float) (s + tn)) * 4.0f, y + (float) s * r * 0.4f);
-            g.strokePath (ten, juce::PathStrokeType (1.2f));
+            ten.startNewSubPath (x + u0 * bw, y);
+            for (int sgm = 1; sgm <= 12; ++sgm)
+            {
+                const float v = (float) sgm / 12.0f;
+                ten.lineTo (x + u0 * bw * (1.0f - 0.3f * v) + std::sin (t * 1.4f - v * 3.5f + (float) tn) * r * 0.18f * v, y + v * len);
+            }
+            g.setGradientFill (juce::ColourGradient (jc.withAlpha (0.45f), x, y, jc.withAlpha (0.0f), x, y + len, false));
+            g.strokePath (ten, juce::PathStrokeType (juce::jmax (0.7f, r * 0.03f)));
+        }
+        // oral arms: a few wider, frilled ribbons in the centre
+        for (int arm = 0; arm < 3; ++arm)
+        {
+            juce::Path ra;
+            const float ax = x + ((float) arm - 1.0f) * bw * 0.22f;
+            ra.startNewSubPath (ax, y);
+            for (int sgm = 1; sgm <= 10; ++sgm)
+            {
+                const float v = (float) sgm / 10.0f;
+                ra.lineTo (ax + std::sin (t * 1.1f - v * 4.0f + (float) arm * 2.0f) * r * 0.16f, y + v * r * 1.5f);
+            }
+            g.setColour (jc.withAlpha (0.28f));
+            g.strokePath (ra, juce::PathStrokeType (r * 0.11f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        }
+        // bell: dome with a scalloped rim
+        juce::Path bell;
+        bell.startNewSubPath (x - bw, y);
+        bell.cubicTo (x - bw, y - bh * 1.15f, x + bw, y - bh * 1.15f, x + bw, y);
+        for (int sc = 8; sc > 0; --sc)
+        {
+            const float xa = x - bw + 2.0f * bw * (float) sc / 8.0f, xb = x - bw + 2.0f * bw * (float) (sc - 1) / 8.0f;
+            bell.quadraticTo ((xa + xb) * 0.5f, y + r * 0.08f, xb, y);
+        }
+        bell.closeSubPath();
+        g.setGradientFill (juce::ColourGradient (jc.brighter (0.4f).withAlpha (0.75f), x, y - bh, jc.withAlpha (0.25f), x, y + r * 0.1f, false));
+        g.fillPath (bell);
+        g.setColour (juce::Colours::white.withAlpha (0.35f));
+        g.strokePath (bell, juce::PathStrokeType (0.8f));
+        // inner glow: four gonads, brighter on the beat
+        for (int gn = 0; gn < 4; ++gn)
+        {
+            const float gx = x + ((float) gn - 1.5f) * bw * 0.28f, gy = y - bh * 0.45f + std::abs ((float) gn - 1.5f) * bh * 0.08f;
+            softBlob (g, gx, gy, r * 0.18f, r * 0.13f, juce::Colours::white.withAlpha (0.25f + 0.35f * pulse * (0.5f + glow[lyDrone])));
+        }
+        // bioluminescent dots on the rim
+        for (int d = 0; d <= 8; ++d)
+        {
+            const float dx = x - bw + 2.0f * bw * (float) d / 8.0f;
+            const float blink = 0.4f + 0.6f * std::sin (t * 3.0f + (float) d * 0.8f + (float) k);
+            g.setColour (juce::Colours::white.withAlpha (0.25f + 0.5f * blink * pres[lyDrone]));
+            g.fillEllipse (dx - 1.2f, y - 1.2f, 2.4f, 2.4f);
         }
     }
     // plankton (Texture)
@@ -898,20 +943,50 @@ void Landscape::paintSparks (juce::Graphics& g)
             g.fillEllipse (s.x - 2, s.y - 2, 4, 4);
             continue;
         }
-        const float a = juce::jlimit (0.0f, 1.0f, s.life * 1.4f) * pres[lyBells] + 0.2f * s.life;
-        if (s.kind == 1) // comet
+        // in the Starfield, notes pass behind the planet
+        if (f.scene == scStarfield && s.kind == 1 && planetPos.getDistanceFrom ({ s.x, s.y }) < planetR * 1.02f) continue;
+        const float life = juce::jlimit (0.0f, 1.0f, s.life);
+        const float a = juce::jlimit (0.0f, 1.0f, (life * 1.4f) * (0.35f + 0.65f * pres[lyBells]));
+        if (a < 0.01f) continue;
+        const float tw = 0.75f + 0.25f * std::sin ((float) f.time * 6.0f + s.size * 13.0f);   // gentle twinkle
+        const float R = s.size * (2.2f + 1.2f * life);
+        if (s.kind == 1) // comet: tapered, fading tail
         {
-            const float len = 60.0f;
-            const float nx = -s.vx / std::sqrt (s.vx * s.vx + s.vy * s.vy), ny = -s.vy / std::sqrt (s.vx * s.vx + s.vy * s.vy);
-            g.setGradientFill (juce::ColourGradient (s.c.withAlpha (a), s.x, s.y, s.c.withAlpha (0.0f), s.x + nx * len, s.y + ny * len, false));
-            g.drawLine (s.x, s.y, s.x + nx * len, s.y + ny * len, 2.0f);
+            const float len = 70.0f + 30.0f * life;
+            const float sp = std::sqrt (s.vx * s.vx + s.vy * s.vy) + 1.0e-3f;
+            const float nx = -s.vx / sp, ny = -s.vy / sp, px = -ny, py = nx;
+            juce::Path tail;
+            tail.startNewSubPath (s.x + px * s.size, s.y + py * s.size);
+            tail.lineTo (s.x + nx * len, s.y + ny * len);
+            tail.lineTo (s.x - px * s.size, s.y - py * s.size);
+            tail.closeSubPath();
+            g.setGradientFill (juce::ColourGradient (s.c.withAlpha (0.55f * a), s.x, s.y, s.c.withAlpha (0.0f), s.x + nx * len, s.y + ny * len, false));
+            g.fillPath (tail);
         }
-        g.setGradientFill (juce::ColourGradient (s.c.withAlpha (0.45f * a), s.x, s.y, s.c.withAlpha (0.0f), s.x + s.size * 7, s.y, true));
-        g.fillEllipse (s.x - s.size * 7, s.y - s.size * 7, s.size * 14, s.size * 14);
-        g.setColour (s.c.withAlpha (a));
-        g.fillEllipse (s.x - s.size * 0.5f, s.y - s.size * 0.5f, s.size, s.size);
-        g.drawLine (s.x - s.size * 2.5f, s.y, s.x + s.size * 2.5f, s.y, 0.8f);
-        g.drawLine (s.x, s.y - s.size * 2.5f, s.x, s.y + s.size * 2.5f, 0.8f);
+        // soft halo
+        g.setGradientFill (juce::ColourGradient (s.c.withAlpha (0.35f * a), s.x, s.y, s.c.withAlpha (0.0f), s.x + R * 4.0f, s.y, true));
+        g.fillEllipse (s.x - R * 4.0f, s.y - R * 4.0f, R * 8.0f, R * 8.0f);
+        // four tapered rays (long) + four short diagonal ones, slowly turning
+        auto rays = [&] (float len, float width, float rot, float alpha)
+        {
+            juce::Path p;
+            for (int k = 0; k < 4; ++k)
+            {
+                const float ang = rot + (float) k * kPi * 0.5f, cx = std::cos (ang), cy = std::sin (ang);
+                p.startNewSubPath (s.x - cy * width, s.y + cx * width);
+                p.lineTo (s.x + cx * len, s.y + cy * len);
+                p.lineTo (s.x + cy * width, s.y - cx * width);
+                p.closeSubPath();
+            }
+            g.setGradientFill (juce::ColourGradient (juce::Colours::white.withAlpha (alpha), s.x, s.y, s.c.withAlpha (0.0f), s.x + len, s.y, true));
+            g.fillPath (p);
+        };
+        const float rot = s.size * 0.7f + (float) f.time * 0.15f;
+        rays (R * 3.2f * tw, R * 0.22f, rot, 0.9f * a);
+        rays (R * 1.5f * tw, R * 0.15f, rot + kPi * 0.25f, 0.55f * a);
+        // bright core
+        g.setGradientFill (juce::ColourGradient (juce::Colours::white.withAlpha (a), s.x, s.y, s.c.withAlpha (0.0f), s.x + R * 0.9f, s.y, true));
+        g.fillEllipse (s.x - R * 0.9f, s.y - R * 0.9f, R * 1.8f, R * 1.8f);
     }
 }
 

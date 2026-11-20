@@ -243,7 +243,7 @@ private:
     juce::File target;
     double startedAt = 0;
     // video
-    juce::ComboBox vDuration, vRes;
+    juce::ComboBox vDuration, vRes, vScene;
     juce::TextButton exportVideo { L ("Exportar vídeo…", "Export video…") }, cancelVideo { L ("Cancelar", "Cancel") },
                      ffmpegInstall { L ("Instalar ffmpeg", "Install ffmpeg") }, ffmpegChoose { L ("Elegir ffmpeg…", "Choose ffmpeg…") };
     VideoExporter video;

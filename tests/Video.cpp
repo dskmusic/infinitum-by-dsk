@@ -136,6 +136,19 @@ public:
         wait (0.4);
     }
     // load the first factory preset of a sub-mood (keeps playing: live change)
+    void loadName (const juce::String& name)
+    {
+        if (auto* arr = bank.getProperty ("presets", {}).getArray())
+            for (auto& v : *arr)
+            {
+                auto p = gx::Preset::fromVar (v);
+                if (p.meta.name != name) continue;
+                p.applyTo (proc);
+                proc.presetGeneration.fetch_add (1);
+                return;
+            }
+        std::printf ("video: preset %s not found\n", name.toRawUTF8());
+    }
     // load the best-scoring factory preset of a sub-mood (nth = the next best ones); keeps playing: live change
     void load (const juce::String& sub, int nth = 0)
     {
@@ -146,7 +159,12 @@ public:
                 auto p = gx::Preset::fromVar (v);
                 if (p.meta.subcategory != sub) continue;
                 auto val = gx::Generator::validate (p, false);
-                if (val.ok) ranked.push_back ({ gx::Generator::interestScore (p, val), p });
+                if (! val.ok) continue;
+                // the demo must sound clean: no noise beds, little wind
+                float sc = gx::Generator::interestScore (p, val);
+                if ((int) p.get (gx::P::noiseType) != 0) sc -= 10.0f * p.get (gx::P::noiseLevel) + 2.0f;
+                sc -= 4.0f * p.get (gx::P::layer (gx::lyWind, gx::P::lLevel)) * p.get (gx::P::layer (gx::lyWind, gx::P::lPresence));
+                ranked.push_back ({ sc, p });
             }
         if (ranked.empty()) return;
         std::sort (ranked.begin(), ranked.end(), [] (auto& a, auto& b) { return a.first > b.first; });
@@ -436,13 +454,15 @@ int runVideo (int argc, char** argv)
                "Exporta audio de hasta 3 horas o un MP4 del paisaje", "modo Dormir · temporizador · 432 Hz · sincronía con el tempo");
     d.click (d.button ("EXPORT"), 3.4);
 
-    // ---- back to the landscape
-    d.caption ("Follows your DAW. Bounces match playback.", "VST3 · AU · Standalone", "Sigue a tu DAW: lo que exportas suena igual que lo que oíste", "");
-    d.load ("Shoreline");
+    // ---- closing highlight: Rising Citadel
+    d.caption ("Rising Citadel", "Cinematic · Epic", "Rising Citadel", "Cine · Épico");
+    d.loadName ("Rising Citadel");
     d.click (d.button ("LANDSCAPE"), 0.3);
-    d.click (d.button ("Ocean"), 4.5);
+    d.click (d.button ("Valley"), 3.5);
+    d.caption ("Follows your DAW. Bounces match playback.", "VST3 · AU · Standalone", "Sigue a tu DAW: lo que exportas suena igual que lo que oíste", "");
+    d.wait (4.5);
     d.clearCaption();
-    d.wait (1.0);
+    d.wait (1.5);
     d.proc.setParamPlain (P::fadeOut, 3.0f);
     d.proc.setPlaying (false);
     d.card (true, 1.0, 3.6, 0.0);

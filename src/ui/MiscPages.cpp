@@ -284,7 +284,11 @@ ExportPage::ExportPage (Context& c) : Page (c)
     vRes.addItem ("1920 x 1080 (Full HD)", 1080);
     vRes.addItem ("1280 x 720 (HD)", 720);
     vRes.setSelectedId (1080, juce::dontSendNotification);
-    for (auto* comp : std::initializer_list<juce::Component*> { &vDuration, &vRes, &exportVideo, &cancelVideo, &ffmpegInstall, &ffmpegChoose })
+    vScene.addItem (L ("Paisaje actual", "Current landscape"), 1);
+    for (int s = 0; s < numScenes; ++s) vScene.addItem (sceneName (s), 2 + s);
+    vScene.setSelectedId (1, juce::dontSendNotification);
+    vScene.setTooltip (L ("Qué paisaje se dibuja en el vídeo", "Which landscape the video shows"));
+    for (auto* comp : std::initializer_list<juce::Component*> { &vDuration, &vRes, &vScene, &exportVideo, &cancelVideo, &ffmpegInstall, &ffmpegChoose })
         addAndMakeVisible (comp);
     cancelVideo.setEnabled (false);
     exportVideo.onClick = [this] { startVideo(); };
@@ -358,7 +362,9 @@ void ExportPage::startVideo()
         videoTarget = f.withFileExtension (".mp4");
         const int hgt = vRes.getSelectedId();
         juce::String err;
-        if (! video.start (Preset::capture (ctx.proc), videoTarget, vDuration.getSelectedId() * 60.0, hgt == 720 ? 1280 : 1920, hgt, ffmpeg, err))
+        auto pr = Preset::capture (ctx.proc);
+        if (vScene.getSelectedId() >= 2) pr.params[(size_t) P::scene] = (float) (vScene.getSelectedId() - 2);
+        if (! video.start (pr, videoTarget, vDuration.getSelectedId() * 60.0, hgt == 720 ? 1280 : 1920, hgt, ffmpeg, err))
         {
             juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::InfoIcon, "ffmpeg", ffmpegInstructions());
             return;
@@ -504,7 +510,7 @@ void ExportPage::paint (juce::Graphics& g)
     bar (a.withTrimmedTop (104).removeFromTop (12), progress.load(), status);
     auto v = panel (215, L ("VÍDEO DEL PAISAJE (MP4)", "LANDSCAPE VIDEO (MP4)"),
                     L ("El paisaje animado con su sonido, listo para YouTube: sin grabar la pantalla.", "The animated landscape with its sound, ready for YouTube: no screen recording needed."));
-    labels (v, { L ("DURACIÓN", "DURATION"), L ("RESOLUCIÓN", "RESOLUTION") });
+    labels (v, { L ("DURACIÓN", "DURATION"), L ("RESOLUCIÓN", "RESOLUTION"), L ("PAISAJE", "LANDSCAPE") });
     bar (v.withTrimmedTop (104).removeFromTop (12), video.progress(), videoStatus);
     panel (110, L ("PRESETS (.INFINITUM)", "PRESETS (.INFINITUM)"), {});
 }
@@ -529,7 +535,8 @@ void ExportPage::resized()
     auto vrow = vin.removeFromTop (28);
     vDuration.setBounds (vrow.removeFromLeft (200).withTrimmedRight (20));
     vRes.setBounds (vrow.removeFromLeft (200).withTrimmedRight (20));
-    vrow.removeFromLeft (210);
+    vScene.setBounds (vrow.removeFromLeft (200).withTrimmedRight (20));
+    vrow.removeFromLeft (10);
     exportVideo.setBounds (vrow.removeFromLeft (200));
     vrow.removeFromLeft (10);
     cancelVideo.setBounds (vrow.removeFromLeft (110));
