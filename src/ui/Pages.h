@@ -84,14 +84,37 @@ public:
     void resized() override;
     void paint (juce::Graphics&) override;
     void tick (const Frame&) override;
+    std::function<void()> onFullscreen;
 private:
     Landscape landscape;
+    juce::OwnedArray<juce::TextButton> sceneButtons;
+    juce::TextButton fullscreen;
     PlayButton play;
     ParamToggle freeze;
     juce::Label seedLabel;
     juce::TextButton dice { L ("Nueva semilla", "New seed") }, seedPrev { "<" }, seedNext { ">" };
     Box harmony, macros, session;
     int lastSeed = -1;
+};
+
+// The landscape alone, full screen (kiosk window). Esc closes; the keyboard plays the macros.
+class FullscreenView : public juce::Component, public Animated
+{
+public:
+    FullscreenView (Context& c, std::function<void()> onClose);
+    void tick (const Frame&) override;
+    void resized() override { view.setBounds (getLocalBounds()); }
+    void paintOverChildren (juce::Graphics&) override;
+    bool keyPressed (const juce::KeyPress&) override;
+    void mouseMove (const juce::MouseEvent&) override { helpUntil = juce::jmax (helpUntil, lastT + 2.5); }
+private:
+    void nudge (int param, float delta, const juce::String& label);
+    Context& ctx;
+    std::function<void()> close;
+    Landscape view;
+    double lastT = 0, helpUntil = 6.0, toastUntil = 0;
+    bool helpPinned = false;
+    juce::String toastText;
 };
 
 // Layer strips + master effects.

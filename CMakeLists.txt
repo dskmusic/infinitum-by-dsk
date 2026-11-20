@@ -26,6 +26,7 @@ juce_add_plugin(Infinitum
     COMPANY_WEBSITE "https://dskmusic.com"
     PRODUCT_NAME "Infinitum by DSK"
     BUNDLE_ID com.dskmusic.infinitum
+    ICON_SMALL "${CMAKE_CURRENT_SOURCE_DIR}/branding/infinitum-icon-small.png"
     ICON_BIG "${CMAKE_CURRENT_SOURCE_DIR}/branding/infinitum-icon.png"   # regenerate: InfinitumTool icon branding
     PLUGIN_MANUFACTURER_CODE Dskm
     PLUGIN_CODE Infm

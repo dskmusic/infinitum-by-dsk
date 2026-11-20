@@ -28,11 +28,13 @@ int runToolExtras (const juce::String& cmd, int argc, char** argv)
         const juce::var bank = data ? juce::JSON::parse (juce::String::fromUTF8 (data, size)) : juce::var();
         auto* arr = bank.getProperty ("presets", {}).getArray();
         if (arr == nullptr) { std::printf ("no factory bank\n"); return 1; }
-        for (auto& mood : gx::categories())
+        juce::StringArray picks (gx::categories());
+        picks.addArray ({ "Neo-Noir", "Derelict" });
+        for (auto& mood : picks)
             for (auto& v : *arr)
             {
                 auto p = gx::Preset::fromVar (v);
-                if (p.meta.category != mood) continue;
+                if (p.meta.category != mood && p.meta.subcategory != mood) continue;
                 const auto f = dir.getChildFile (juce::File::createLegalFileName ("Infinitum demo - " + gx::categoryLabel (mood) + " - " + p.meta.name + ".ogg"));
                 const auto err = gx::exportAudio (p, f, gx::efOgg, mins * 60.0, 48000.0);
                 std::printf ("%s %s\n", f.getFileName().toRawUTF8(), err.toRawUTF8());
@@ -55,7 +57,9 @@ int runToolExtras (const juce::String& cmd, int argc, char** argv)
             for (int si = 0; si < gx::subcategories (mood).size(); ++si)
             {
                 std::vector<gx::Preset> accepted;
-                for (int guard = 0; (int) accepted.size() < perSub && guard < perSub * 8; ++guard)
+                const auto subName = gx::subcategories (mood)[si];
+                const int want = perSub + (subName == "Neo-Noir" || subName == "Derelict" ? 3 : 0);
+                for (int guard = 0; (int) accepted.size() < want && guard < want * 8; ++guard)
                 {
                     gx::GenRequest r;
                     r.category = mood;
@@ -73,7 +77,7 @@ int runToolExtras (const juce::String& cmd, int argc, char** argv)
                     bool dup = false;
                     for (auto& a : accepted) dup |= a.similarity (p) > 0.93f;
                     if (dup) { ++dups; continue; }
-                    for (int t = 0; names.contains (p.meta.name) && t < 40; ++t) p.meta.name = gx::Generator::makeName (mood, rng);
+                    for (int t = 0; names.contains (p.meta.name) && t < 40; ++t) p.meta.name = gx::Generator::makeName (mood, rng, p.meta.subcategory);
                     if (names.contains (p.meta.name)) p.meta.name << " II";
                     names.add (p.meta.name);
                     p.meta.author = "DSK Music";
@@ -126,7 +130,7 @@ int runToolExtras (const juce::String& cmd, int argc, char** argv)
         // InfinitumTool icon <dir>  ->  infinitum-icon.png (1024 px, used by CMake ICON_BIG) + infinitum.ico (installer)
         const juce::File dir = juce::File::getCurrentWorkingDirectory().getChildFile (argc > 2 ? argv[2] : "branding");
         dir.createDirectory();
-        auto render = [] (int px)
+        auto render = [] (int px, bool small = false)
         {
             juce::Image img (juce::Image::ARGB, px, px, true);
             {
@@ -136,21 +140,25 @@ int runToolExtras (const juce::String& cmd, int argc, char** argv)
                 g.setGradientFill (juce::ColourGradient (juce::Colour (0xff1b1544), 0, 2, juce::Colour (0xff04050d), 0, 62, false));
                 g.fillRoundedRectangle (r, 13.0f);
                 // horizon glow
+                if (! small) {
                 g.setGradientFill (juce::ColourGradient (gx::ui::col::accent2.withAlpha (0.5f), 32, 50, gx::ui::col::accent2.withAlpha (0.0f), 32 + 24, 50, true));
                 g.fillEllipse (8, 43, 48, 14);
                 g.setColour (gx::ui::col::accent2.withAlpha (0.7f));
                 g.fillRect (12.0f, 49.6f, 40.0f, 0.8f);
+                }
                 g.setColour (gx::ui::col::accent.withAlpha (0.35f));
                 g.drawRoundedRectangle (r.reduced (0.5f), 13.0f, 1.0f);
-                gx::ui::Logo::drawMark (g, juce::Rectangle<float> (8, 16, 48, 26), 1.0f, 0.15f);
+                if (small) gx::ui::Logo::drawMark (g, juce::Rectangle<float> (3, 15, 58, 34), 0.0f, 0.15f); // bigger, bolder for taskbar sizes
+                else gx::ui::Logo::drawMark (g, juce::Rectangle<float> (8, 16, 48, 26), 1.0f, 0.15f);
             }
             return img;
         };
         auto png = [] (const juce::Image& img) { juce::MemoryOutputStream m; juce::PNGImageFormat().writeImageToStream (img, m); return m.getMemoryBlock(); };
         { auto f = dir.getChildFile ("infinitum-icon.png"); const auto data = png (render (1024)); f.replaceWithData (data.getData(), data.getSize()); }
+        { auto f = dir.getChildFile ("infinitum-icon-small.png"); const auto data = png (render (256, true)); f.replaceWithData (data.getData(), data.getSize()); }
         const int sizes[] { 16, 24, 32, 48, 64, 128, 256 };
         std::vector<juce::MemoryBlock> imgs;
-        for (int s : sizes) imgs.push_back (png (render (s)));
+        for (int s : sizes) imgs.push_back (png (render (s, s <= 48)));
         juce::MemoryOutputStream ico;
         ico.writeShort (0); ico.writeShort (1); ico.writeShort ((short) imgs.size());
         int offset = 6 + 16 * (int) imgs.size();
@@ -212,7 +220,19 @@ int runToolExtras (const juce::String& cmd, int argc, char** argv)
         for (int pg = 0; pg < 6; ++pg)
         {
             ge->showPage (pg);
-            pump (pg == 0 ? 150 : 40);
+            if (pg == 0)
+            {
+                const char* sceneNames[] { "landscape-valley", "landscape-starfield", "landscape-nebula", "landscape-neon" };
+                for (int sc = gx::numScenes; --sc >= 0;)
+                {
+                    p.setParamPlain (gx::P::scene, (float) sc);
+                    if (sc == gx::scNeon) p.setParamPlain (gx::P::rain, 0.6f);
+                    pump (60);
+                    shot (sceneNames[sc]);
+                }
+                p.setParamPlain (gx::P::rain, 0.0f);
+            }
+            pump (pg == 0 ? 60 : 40);
             if (pg == 2)
             {
                 ge->generatorPage().generate();

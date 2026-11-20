@@ -28,6 +28,8 @@ public:
     void advanceFrames (double dt);   // used by the screenshot tool
     gx::ui::GeneratorPage& generatorPage() { return *generator; }
     void rebuildUi();                 // language switch (also exercised by InfinitumTool screenshot)
+    void openFullscreen();
+    void closeFullscreen();
     void videoFrame() { stopTimer(); timerCallback(); } // InfinitumTool video: one UI frame on the virtual clock
 
 private:
@@ -56,6 +58,7 @@ private:
     std::unique_ptr<gx::ui::ExportPage> exportPage;
     std::unique_ptr<gx::ui::SettingsPage> settingsPage;
     std::unique_ptr<gx::ui::AboutOverlay> about;
+    std::unique_ptr<gx::ui::FullscreenView> fullscreenView;
     juce::MidiKeyboardComponent keyboard;
     juce::Label toastLabel;
     std::unique_ptr<juce::TooltipWindow> tooltips;

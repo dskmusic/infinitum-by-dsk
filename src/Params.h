@@ -16,6 +16,7 @@ namespace P
         evolution, density, light, space, freeze,
         tuning, midiMode, fadeIn, fadeOut, timer,
         width, warmth, lowCut, highCut, revDamp, dlyTime, dlyFb, dlyTone, dlyMix,
+        scene, rain,
         numGlobal
     };
     enum LayerField : int { lOn, lLevel, lPresence, lTone, lChar, numLayerFields };
@@ -27,6 +28,7 @@ namespace P
 
 enum ParamKind { pkFloat, pkInt, pkBool, pkChoice };
 enum MidiMode { mmOff, mmKey, mmPlay, mmKeyPlay };
+enum Scene { scValley, scStarfield, scNebula, scNeon, numScenes };
 
 struct ParamDef
 {
@@ -45,6 +47,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout createLayout();
 
 const juce::StringArray& layerIds();                         // "drone", "pad", ...
 juce::String layerName (int layer);                          // localized (UI)
+juce::String sceneName (int scene);                          // localized (UI)
 const juce::StringArray& keyNames();
 const juce::StringArray& scaleNames();
 const std::vector<int>& scaleSteps (int scale);              // semitones from the root, ascending, < 12

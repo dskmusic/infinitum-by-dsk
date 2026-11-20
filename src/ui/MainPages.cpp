@@ -28,6 +28,18 @@ LandscapePage::LandscapePage (Context& c)
 {
     addAndMakeVisible (landscape);
     landscape.onClick = [this] { if (! ctx.proc.isPlayingInternal() && ! ctx.proc.isHostPlaying()) ctx.proc.setPlaying (true); };
+    for (int s = 0; s < numScenes; ++s)
+    {
+        auto* b = sceneButtons.add (new juce::TextButton (sceneName (s)));
+        b->setClickingTogglesState (false);
+        b->setTooltip (L ("Paisaje visual (se guarda con el preset)", "Visual landscape (saved with the preset)"));
+        b->onClick = [this, s] { ctx.proc.setParamPlain (P::scene, (float) s); };
+        addAndMakeVisible (b);
+    }
+    fullscreen.setButtonText (L ("Pantalla completa", "Full screen"));
+    fullscreen.setTooltip (L ("Paisaje a pantalla completa (Esc para salir, H para ver los atajos)", "Full-screen landscape (Esc to exit, H for shortcuts)"));
+    fullscreen.onClick = [this] { if (onFullscreen) onFullscreen(); };
+    addAndMakeVisible (fullscreen);
     addAndMakeVisible (play);
     addAndMakeVisible (freeze);
     freeze.setTooltip (L ("Congela el paisaje: la evolución se detiene y la textura y el shimmer se quedan suspendidos.",
@@ -115,6 +127,7 @@ LandscapePage::LandscapePage (Context& c)
 void LandscapePage::tick (const Frame& f)
 {
     Page::tick (f);
+    for (int s = 0; s < sceneButtons.size(); ++s) sceneButtons[s]->setToggleState (s == f.scene, juce::dontSendNotification);
     if (f.seed != lastSeed) { lastSeed = f.seed; seedLabel.setText (L ("SEMILLA ", "SEED ") + juce::String (f.seed), juce::dontSendNotification); }
 }
 
@@ -131,6 +144,14 @@ void LandscapePage::resized()
 {
     auto r = getLocalBounds().reduced (8);
     landscape.setBounds (r.removeFromTop (410));
+    {
+        auto bar = landscape.getBounds().reduced (14, 10).removeFromBottom (22);
+        fullscreen.setBounds (bar.removeFromRight (130));
+        bar.removeFromRight (8);
+        for (int s = sceneButtons.size(); --s >= 0;) sceneButtons[s]->setBounds (bar.removeFromRight (s == scNeon ? 108 : 98).reduced (2, 0));
+        for (auto* b : sceneButtons) b->toFront (false);
+        fullscreen.toFront (false);
+    }
     r.removeFromTop (8);
     harmony.setBounds (r.removeFromLeft (330));
     r.removeFromLeft (8);
@@ -156,7 +177,7 @@ SoundPage::Strip::Strip (Context& c, int l) : Box (c, layerName (l), layerIds()[
 {
     accent = col::layer[l];
     const juce::String tone[] { L ("BRILLO", "BRIGHT"), L ("FILTRO", "FILTER"), L ("TONO", "PITCH"), L ("BRILLO", "BRIGHT"), L ("COLOR", "COLOUR"), L ("CRISTAL", "GLASS") };
-    const juce::String chr[] { L ("MUTACIÓN", "MUTATION"), L ("DESAFINAR", "DETUNE"), L ("GRANO", "GRAIN"), L ("QUINTA", "FIFTH"), L ("RÁFAGAS", "GUSTS"), L ("DENSIDAD", "DENSITY") };
+    const juce::String chr[] { L ("MUTACIÓN", "MUTATION"), L ("ANALÓGICO", "ANALOG"), L ("GRANO", "GRAIN"), L ("QUINTA", "FIFTH"), L ("RÁFAGAS", "GUSTS"), L ("DENSIDAD", "DENSITY") };
     const juce::String toneTip[] { L ("Brillo del espectro en mutación", "Brightness of the mutating spectrum"),
                                    L ("Apertura del filtro del pad", "Pad filter opening"),
                                    L ("Grave: granos a la octava; agudo: quintas y octavas arriba", "Low: octave grains; high: fifths and octaves above"),
@@ -164,7 +185,7 @@ SoundPage::Strip::Strip (Context& c, int l) : Box (c, layerName (l), layerIds()[
                                    L ("Altura del viento: de un rumor grave a un silbido", "Wind pitch: from a low rumble to a whistle"),
                                    L ("De campanas suaves a cristal brillante (índice FM)", "From soft bells to bright glass (FM index)") };
     const juce::String chrTip[] { L ("Velocidad y caos con que mutan los armónicos", "Speed and chaos of the harmonic mutation"),
-                                  L ("Anchura de la desafinación de las tres sierras", "Detune width of the three saws"),
+                                  L ("Carácter analógico de los 80: desafinación, vibrato lento y apertura del filtro en cada acorde", "80s analog character: detune, slow vibrato and a filter bloom on every chord"),
                                   L ("Granos pequeños y densos o grandes y lentos", "Small dense grains or big slow ones"),
                                   L ("Mezcla del shimmer de octava con octava + quinta", "Blend of octave shimmer with octave + fifth"),
                                   L ("Intensidad de las ráfagas y resonancia", "Gust intensity and resonance"),
@@ -201,7 +222,7 @@ void SoundPage::Strip::paint (juce::Graphics& g)
     g.fillRoundedRectangle (m.withWidth (m.getWidth() * juce::jmin (1.0f, energy)).withTrimmedTop (m.getHeight() * 0.6f), 2);
 }
 
-SoundPage::SoundPage (Context& c) : Page (c), fx (c, L ("Mezcla y efectos", "Mix & effects"), "fx"), space (c, L ("Transporte", "Transport"), "global")
+SoundPage::SoundPage (Context& c) : Page (c), fx (c, L ("Mezcla y efectos", "Mix & effects"), "fx"), space (c, L ("Clima y fundidos", "Weather & fades"), "global")
 {
     for (int l = 0; l < kNumLayers; ++l) addAndMakeVisible (strips.add (new Strip (c, l)));
     const std::pair<int, juce::String> fxk[] { { P::warmth, L ("CALIDEZ", "WARMTH") }, { P::width, L ("ANCHURA", "WIDTH") }, { P::lowCut, L ("CORTE GRAVE", "LOW CUT") },
@@ -212,6 +233,7 @@ SoundPage::SoundPage (Context& c) : Page (c), fx (c, L ("Mezcla y efectos", "Mix
     fx.layout = [ks] (juce::Rectangle<int> r) { rowKnobs (ks, r, 110); };
     addAndMakeVisible (fx);
     std::vector<juce::Component*> ts;
+    ts.push_back (&space.add<ParamKnob> (c, P::rain, L ("LLUVIA", "RAIN"), L ("Lluvia: gotas y siseo (también se ve en el paisaje Lluvia de neón)", "Rain: drops and hiss (also shown in the Neon Rain landscape)")));
     ts.push_back (&space.add<ParamKnob> (c, P::fadeIn, L ("FUNDIDO ENTRADA", "FADE IN"), L ("Tiempo de entrada al pulsar Play", "Fade-in time when pressing Play")));
     ts.push_back (&space.add<ParamKnob> (c, P::fadeOut, L ("FUNDIDO SALIDA", "FADE OUT"), L ("Tiempo de salida al pulsar Stop o al acabar el temporizador", "Fade-out time on Stop or when the timer ends")));
     space.layout = [ts] (juce::Rectangle<int> r) { rowKnobs (ts, r, 110); };
@@ -243,8 +265,93 @@ void SoundPage::resized()
     vu.setBounds (vis.removeFromRight (40).reduced (2, 0));
     spectrum.setBounds (vis.reduced (2, 0));
     r.removeFromRight (8);
-    space.setBounds (r.removeFromRight (180));
+    space.setBounds (r.removeFromRight (260));
     r.removeFromRight (8);
     fx.setBounds (r);
+}
+
+// ================================================================ Full-screen landscape
+FullscreenView::FullscreenView (Context& c, std::function<void()> onClose) : ctx (c), close (std::move (onClose))
+{
+    setOpaque (true);
+    setWantsKeyboardFocus (true);
+    view.setInterceptsMouseClicks (false, false);
+    addAndMakeVisible (view);
+}
+
+void FullscreenView::tick (const Frame& f)
+{
+    if (lastT == 0) helpUntil = f.time + 6.0; // first frame: show the shortcuts for a few seconds
+    lastT = f.time;
+    view.tick (f);
+    repaint();
+}
+
+void FullscreenView::nudge (int param, float delta, const juce::String& label)
+{
+    const auto& d = paramDefs()[(size_t) param];
+    const float v = d.range.convertFrom0to1 (juce::jlimit (0.0f, 1.0f, d.range.convertTo0to1 (ctx.proc.getParam (param)) + delta));
+    ctx.proc.setParamPlain (param, v);
+    toastText = label + "  " + juce::String ((int) std::lround (d.range.convertTo0to1 (v) * 100)) + " %";
+    toastUntil = lastT + 1.5;
+}
+
+bool FullscreenView::keyPressed (const juce::KeyPress& k)
+{
+    const int c = k.getKeyCode();
+    const auto ch = juce::CharacterFunctions::toUpperCase (k.getTextCharacter());
+    auto say = [this] (const juce::String& s) { toastText = s; toastUntil = lastT + 1.5; };
+    if (c == juce::KeyPress::escapeKey) { if (close) close(); return true; }
+    if (c == juce::KeyPress::spaceKey) { ctx.proc.setPlaying (! ctx.proc.isPlayingInternal()); say (ctx.proc.isPlayingInternal() ? "PLAY" : "STOP"); return true; }
+    if (c == juce::KeyPress::leftKey) { nudge (P::light, -0.05f, L ("LUZ", "LIGHT")); return true; }
+    if (c == juce::KeyPress::rightKey) { nudge (P::light, 0.05f, L ("LUZ", "LIGHT")); return true; }
+    if (c == juce::KeyPress::upKey) { nudge (P::evolution, 0.05f, L ("EVOLUCIÓN", "EVOLUTION")); return true; }
+    if (c == juce::KeyPress::downKey) { nudge (P::evolution, -0.05f, L ("EVOLUCIÓN", "EVOLUTION")); return true; }
+    if (ch >= '1' && ch <= '4') { ctx.proc.setParamPlain (P::scene, (float) (ch - '1')); say (sceneName ((int) (ch - '1'))); return true; }
+    switch (ch)
+    {
+        case 'F':
+        {
+            const bool on = ctx.proc.getParam (P::freeze) < 0.5f;
+            ctx.proc.setParamPlain (P::freeze, on ? 1.0f : 0.0f);
+            say (on ? L ("CONGELADO", "FROZEN") : L ("DESCONGELADO", "UNFROZEN"));
+            return true;
+        }
+        case 'N': ctx.proc.setParamPlain (P::seed, (float) (1 + juce::Random::getSystemRandom().nextInt (99999))); say (L ("NUEVA SEMILLA", "NEW SEED")); return true;
+        case 'A': nudge (P::density, 0.05f, L ("DENSIDAD", "DENSITY")); return true;
+        case 'Z': nudge (P::density, -0.05f, L ("DENSIDAD", "DENSITY")); return true;
+        case 'S': nudge (P::space, 0.05f, L ("ESPACIO", "SPACE")); return true;
+        case 'X': nudge (P::space, -0.05f, L ("ESPACIO", "SPACE")); return true;
+        case 'R': nudge (P::rain, ctx.proc.getParam (P::rain) > 0.05f ? -1.0f : 0.6f, L ("LLUVIA", "RAIN")); return true;
+        case 'H': helpPinned = ! helpPinned; helpUntil = helpPinned ? 1.0e9 : 0.0; return true;
+        default: return false;
+    }
+}
+
+void FullscreenView::paintOverChildren (juce::Graphics& g)
+{
+    const auto b = getLocalBounds().toFloat();
+    if (lastT < toastUntil)
+    {
+        g.setColour (juce::Colours::white.withAlpha ((float) juce::jmin (1.0, (toastUntil - lastT) * 2.0)));
+        g.setFont (techFont (30.0f));
+        g.drawText (toastText, b.withTrimmedTop (b.getHeight() * 0.42f).removeFromTop (40), juce::Justification::centred);
+    }
+    const float a = (float) juce::jlimit (0.0, 1.0, helpUntil - lastT);
+    if (a <= 0.01f) return;
+    auto box = juce::Rectangle<float> (b.getRight() - 360, b.getBottom() - 310, 330, 270);
+    g.setColour (juce::Colours::black.withAlpha (0.55f * a));
+    g.fillRoundedRectangle (box, 10.0f);
+    g.setColour (col::accent.withAlpha (a));
+    g.setFont (techFont (15.0f));
+    auto in = box.reduced (16, 12);
+    g.drawText (L ("ATAJOS", "SHORTCUTS"), in.removeFromTop (22), juce::Justification::centredLeft);
+    g.setFont (font (13.0f));
+    g.setColour (juce::Colours::white.withAlpha (0.9f * a));
+    const juce::String lines[] { L ("Espacio: Play / Stop", "Space: Play / Stop"), L ("Esc: salir", "Esc: exit"), L ("F: congelar", "F: freeze"),
+                                 L ("1 2 3 4: paisaje", "1 2 3 4: landscape"), L ("N: nueva semilla", "N: new seed"), L ("Izquierda / derecha: luz", "Left / right: light"),
+                                 L ("Arriba / abajo: evolución", "Up / down: evolution"), L ("A / Z: densidad", "A / Z: density"), L ("S / X: espacio", "S / X: space"),
+                                 L ("R: lluvia sí / no", "R: rain on / off"), L ("H: mostrar / ocultar ayuda", "H: show / hide help") };
+    for (auto& l : lines) g.drawText (l, in.removeFromTop (20), juce::Justification::centredLeft);
 }
 }

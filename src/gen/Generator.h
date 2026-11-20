@@ -33,7 +33,7 @@ public:
     static Preset mutate (const Preset& p, float amount, uint32_t seed, const std::set<juce::String>& locks = {});
     static Preset blend (const Preset& a, const Preset& b, float t, uint32_t seed);
     static juce::StringArray deriveTags (const Preset& p);
-    static juce::String makeName (const juce::String& mood, Rng& rng);
+    static juce::String makeName (const juce::String& mood, Rng& rng, const juce::String& sub = {});
     static float targetRmsDb (const juce::String& mood);
 };
 

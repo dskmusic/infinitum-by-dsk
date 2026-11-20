@@ -12,7 +12,7 @@ const juce::StringArray& categories()
 const juce::StringArray& subcategories (const juce::String& cat)
 {
     static const std::map<juce::String, juce::StringArray> m {
-        { "Cinematic", { "Epic", "Wonder", "Tension" } },
+        { "Cinematic", { "Epic", "Wonder", "Tension", "Neo-Noir", "Derelict" } },
         { "Ambient", { "Drift", "Glow", "Haze" } },
         { "Meditation", { "Calm", "Breath", "Healing" } },
         { "Dark", { "Abyss", "Ritual", "Night" } },
@@ -32,7 +32,8 @@ juce::String categoryLabel (const juce::String& c)
 const juce::StringArray& characterTags()
 {
     static const juce::StringArray t { "Dark", "Bright", "Warm", "Cold", "Evolving", "Static", "Airy", "Shimmering", "Granular",
-                                       "Windy", "Sparkling", "Deep", "Calm", "Tense", "Wide", "Lush", "Frozen", "432 Hz" };
+                                       "Windy", "Sparkling", "Deep", "Calm", "Tense", "Wide", "Lush", "Frozen", "432 Hz",
+                                       "Rain", "Analog", "Noir", "Haunted" };
     return t;
 }
 

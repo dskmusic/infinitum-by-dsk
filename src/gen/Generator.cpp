@@ -13,8 +13,12 @@ struct Arch
 {
     std::vector<int> scales;                          // indices into scaleNames()
     Range2 octave { 1.6f, 2.4f }, harmony { 0.3f, 0.7f }, chordRate { 0.2f, 0.5f }, evolution { 0.3f, 0.6f },
-           density { 0.4f, 0.7f }, light { 0.4f, 0.7f }, space { 0.6f, 0.9f }, warmth { 0.1f, 0.35f }, dly { 0.15f, 0.4f };
+           density { 0.4f, 0.7f }, light { 0.4f, 0.7f }, space { 0.6f, 0.9f }, warmth { 0.1f, 0.35f }, dly { 0.15f, 0.4f },
+           rain { 0.0f, 0.0f }, dlyFb { 0.3f, 0.65f }, dlyTime { 250.0f, 900.0f };
     float tuning432 = 0.0f;                           // probability of A4 = 432 Hz
+    float rainChance = 0.0f;                          // probability of using rain at all
+    std::vector<int> scenes { scValley };             // landscapes that fit (first = most typical)
+    bool fixedFocus = false;                          // sub-mood already decides the layer balance
     // per layer: level, presence, tone, character
     std::array<std::array<Range2, 4>, kNumLayers> layer {};
 };
@@ -37,6 +41,7 @@ Arch baseArch (const juce::String& mood)
         a.harmony = { 0.45f, 0.9f }; a.chordRate = { 0.3f, 0.7f }; a.evolution = { 0.4f, 0.75f };
         a.density = { 0.5f, 0.8f }; a.light = { 0.3f, 0.65f }; a.space = { 0.7f, 0.95f }; a.octave = { 1.0f, 2.4f };
         a.layer[lyPad][0] = { 0.6f, 0.8f };
+        a.scenes = { scValley, scNebula, scValley };
     }
     else if (mood == "Meditation")
     {
@@ -45,6 +50,8 @@ Arch baseArch (const juce::String& mood)
         a.density = { 0.3f, 0.55f }; a.light = { 0.4f, 0.7f }; a.space = { 0.7f, 0.95f }; a.tuning432 = 0.5f;
         a.layer[lyBells] = { { { 0.15f, 0.35f }, { 0.3f, 0.6f }, { 0.2f, 0.5f }, { 0.05f, 0.25f } } };
         a.layer[lyWind][0] = { 0.1f, 0.3f };
+        a.scenes = { scValley, scStarfield, scValley };
+        a.rainChance = 0.15f; a.rain = { 0.1f, 0.35f };
     }
     else if (mood == "Dark")
     {
@@ -52,6 +59,8 @@ Arch baseArch (const juce::String& mood)
         a.harmony = { 0.15f, 0.6f }; a.light = { 0.0f, 0.3f }; a.octave = { 1.0f, 1.6f }; a.warmth = { 0.3f, 0.6f };
         a.layer[lyPad][2] = { 0.15f, 0.4f }; a.layer[lyDrone][2] = { 0.15f, 0.45f };
         a.layer[lyWind] = { { { 0.25f, 0.5f }, { 0.3f, 0.7f }, { 0.1f, 0.4f }, { 0.4f, 0.8f } } };
+        a.scenes = { scNebula, scValley, scNeon };
+        a.rainChance = 0.3f; a.rain = { 0.2f, 0.6f };
     }
     else if (mood == "Sci-Fi")
     {
@@ -59,11 +68,14 @@ Arch baseArch (const juce::String& mood)
         a.harmony = { 0.4f, 0.9f }; a.evolution = { 0.55f, 0.9f }; a.density = { 0.5f, 0.85f };
         a.layer[lyDrone][3] = { 0.6f, 0.95f }; a.layer[lyTexture] = { { { 0.45f, 0.7f }, { 0.5f, 0.9f }, { 0.55f, 0.95f }, { 0.1f, 0.6f } } };
         a.layer[lyShimmer][3] = { 0.5f, 1.0f };
+        a.scenes = { scStarfield, scNebula, scNeon };
     }
     else // Ambient
     {
         a.scales = { Major, Lydian, MajPent, Suspended, Mixolydian, Dorian };
         a.light = { 0.45f, 0.8f };
+        a.scenes = { scValley, scNebula, scStarfield };
+        a.rainChance = 0.2f; a.rain = { 0.15f, 0.45f };
     }
     return a;
 }
@@ -84,6 +96,33 @@ void applySub (Arch& a, const juce::String& sub)
     else if (sub == "Night") { a.scales = { Minor, Dorian, MinPent }; a.light = { 0.15f, 0.35f }; }
     else if (sub == "Deep Space") { a.light = { 0.05f, 0.35f }; a.space = { 0.85f, 1.0f }; a.octave = { 1.0f, 1.8f }; }
     else if (sub == "Machine") { a.layer[lyTexture][3] = { 0.0f, 0.3f }; a.layer[lyTexture][1] = { 0.7f, 1.0f }; a.layer[lyWind][1] = { 0.0f, 0.25f }; }
+    else if (sub == "Neo-Noir") // rain-soaked neon city of the future: lush analog brass pads, glassy bells, long echoes
+    {
+        a.scales = { Minor, Dorian, Lydian, Minor, Phrygian }; a.harmony = { 0.55f, 0.92f }; a.chordRate = { 0.25f, 0.5f };
+        a.evolution = { 0.3f, 0.55f }; a.density = { 0.45f, 0.7f }; a.light = { 0.12f, 0.38f }; a.space = { 0.82f, 1.0f };
+        a.warmth = { 0.35f, 0.6f }; a.octave = { 1.0f, 2.0f }; a.dly = { 0.35f, 0.55f }; a.dlyFb = { 0.5f, 0.66f }; a.dlyTime = { 480.0f, 900.0f };
+        a.layer[lyPad] = { { { 0.72f, 0.88f }, { 0.85f, 1.0f }, { 0.45f, 0.7f }, { 0.72f, 1.0f } } };
+        a.layer[lyDrone] = { { { 0.45f, 0.65f }, { 0.9f, 1.0f }, { 0.25f, 0.45f }, { 0.15f, 0.35f } } };
+        a.layer[lyTexture] = { { { 0.2f, 0.4f }, { 0.3f, 0.6f }, { 0.3f, 0.6f }, { 0.4f, 0.7f } } };
+        a.layer[lyShimmer] = { { { 0.25f, 0.45f }, { 0.4f, 0.7f }, { 0.3f, 0.55f }, { 0.0f, 0.3f } } };
+        a.layer[lyWind] = { { { 0.25f, 0.42f }, { 0.55f, 0.9f }, { 0.15f, 0.35f }, { 0.25f, 0.5f } } };
+        a.layer[lyBells] = { { { 0.25f, 0.42f }, { 0.4f, 0.75f }, { 0.65f, 0.95f }, { 0.25f, 0.5f } } };
+        a.rainChance = 0.95f; a.rain = { 0.4f, 0.85f };
+        a.scenes = { scNeon }; a.fixedFocus = true;
+    }
+    else if (sub == "Derelict") // a dead ship drifting in deep space: metallic mutating hum, air vents, sonar pings, dread
+    {
+        a.scales = { Phrygian, HarmMinor, WholeTone, Hirajoshi }; a.harmony = { 0.0f, 0.28f }; a.chordRate = { 0.0f, 0.25f };
+        a.evolution = { 0.35f, 0.6f }; a.density = { 0.35f, 0.6f }; a.light = { 0.0f, 0.15f }; a.space = { 0.75f, 0.95f };
+        a.warmth = { 0.15f, 0.4f }; a.octave = { 1.0f, 1.3f }; a.dly = { 0.2f, 0.4f }; a.dlyTime = { 600.0f, 1400.0f };
+        a.layer[lyDrone] = { { { 0.7f, 0.85f }, { 0.95f, 1.0f }, { 0.1f, 0.35f }, { 0.65f, 0.95f } } };
+        a.layer[lyPad] = { { { 0.2f, 0.4f }, { 0.3f, 0.6f }, { 0.08f, 0.3f }, { 0.2f, 0.5f } } };
+        a.layer[lyTexture] = { { { 0.4f, 0.6f }, { 0.5f, 0.85f }, { 0.7f, 1.0f }, { 0.08f, 0.35f } } };
+        a.layer[lyShimmer] = { { { 0.2f, 0.4f }, { 0.3f, 0.6f }, { 0.1f, 0.35f }, { 0.7f, 1.0f } } };
+        a.layer[lyWind] = { { { 0.35f, 0.55f }, { 0.7f, 1.0f }, { 0.08f, 0.32f }, { 0.5f, 0.8f } } };
+        a.layer[lyBells] = { { { 0.15f, 0.3f }, { 0.3f, 0.6f }, { 0.8f, 1.0f }, { 0.08f, 0.28f } } };
+        a.scenes = { scStarfield, scNebula }; a.fixedFocus = true;
+    }
     else if (sub == "Alien") { a.scales = { WholeTone, Hirajoshi }; a.layer[lyDrone][3] = { 0.8f, 1.0f }; }
 }
 
@@ -160,20 +199,36 @@ Preset Generator::candidate (const GenRequest& req, uint32_t seed)
         b.set (P::layer (l, P::lTone), b.rr (a.layer[(size_t) l][2]));
         b.set (P::layer (l, P::lChar), b.rr (a.layer[(size_t) l][3]) + (l == lyDrone ? req.mystery * 0.25f : 0.0f));
     }
+    // variety with coherence: one featured layer leads, one or two step back (unless the sub-mood fixes the balance)
+    if (! a.fixedFocus)
+    {
+        const int featured = 1 + (int) (r.next() % 5);
+        b.set (P::layer (featured, P::lLevel), p.get (P::layer (featured, P::lLevel)) + 0.15f);
+        b.set (P::layer (featured, P::lPresence), p.get (P::layer (featured, P::lPresence)) + 0.25f);
+        const int quiet = (int) (r.next() % 3);
+        for (int k = 0; k < quiet; ++k)
+        {
+            const int l = 1 + (int) (r.next() % 5);
+            if (l != featured) b.set (P::layer (l, P::lPresence), p.get (P::layer (l, P::lPresence)) - 0.3f);
+        }
+    }
     // the drone carries the piece: never let it disappear for long
     if (p.get (P::layer (lyDrone, P::lPresence)) < 0.85f) b.set (P::layer (lyDrone, P::lPresence), 0.9f);
     // occasionally drop a layer for a sparser, more characterful landscape
-    if (r.uni() < 0.35f) b.set (P::layer (r.uni() < 0.5f ? lyWind : lyBells, P::lOn), 0);
+    if (! a.fixedFocus && r.uni() < 0.35f) b.set (P::layer (r.uni() < 0.5f ? lyWind : lyBells, P::lOn), 0);
     // ---- fx
     b.set (P::warmth, b.rr (a.warmth));
     b.set (P::dlyMix, b.rr (a.dly));
-    b.set (P::dlyTime, 250.0f + r.uni() * 650.0f);
-    b.set (P::dlyFb, 0.3f + r.uni() * 0.35f);
+    b.set (P::dlyTime, b.rr (a.dlyTime));
+    b.set (P::dlyFb, b.rr (a.dlyFb));
+    b.set (P::rain, r.uni() < a.rainChance ? b.rr (a.rain) : 0.0f);
+    b.set (P::scene, (float) a.scenes[(size_t) (r.uni() < 0.6f ? 0 : r.next() % (uint32_t) a.scenes.size())]);
     b.set (P::dlyTone, 0.3f + r.uni() * 0.4f);
     b.set (P::revDamp, 0.25f + r.uni() * 0.4f);
     b.set (P::width, 0.9f + r.uni() * 0.4f);
     b.set (P::lowCut, mood == "Dark" ? 22.0f : 28.0f + r.uni() * 20.0f);
-    b.set (P::highCut, mood == "Dark" ? 7000.0f + r.uni() * 5000.0f : 12000.0f + r.uni() * 8000.0f);
+    // brighter landscapes keep more top end; dark ones roll it off (coherent with Light)
+    b.set (P::highCut, 6000.0f + 14000.0f * juce::jlimit (0.0f, 1.0f, p.get (P::light) * 0.8f + r.uni() * 0.3f));
     b.set (P::fadeIn, mood == "Meditation" ? 8.0f : 3.0f + r.uni() * 4.0f);
     b.set (P::fadeOut, mood == "Meditation" ? 15.0f : 6.0f + r.uni() * 6.0f);
 
@@ -183,7 +238,7 @@ Preset Generator::candidate (const GenRequest& req, uint32_t seed)
     p.meta.uuid = juce::Uuid().toString();
     p.meta.category = mood;
     p.meta.subcategory = sub;
-    p.meta.name = makeName (mood, nr);
+    p.meta.name = makeName (mood, nr, sub);
     p.meta.author = "Infinitum AI";
     p.meta.tags = deriveTags (p);
     p.meta.created = p.meta.modified = juce::Time::getCurrentTime();
@@ -318,13 +373,26 @@ juce::StringArray Generator::deriveTags (const Preset& p)
     if (p.get (P::freeze) > 0.5f) t.add ("Frozen");
     if ((int) p.get (P::tuning) == 1) t.add ("432 Hz");
     if (p.meta.category == "Meditation") t.add ("Calm");
-    if (p.meta.subcategory == "Tension" || p.meta.subcategory == "Ritual") t.add ("Tense");
+    if (p.meta.subcategory == "Tension" || p.meta.subcategory == "Ritual" || p.meta.subcategory == "Derelict") t.add ("Tense");
+    if (p.get (P::rain) > 0.2f) t.add ("Rain");
+    if (lay (lyPad, P::lChar) > 0.7f && amount (lyPad) > 0.4f) t.add ("Analog");
+    if (p.meta.subcategory == "Neo-Noir") t.add ("Noir");
+    if (p.meta.subcategory == "Derelict") t.add ("Haunted");
     t.removeDuplicates (false);
     return t;
 }
 
-juce::String Generator::makeName (const juce::String& mood, Rng& rng)
+juce::String Generator::makeName (const juce::String& mood, Rng& rng, const juce::String& sub)
 {
+    static const std::map<juce::String, std::pair<juce::StringArray, juce::StringArray>> subWords {
+        { "Neo-Noir", { { "Neon", "Acid", "Chrome", "Midnight", "Wet", "Electric", "Synthetic", "Lonely", "Burning", "Smoky", "Rain-Soaked", "Violet", "Amber", "Endless", "Replica", "Off-World", "Holo", "Fading", "Last", "Silent" },
+                        { "Rain", "Skyline", "Avenue", "District", "Memories", "Tears", "Rooftops", "Alley", "Arcology", "Detective", "Boulevard", "Haze", "Billboards", "Origami", "Overpass", "Nightfall", "Android", "Signals", "Streets", "Sector 7" } } },
+        { "Derelict", { { "Derelict", "Cold", "Silent", "Abandoned", "Drifting", "Dead", "Frozen", "Hollow", "Forsaken", "Dark", "Lost", "Sealed", "Corroded", "Quarantined", "Deep", "Haunted", "Black", "Sleeping", "Ruined", "Last" },
+                        { "Hull", "Cargo Bay", "Hypersleep", "Vents", "Corridor", "Airlock", "Signal", "Freighter", "Bulkhead", "Reactor", "Mothership", "Egg Chamber", "Beacon", "Moon", "Colony", "Station", "Engine Room", "Crew Deck", "Transmission", "Wreck" } } },
+    };
+    if (auto st = subWords.find (sub); st != subWords.end())
+        return st->second.first[(int) (rng.next() % (uint32_t) st->second.first.size())] + " " + st->second.second[(int) (rng.next() % (uint32_t) st->second.second.size())];
+
     static const std::map<juce::String, std::pair<juce::StringArray, juce::StringArray>> words {
         { "Cinematic", { { "Endless", "Burning", "Silent", "Fallen", "Golden", "Distant", "Last", "Rising", "Broken", "Eternal", "Northern", "Iron", "Crimson", "Ancient", "Lost", "Final", "Vast", "Hidden", "Sacred", "Frozen" },
                          { "Horizon", "Empire", "Kingdom", "Odyssey", "Exodus", "Citadel", "Frontier", "Monument", "Requiem", "Voyage", "Dominion", "Titans", "Legacy", "Valley", "Shores", "Covenant", "Ascent", "Dynasty", "Prophecy", "Dawn" } } },

@@ -42,7 +42,7 @@ struct MutOsc
 struct PadVoice
 {
     float note = 60, target = 60, gain = 0, gainTarget = 0, attackCoef = 0, releaseCoef = 0, pan = 0;
-    float ph[4] {}, inc[4] {};
+    float ph[4] {}, inc[4] {}, vib = 0;
     Svf f[2];
     bool midi = false;
     int midiNote = -1, age = 0;
@@ -134,7 +134,9 @@ private:
     float pink[2][3] {};
     Svf windF[2][2];
     Rng windRng { 31337 };
-    float windGust = 0;
+    float windGust = 0, rainEnv[2] {};
+    Biquad rainHp[2];
+    double swellT = 100.0;               // seconds since the last chord change (pad filter bloom)
 
     // bells
     std::array<Bell, kBellVoices> bells {};

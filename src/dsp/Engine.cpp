@@ -129,6 +129,9 @@ void Engine::reset (uint32_t s)
     for (auto& c : windF) for (auto& f : c) f.reset();
     windRng = Rng (seed * 13u + 31337u);
     windGust = 0;
+    rainEnv[0] = rainEnv[1] = 0;
+    for (auto& b : rainHp) { b.reset(); b.highpass (sr, 1100.0, 0.6); }
+    swellT = 100.0;
     // bells
     for (auto& b : bells) b = Bell();
     bellRng = Rng (seed * 17u + 7u);
@@ -186,6 +189,7 @@ void Engine::updateChord (bool force)
     const int scaleNow = (int) pv (P::scale), octNow = (int) pv (P::octave);
     const float harmNow = pv (P::harmony);
     if (! force && slot == chordSlot && rootPc == curRoot && scaleNow == curScale && octNow == curOct && harmNow == curHarm) return;
+    if (! force && slot != chordSlot) swellT = 0; // new chord: the analog pad blooms
     chordSlot = slot;
     curRoot = rootPc; curScale = scaleNow; curOct = octNow; curHarm = harmNow;
     const auto& s = scaleSteps ((int) pv (P::scale));
@@ -399,6 +403,10 @@ void Engine::control()
         const float ch = lp (lyPad, P::lChar);
         const float glide = coefFor (1.5f + 2.5f * (1.0f - pv (P::chordRate)), sr / kCtrl);
         const float cents = 3.0f + ch * 20.0f;
+        // "analog" character: slow per-voice vibrato drift + filter bloom on every chord change (80s poly-synth feel)
+        swellT += (double) kCtrl / sr;
+        const float swell = (float) ((1.0 - std::exp (-swellT / 1.4)) * std::exp (-swellT / 7.0));
+        const float vibDepth = ch * ch * 9.0f;
         const float tone = toneEff[lyPad];
         for (int v = 0; v < kPadVoices; ++v)
         {
@@ -406,10 +414,13 @@ void Engine::control()
             pvc.note = pvc.target + glide * (pvc.note - pvc.target);
             if (! pvc.midi) pvc.gainTarget = 1.0f;
             const float f = noteToHz (pvc.note, a4);
-            const float d[4] { -cents, cents * 0.15f, cents, -1200.0f };
+            pvc.vib += (0.17f + 0.031f * (float) v) * (float) kCtrl / (float) sr;
+            if (pvc.vib >= 1.0f) pvc.vib -= 1.0f;
+            const float vb = vibDepth * fastSin (pvc.vib);
+            const float d[4] { -cents + vb, cents * 0.15f + vb, cents + vb, -1200.0f + vb };
             for (int k = 0; k < 4; ++k) pvc.inc[k] = juce::jmin (0.45f, f * std::exp2 (d[k] / 1200.0f) / (float) sr);
             const float wob = evoNoise (lyPad * 4 + 2, evoT * 2.0 + v * 17.0);
-            const float cut = juce::jlimit (60.0f, (float) sr * 0.45f, f * (1.5f + 10.0f * tone * tone) * lightMul * (0.75f + 0.5f * wob));
+            const float cut = juce::jlimit (60.0f, (float) sr * 0.45f, f * (1.5f + 10.0f * tone * tone) * lightMul * (0.75f + 0.5f * wob) * (1.0f + swell * ch * 2.5f));
             for (auto& flt : pvc.f) flt.set (std::tan (kPi * cut / (float) sr), 1.5f);
         }
     }
@@ -486,7 +497,7 @@ void Engine::renderChunk (float* L, float* R, int n)
     const float droneOn = lp (lyDrone, P::lOn), padOnF = lp (lyPad, P::lOn);
     // texture and shimmer listen to drone + pad even when those layers are muted in the mix
     const bool feed = (lp (lyTexture, P::lOn) > 0.5f && gainNow[lyTexture] > 1.0e-5f) || (lp (lyShimmer, P::lOn) > 0.5f && gainNow[lyShimmer] > 1.0e-5f);
-    const float windCh = lp (lyWind, P::lChar);
+    const float windCh = lp (lyWind, P::lChar), rainAmt = pv (P::rain);
 
     for (int i = 0; i < n; ++i)
     {
@@ -594,6 +605,20 @@ void Engine::renderChunk (float* L, float* R, int n)
             wl *= g; wr *= g;
         }
 
+        // ---- rain: random drops + soft hiss, through a high-pass
+        float rl = 0, rr = 0;
+        if (sources > 0 && rainAmt > 0.001f)
+        {
+            for (int c = 0; c < 2; ++c)
+            {
+                if (windRng.uni() < rainAmt * 0.004f) rainEnv[c] = 0.25f + 0.75f * windRng.uni();
+                const float nz = windRng.bi();
+                const float y = rainHp[c].tick (nz * (rainEnv[c] + 0.12f * rainAmt));
+                rainEnv[c] *= 0.992f;
+                (c == 0 ? rl : rr) = y * rainAmt * 0.42f;
+            }
+        }
+
         // ---- bells
         float bl = 0, br = 0;
         for (auto& b : bells)
@@ -634,11 +659,11 @@ void Engine::renderChunk (float* L, float* R, int n)
         // energy per layer (UI)
         energyAcc[lyDrone] += dl * dl + dr * dr; energyAcc[lyPad] += padL * padL + padR * padR;
         energyAcc[lyTexture] += tl * tl + tr * tr; energyAcc[lyShimmer] += sl * sl + sr2 * sr2;
-        energyAcc[lyWind] += wl * wl + wr * wr; energyAcc[lyBells] += bl * bl + br * br;
+        energyAcc[lyWind] += wl * wl + wr * wr + rl * rl + rr * rr; energyAcc[lyBells] += bl * bl + br * br;
 
         // ---- mix: layers (faded by the transport) + MIDI voices
-        float xl = (dl + padL + tl + wl + bl) * rg + sl + midiL;
-        float xr = (dr + padR + tr + wr + br) * rg + sr2 + midiR;
+        float xl = (dl + padL + tl + wl + bl + rl) * rg + sl + midiL;
+        float xr = (dr + padR + tr + wr + br + rr) * rg + sr2 + midiR;
 
         // ---- delay (bells + texture send), cross feedback
         {

@@ -18,7 +18,8 @@ struct Frame
     std::array<int, kChordVoices> chord {};
     int rootPc = 9, degree = 0, bellCount = 0, lastBellNote = 72, seed = 1;
     float runGain = 0, evoTime = 0, musTime = 0, elapsed = 0, lastBellPan = 0, light = 0.5f, space = 0.5f, harmony = 0.5f;
-    int scale = 1, timerMin = 0;
+    int scale = 1, timerMin = 0, scene = 0;
+    float rain = 0, evolution = 0.5f, density = 0.5f;
     bool running = false, frozen = false, playButton = false, hostPlaying = false;
     bool reduced = false;                    // reduced animation mode
 };
@@ -75,27 +76,45 @@ private:
     float l = 0, r = 0, hl = 0, hr = 0;
 };
 
-// Generative landscape: sky (Light), sun/moon on the evolution clock, aurora (Shimmer), mountain ranges
-// (Drone, Pad), drifting mist (Wind), grain dust (Texture) and rising sparks for every bell.
+// Generative landscape with four scenes (Valley, Starfield, Nebula, Neon Rain). Every layer has a visual role:
+// drone and pad shape the big masses, texture is dust/grain, shimmer is aurora/beams, wind is mist/fog,
+// bells are sparks/comets/flying lights; the seed decides the scenery (lake, forest, planet, skyline...).
 class Landscape : public juce::Component, public Animated
 {
 public:
     Landscape();
     void tick (const Frame&) override;
     void paint (juce::Graphics&) override;
+    void resized() override { cacheKey = {}; }
     bool showOverlay = true;                 // chord / key / clock texts
     std::function<void()> onClick;
     void mouseUp (const juce::MouseEvent& e) override { if (onClick && e.mouseWasClicked()) onClick(); }
 private:
-    struct Spark { float x, y, vy, life, size; juce::Colour c; };
+    struct Spark { float x, y, vx, vy, life, size; juce::Colour c; int kind; };
+    void paintValley (juce::Graphics&, juce::Rectangle<float>);
+    void paintStarfield (juce::Graphics&, juce::Rectangle<float>);
+    void paintNebula (juce::Graphics&, juce::Rectangle<float>);
+    void paintNeon (juce::Graphics&, juce::Rectangle<float>);
+    void paintSparks (juce::Graphics&);
+    void paintOverlay (juce::Graphics&, juce::Rectangle<float>);
+    void rebuildCache();                     // seed/size dependent scenery
     Frame f;
     std::vector<Spark> sparks;
-    std::array<juce::Point<float>, 140> stars {};
-    std::array<float, 140> twinkle {};
+    std::array<juce::Point<float>, 260> stars {};
+    std::array<float, 260> twinkle {}, starSize {};
     std::array<float, kNumLayers> pres {}, glow {};
     int lastBells = -1;
     double lastT = 0;
     juce::Random rng { 1234 };
+    // seed-dependent scenery
+    juce::String cacheKey;
+    bool hasLake = false, hasForest = false, hasBirds = false, hasRings = false;
+    int numClouds = 3;
+    juce::Point<float> planetPos; float planetR = 100; juce::Colour planetCol, planetCol2;
+    std::array<juce::Image, 3> skyline;      // Neon Rain building layers (with lit windows)
+    struct Sign { juce::Rectangle<float> r; juce::Colour c; float phase; int layer; };
+    std::vector<Sign> signs;
+    juce::Point<float> arcology;
 };
 
 juce::String chordName (int rootPc, int scale, int degree, float harmony); // "Am7", "Fmaj9"...

@@ -35,6 +35,17 @@ juce::String layerName (int l)
         default: return {};
     }
 }
+juce::String sceneName (int s)
+{
+    switch (s)
+    {
+        case scValley: return L ("Valle", "Valley");
+        case scStarfield: return L ("Campo estelar", "Starfield");
+        case scNebula: return L ("Nebulosa", "Nebula");
+        case scNeon: return L ("Lluvia de neón", "Neon Rain");
+        default: return {};
+    }
+}
 const juce::StringArray& keyNames()
 {
     static const juce::StringArray n { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
@@ -118,6 +129,9 @@ std::vector<ParamDef> build()
     b.add (dlyFb, "dly_fb", "Delay Feedback", lin (0, 0.95f), 0.45f);
     b.add (dlyTone, "dly_tone", "Delay Tone", lin (0, 1), 0.5f);
     b.add (dlyMix, "dly_mix", "Delay Send", lin (0, 1), 0.3f);
+    b.add (rain, "rain", "Rain", lin (0, 1), 0.0f);
+    b.group = "global";
+    b.addChoice (scene, "scene", "Scene", { "Valley", "Starfield", "Nebula", "Neon Rain" }, 0);
 
     //                      level presence tone  char
     const float defs[kNumLayers][4] { { 0.70f, 1.00f, 0.50f, 0.40f },   // drone

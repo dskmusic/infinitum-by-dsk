@@ -86,6 +86,7 @@ void InfinitumEditor::buildUi()
     header->abButton.setButtonText (abActive == 0 ? "A" : "B");
     presets->onLoaded = [this] (const gx::Preset& pr) { header->setPresetName (pr.meta.name); generator->presetLoaded(); };
     generator->onPresetChanged = [this] { header->setPresetName (proc.currentMeta.name); undo.reset(); };
+    landscapePage->onFullscreen = [this] { openFullscreen(); };
     generator->openEditor = [this] { showPage (1); };
     generator->openExport = [this] { showPage (4); };
     generator->openPresets = [this] { showPage (3); };
@@ -94,6 +95,7 @@ void InfinitumEditor::buildUi()
 // Language switch: recreate every page so all labels, menus and tooltips change at once.
 void InfinitumEditor::rebuildUi()
 {
+    closeFullscreen();
     pendingRebuild = false;
     gx::uiEnglish() = settings.messageLanguage() == "en";
     const auto genState = generator->uiState();
@@ -111,6 +113,7 @@ void InfinitumEditor::rebuildUi()
 InfinitumEditor::~InfinitumEditor()
 {
     stopTimer();
+    closeFullscreen();
     proc.keyboardState.allNotesOff (1);
     if (&juce::LookAndFeel::getDefaultLookAndFeel() == &lnf) juce::LookAndFeel::setDefaultLookAndFeel (nullptr);
     setLookAndFeel (nullptr);
@@ -181,6 +184,33 @@ void InfinitumEditor::advanceFrames (double dt)
     frame.reduced = settings.animation() == 1;
     header->tick (frame);
     pages[(size_t) currentPage]->tick (frame);
+    if (fullscreenView) fullscreenView->tick (frame);
+}
+
+// Full-screen landscape: a borderless desktop window in kiosk mode. Esc (or losing it) comes back here.
+void InfinitumEditor::openFullscreen()
+{
+    if (fullscreenView) return;
+    fullscreenView = std::make_unique<gx::ui::FullscreenView> (ctx, [sp = juce::Component::SafePointer<InfinitumEditor> (this)]
+    {
+        juce::MessageManager::callAsync ([sp] { if (sp) sp->closeFullscreen(); }); // never delete the view inside its own key handler
+    });
+    fullscreenView->setLookAndFeel (&lnf);
+    fullscreenView->addToDesktop (juce::ComponentPeer::windowAppearsOnTaskbar);
+    fullscreenView->setBounds (juce::Desktop::getInstance().getDisplays().getDisplayForRect (getScreenBounds())->totalArea);
+    fullscreenView->setVisible (true);
+    juce::Desktop::getInstance().setKioskModeComponent (fullscreenView.get(), false);
+    fullscreenView->toFront (true);
+    fullscreenView->grabKeyboardFocus();
+}
+
+void InfinitumEditor::closeFullscreen()
+{
+    if (! fullscreenView) return;
+    if (juce::Desktop::getInstance().getKioskModeComponent() == fullscreenView.get()) juce::Desktop::getInstance().setKioskModeComponent (nullptr, false);
+    fullscreenView->removeFromDesktop();
+    fullscreenView->setLookAndFeel (nullptr);
+    fullscreenView.reset();
 }
 
 void InfinitumEditor::timerCallback()
