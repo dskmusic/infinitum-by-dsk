@@ -1037,72 +1037,154 @@ vec3 scene (vec2 uv)
 
 // ------------------------------------------------------------------ Ocean
 const char* ocean = R"GLSL(
-vec3 sky (vec2 p, float y, float hor, vec2 sp, vec3 sc, float L)
+void oceanSun (float L, float asp, float hor, out vec2 sp, out vec3 sc, out float el)
 {
-    vec3 c = skyGrad ((y - hor) / (1.0 - hor), L);
+    float ph = fract (uEvoT / 600.0 + fract (uSeed * 0.0137));
+    el = mix (-0.1, 0.42, smoothstep (0.05, 0.95, L));
+    sp = vec2 ((0.2 + 0.6 * ph) * asp, hor + el);
+    sc = mix (vec3 (1.25, 1.05, 0.88), vec3 (1.45, 0.6, 0.28), 1.0 - smoothstep (0.03, 0.25, el));
+    if (el < 0.0) { sp = vec2 ((0.8 - 0.6 * ph) * asp, hor + 0.34); sc = vec3 (0.72, 0.8, 1.0); }
+}
+vec3 sky (vec2 p, float y, float hor, vec2 sp, vec3 sc, float el, float rain)
+{
+    float t = clamp ((y - hor) / (1.0 - hor), 0.0, 1.0);
+    float day = smoothstep (-0.06, 0.06, el);
+    vec3 zen = mix (vec3 (0.006, 0.01, 0.035), vec3 (0.1, 0.28, 0.6), smoothstep (-0.05, 0.3, el));
+    vec3 horz = mix (vec3 (0.03, 0.05, 0.1), mix (vec3 (1.0, 0.5, 0.3), vec3 (0.7, 0.82, 0.95), smoothstep (0.06, 0.3, el)), day);
+    vec3 c = mix (horz, zen, pow (t, 0.5));
     float sd = length (p - sp);
-    c += sc * 0.02 / (sd * sd + 0.012) * 0.35;
+    c += sc * 0.018 / (sd * sd + 0.016) * (0.3 + 0.6 * (1.0 - smoothstep (0.05, 0.35, el))) * (el < 0.0 ? 0.2 : 1.0);
     vec2 cp = vec2 (p.x * 1.1 + uMus * 0.004, y * 5.0) + S;
     float d1 = fbm (cp), d2 = fbm (cp + normalize (sp - p) * 0.05);
-    float cl = smoothstep (0.5, 0.85, d1) * smoothstep (hor, hor + 0.2, y);
+    float cover = 0.5 - 0.2 * rain;
+    float cl = smoothstep (cover, cover + 0.33, d1) * smoothstep (hor, hor + 0.2, y);
     float lit = clamp ((d1 - d2) * 7.0 + 0.5, 0.0, 1.0);
-    c = mix (c, mix (skyGrad (0.0, L) * 0.5, sc * mix (0.6, 1.2, L), lit), cl * 0.9);
+    c = mix (c, mix (horz * 0.45, sc * mix (0.35, 1.15, day) * (1.0 - 0.5 * rain), lit), cl * 0.9);
+    c = mix (c, vec3 (0.3, 0.33, 0.38) * mix (0.3, 1.0, day), rain * 0.35 * (1.0 - t));
     return c;
 }
+// the cliff on one side: rock face with ledges, grass on top
+float cliffEdge (float y, float side, float asp)
+{
+    float base = side > 0.0 ? asp * 0.86 : asp * 0.14;
+    return base - side * (0.07 * fbm (vec2 (y * 6.0, 3.0) + S) + 0.018 * noise (vec2 (y * 45.0, 1.0)) + 0.05 * smoothstep (0.55, 0.95, y) - 0.03 * y);
+}
+)GLSL" R"GLSL(
 vec3 scene (vec2 uv)
 {
     float L = uLight, asp = uRes.x / uRes.y;
     vec2 p = vec2 (uv.x * asp, uv.y);
-    float hor = 0.48;
-    float ph = fract (uEvoT / 420.0 + fract (uSeed * 0.0137));
-    vec2 sp = vec2 ((0.15 + 0.7 * ph) * asp, hor + 0.04 + sin (ph * 3.14159) * 0.36);
-    vec3 sc = mix (vec3 (0.85, 0.9, 1.05), vec3 (1.3, 0.92, 0.55), step (0.5, L));
+    float hor = 0.46;
+    vec2 sp; vec3 sc; float el;
+    oceanSun (L, asp, hor, sp, sc, el);
+    float day = smoothstep (-0.06, 0.06, el);
+    float rain = wRain(), haze = wHaze();
+    float swell = 0.5 + 0.6 * uPres[1] + 0.5 * uGlow[4] + 0.6 * uGlow[6];          // Pad, Wind and Bass raise the sea
+    vec3 low = sky (vec2 (p.x, 0.0), hor, hor, sp, sc, el, rain);
     vec3 col;
     if (uv.y > hor)
     {
-        col = sky (p, uv.y, hor, sp, sc, L);
-        col += vec3 (stars (p * 110.0 + S, 0.08, 0.08)) * clamp ((0.6 - L) * 2.2, 0.0, 1.0);
-        col = mix (col, sc * 1.6, smoothstep (0.04, 0.034, length (p - sp)));
-        // crepuscular rays from the sun
+        col = sky (p, uv.y, hor, sp, sc, el, rain);
+        col += vec3 (stars (p * 110.0 + S, 0.08, 0.08)) * (1.0 - day) * (1.0 - rain);
+        col = mix (col, sc * 1.6, smoothstep (0.036, 0.03, length (p - sp)) * (1.0 - rain));
         vec2 v = p - sp;
-        float ang = atan (v.y, v.x);
-        col += sc * pow (noise (vec2 (ang * 12.0, uTime * 0.05)), 3.0) * 0.12 * exp (-length (v) * 2.0) * smoothstep (0.35, 0.6, L);
+        col += sc * pow (noise (vec2 (atan (v.y, v.x) * 12.0, uTime * 0.05)), 3.0) * 0.1 * exp (-length (v) * 2.0) * day * (1.0 - rain);
         // distant islands (Drone)
         float isl = hor + max (0.0, fbm3 (vec2 (p.x * 2.5 + S.x, 0.0)) - 0.45) * 0.25 * (0.5 + uPres[0]);
-        if (uv.y < isl) col = mix (skyGrad (0.0, L) * 0.35, vec3 (0.02, 0.03, 0.05), 0.5);
+        if (uv.y < isl) col = mix (low * 0.4, vec3 (0.02, 0.03, 0.05), 0.5);
+        // seagulls gliding, a wing beat now and then
+        for (int k = 0; k < 4; k++)
+        {
+            float fk = float (k);
+            vec2 gc = vec2 (fract (hash12 (vec2 (fk, 1.0)) + uTime * (0.006 + 0.004 * fk) * (fk < 2.0 ? 1.0 : -1.0)) * (asp + 0.4) - 0.2,
+                            hor + 0.12 + 0.25 * hash12 (vec2 (fk, 2.0)) + 0.02 * sin (uTime * 0.3 + fk));
+            vec2 q = (p - gc) / (0.012 + 0.006 * hash12 (vec2 (fk, 3.0)));
+            float flap = sin (uTime * 6.0 + fk) * step (0.8, sin (uTime * 0.7 + fk * 2.0));
+            float wing = abs (abs (q.x) * (0.35 + 0.35 * flap) - q.y + 0.25 * q.x * q.x);
+            float gull = smoothstep (0.16, 0.05, wing) * step (abs (q.x), 1.0);
+            col = mix (col, mix (vec3 (0.85, 0.87, 0.9) * mix (0.2, 1.0, day), vec3 (0.05), 0.4), gull * 0.9);
+        }
     }
     else
     {
-        // perspective water: waves from fbm, fresnel reflection of the sky, sun glitter
+        // perspective water: waves from fbm, fresnel reflection of the sky, a glittering path under the sun
         float dz = hor - uv.y + 0.002;
         float depth = 0.05 / dz;
         vec2 wp = vec2 (p.x * depth * 0.6, depth) + vec2 (uMus * 0.01, -uTime * 0.25);
-        float swell = 0.5 + 0.6 * uPres[1] + 0.5 * uGlow[4];
         float e = 0.02;
         float h0 = fbm (wp * 1.5), hx = fbm (wp * 1.5 + vec2 (e, 0.0)), hy = fbm (wp * 1.5 + vec2 (0.0, e));
         vec3 n = normalize (vec3 ((h0 - hx) * swell * 3.0, 1.0, (h0 - hy) * swell * 3.0));
         float fres = pow (1.0 - max (n.y, 0.0) * 0.9, 3.0) * 0.6 + 0.25;
         float ry = hor + dz * 1.2 + n.x * 0.15 + n.z * 0.1;
-        vec3 refl = sky (p + vec2 (n.x * 0.2, 0.0), clamp (ry, hor, 1.0), hor, sp, sc, L);
-        vec3 water = mix (vec3 (0.01, 0.05, 0.09), vec3 (0.04, 0.16, 0.22), L) * (0.5 + 0.5 * (1.0 - dz * 2.0));
+        vec3 refl = sky (p + vec2 (n.x * 0.2, 0.0), clamp (ry, hor, 1.0), hor, sp, sc, el, rain);
+        vec3 water = mix (vec3 (0.008, 0.04, 0.07), vec3 (0.04, 0.16, 0.22), smoothstep (-0.05, 0.3, el)) * (0.5 + 0.5 * (1.0 - dz * 2.0));
         col = mix (water, refl, fres);
-        float glit = pow (max (0.0, noise (wp * 18.0 + uTime) * (0.6 + n.x * 3.0)), 6.0) * exp (-abs (p.x - sp.x) * (2.0 + 6.0 * dz)) * (sp.y - hor + 0.1);
-        col += sc * glit * 3.0;
-        // foam crests (Texture)
+        float path = exp (-abs (p.x - sp.x) / (0.02 + dz * 0.5)) * step (0.0, el + 0.2);
+        float glit = pow (max (0.0, noise (wp * 22.0 + uTime * 1.3) * (0.6 + n.x * 3.0)), 7.0);
+        col += sc * glit * path * 4.0 * (1.0 - rain) * (el < 0.0 ? 0.35 : 1.0);
+        col += sc * path * 0.06 * (1.0 - smoothstep (0.0, 0.3, dz));
         float foam = smoothstep (0.68, 0.8, fbm (wp * 3.0 + 5.0)) * (0.3 + 0.7 * uPres[2]) * (1.0 - dz * 1.5);
-        col = mix (col, vec3 (0.85, 0.9, 0.95) * (0.5 + 0.5 * L), foam * 0.35);
-        // the shore with a foam line that comes and goes
-        float shore = 0.08 + 0.02 * sin (uTime * 0.45) * swell + 0.01 * fbm3 (vec2 (p.x * 6.0, 0.0));
-        if (uv.y < shore + 0.01)
+        col = mix (col, vec3 (0.85, 0.9, 0.95) * mix (0.25, 1.0, day), foam * 0.3);
+        // a whale surfacing far away now and then: its back, then the spout drifting in the wind
+        float ww = fract (uTime / 70.0 + hash12 (S + 6.0));
+        if (ww < 0.12)
         {
-            float fl = smoothstep (0.012, 0.0, abs (uv.y - shore)) * (0.6 + 0.4 * noise (vec2 (p.x * 40.0, uTime)));
-            vec3 sand = mix (vec3 (0.12, 0.09, 0.06), vec3 (0.45, 0.36, 0.26), L) * (0.7 + 0.3 * fbm (p * 30.0));
-            col = uv.y < shore ? sand * 0.6 + refl * 0.08 : col;
-            col += vec3 (0.9) * fl * 0.5;
+            float t = ww / 0.12;
+            vec2 wc = vec2 ((0.3 + 0.4 * hash12 (vec2 (floor (uTime / 70.0), 4.0))) * asp, hor - 0.012);
+            float arc = smoothstep (0.0, 0.3, t) * smoothstep (1.0, 0.6, t);
+            vec2 q = (p - wc) / vec2 (0.05, 0.008);
+            float back = step (length (q * vec2 (1.0, 1.0)) , 1.0) * step (0.0, q.y + 0.6 - arc * 0.6) * step (q.y, arc);
+            col = mix (col, vec3 (0.03, 0.04, 0.05) + low * 0.08, back * 0.9);
+        }
+        // the shore: waves rush up the sand and draw back, a lacy foam edge, wet sand shining as it retreats
+        float shore = 0.11 + 0.012 * fbm3 (vec2 (p.x * 3.0, 0.0) + S);
+        float cyc = fract (uTime / 7.5 + 0.08 * sin (p.x * 2.0));
+        float runup = (0.045 + 0.02 * swell) * smoothstep (0.0, 0.3, cyc) * (1.0 - smoothstep (0.3, 1.0, cyc));
+        float edge = shore - runup;
+        if (uv.y < shore + 0.012)
+        {
+            vec3 sand = mix (vec3 (0.12, 0.09, 0.06), vec3 (0.55, 0.45, 0.32), smoothstep (-0.05, 0.3, el)) * (0.75 + 0.25 * fbm (p * vec2 (40.0, 90.0)));
+            float wet = smoothstep (shore - 0.075, edge, uv.y);
+            vec3 wetSand = sand * 0.55 + refl * 0.25 + sc * path * 0.5 * day;
+            vec3 swash = mix (col, vec3 (0.75, 0.82, 0.86) * mix (0.25, 1.0, day), 0.25);
+            vec3 g = uv.y > edge ? swash : mix (sand, wetSand, wet);
+            float lace = smoothstep (0.012, 0.0, abs (uv.y - edge)) * (0.5 + 0.5 * smoothstep (0.4, 0.7, fbm3 (vec2 (p.x * 30.0, uv.y * 60.0 - uTime))));
+            lace += smoothstep (0.4, 0.75, fbm3 (vec2 (p.x * 22.0, uv.y * 40.0 + uTime * 0.3))) * step (edge, uv.y) * smoothstep (shore + 0.012, edge, uv.y) * 0.6;
+            g = mix (g, vec3 (0.9, 0.93, 0.95) * mix (0.25, 1.0, day), clamp (lace, 0.0, 1.0) * 0.8);
+            col = mix (col, g, smoothstep (shore + 0.012, shore + 0.004, uv.y) + step (uv.y, shore));
         }
     }
-    // haze on the horizon
-    col = mix (col, skyGrad (0.0, L), exp (-abs (uv.y - hor) * 40.0) * 0.4);
+    // the cliff with waves bursting at its foot
+    float side = hash12 (S + 2.0) < 0.5 ? -1.0 : 1.0;
+    float cx = cliffEdge (uv.y, side, asp);
+    float inCliff = smoothstep (1.0 / uRes.y, -1.0 / uRes.y, (p.x - cx) * side * -1.0) * step (0.11, uv.y);
+    if (inCliff > 0.0 && uv.y < 0.82 + 0.05 * fbm3 (vec2 (p.x * 6.0, 1.0)))
+    {
+        float sunSide = sp.x > p.x ? 1.0 : -1.0;
+        float e2 = 0.02;
+        vec2 q = vec2 (p.x * 6.0, uv.y * 9.0) + S;
+        float h0 = ridged (q), hx = ridged (q + vec2 (e2, 0.0)), hy = ridged (q + vec2 (0.0, e2));
+        vec3 n = normalize (vec3 ((h0 - hx) * 1.5, (h0 - hy) * 0.9, e2));
+        float shade = clamp (0.12 + max (dot (n, normalize (vec3 (sunSide * 0.7, 0.5, 0.45))), 0.0), 0.0, 1.2);
+        vec3 rock = mix (vec3 (0.05, 0.045, 0.045), vec3 (0.3, 0.26, 0.22), fbm (q * 2.0)) * shade * mix (vec3 (0.3, 0.35, 0.5), sc, day);
+        float topY = 0.82 + 0.05 * fbm3 (vec2 (p.x * 6.0, 1.0));
+        rock = mix (rock, vec3 (0.08, 0.14, 0.05) * mix (0.3, 1.0, day), smoothstep (topY - 0.03, topY - 0.01, uv.y));
+        rock *= 0.55 + 0.45 * smoothstep (0.0, 0.035, abs (p.x - cx));   // shadowed rim along the face
+        rock = mix (rock, low * 0.6, 0.15 + 0.15 * haze);
+        col = mix (col, rock, inCliff);
+    }
+    {   // spray where the swell meets the rock
+        float burst = pow (max (0.0, sin (uTime * 0.85 + S.x)), 6.0) * (0.6 + 0.6 * swell);
+        vec2 bc = vec2 (cliffEdge (hor - 0.02, side, asp) - side * 0.01, hor - 0.025);
+        vec2 q = (p - bc) / vec2 (0.05, 0.09);
+        float spray = smoothstep (1.0, 0.0, length (q - vec2 (0.0, 0.4 * burst))) * smoothstep (0.35, 0.7, fbm3 (p * 30.0 - vec2 (0.0, uTime * 0.6))) * burst;
+        col = mix (col, vec3 (0.9, 0.93, 0.95) * mix (0.3, 1.0, day), clamp (spray, 0.0, 0.85));
+    }
+    // sea mist on the horizon, weather rain
+    float mist = exp (-abs (uv.y - hor) * 28.0) * (0.35 + 0.35 * haze) + haze * 0.15;
+    mist *= 0.7 + 0.3 * fbm3 (vec2 (p.x * 2.0 - uTime * 0.01, uv.y * 6.0));
+    col = mix (col, low * 0.95 + 0.02, clamp (mist, 0.0, 0.75));
+    col += rainOverlay (p, uv, rain, mix (vec3 (0.35, 0.4, 0.5), vec3 (0.8, 0.85, 0.95), day));
     return col;
 }
 )GLSL";
