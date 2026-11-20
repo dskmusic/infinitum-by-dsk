@@ -137,6 +137,9 @@ private:
     std::unique_ptr<juce::OpenGLContext> gl;
     GpuScenes scenes;
     std::atomic<bool> glOk { false };
+    std::atomic<int> framesDrawn { 0 };
+    double fpsT0 = 0; float fps = 0;
+    void paintFps (juce::Graphics&, juce::Rectangle<float>);
     juce::SpinLock ulock;
     SceneUniforms uni;
     juce::Image external;
@@ -148,4 +151,5 @@ private:
 juce::String chordName (int rootPc, int scale, int degree, float harmony); // "Am7", "Fmaj9"...
 // Visual intensity of the stars that appear with the notes (Settings, 0..1)
 inline float& noteStarIntensity() { static float v = 0.3f; return v; }
+inline bool& showFps() { static bool v = false; return v; }
 }

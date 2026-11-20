@@ -303,20 +303,38 @@ vec3 scene (vec2 uv)
         vec2 jc = vec2 ((0.14 + 0.24 * fj) * asp + sin (uTime * 0.12 + fj * 2.0) * 0.05, 0.3 + 0.55 * life + 0.02 * sin (uTime * 0.8 + fj));
         float vis = smoothstep (0.0, 0.1, life) * smoothstep (1.0, 0.9, life);   // fades in below, out near the surface
         float beat = 0.5 + 0.5 * sin (uTime * (1.1 + 0.25 * fj) + fj * 1.7);
-        float R = (0.06 + 0.03 * hash12 (vec2 (fj, 2.0))) * (0.85 + 0.3 * uPres[0]);
+        float R = (0.055 + 0.03 * hash12 (vec2 (fj, 2.0))) * (0.85 + 0.3 * uPres[0]);
         vec3 jcol = fj == 0.0 ? vec3 (1.0, 0.45, 0.85) : (fj == 1.0 ? vec3 (0.45, 1.0, 0.9) : (fj == 2.0 ? vec3 (0.72, 0.62, 1.0) : vec3 (1.0, 0.6, 0.75)));
-        vec2 q = (p - jc) / vec2 (R * (1.0 - 0.12 * beat), R * (0.75 + 0.12 * beat));
-        float dbell = length (q);
-        float bell = smoothstep (1.0, 0.8, dbell) * step (-0.05, q.y);
-        float rim = smoothstep (0.15, 0.0, abs (dbell - 0.95)) * step (-0.05, q.y);
-        float inner = smoothstep (0.6, 0.0, length (q - vec2 (0.0, 0.35)));
-        float glowJ = exp (-dbell * 1.5) * 0.25;
-        // tentacles below
-        float tt = clamp (-q.y / 4.0, 0.0, 1.0);
-        float xx = q.x + sin (uTime * 1.4 - tt * 5.0 + fj) * 0.35 * tt;
-        float ten = step (q.y, 0.0) * smoothstep (1.0, 0.0, tt) * smoothstep (0.95, 0.75, abs (xx)) * pow (abs (sin (xx * 9.0)), 6.0);
-        float a = bell * 0.35 + rim * 0.6 + inner * 0.35 * (0.5 + beat) + ten * 0.5 + glowJ;
-        col = mix (col, jcol * (0.8 + 0.6 * uGlow[0]), clamp (a, 0.0, 1.0) * 0.8 * vis);
+        // bell in its own frame (q.y up), pulsing: it narrows and lengthens on each beat
+        vec2 q = (p - jc) / R;
+        q.x /= 1.0 - 0.14 * beat;
+        q.y /= 0.85 + 0.12 * beat;
+        float rimY = -0.28 * q.x * q.x + 0.025 * sin (q.x * 26.0 + uTime * 2.0) * q.x * q.x;   // scalloped margin
+        float dome = length (vec2 (q.x, max (q.y, 0.0) * 1.1));
+        float inBell = smoothstep (1.0, 0.94, dome) * smoothstep (rimY - 0.03, rimY + 0.05, q.y);
+        float edge = inBell * pow (dome, 5.0);                                          // gel is brighter where you look through more of it
+        float canals = inBell * pow (abs (cos (atan (q.x, q.y + 0.4) * 8.0)), 24.0) * 0.35 * smoothstep (0.2, 0.9, dome);
+        float gonads = smoothstep (0.3, 0.05, length (vec2 (abs (q.x) - 0.26, q.y - 0.3))) * inBell * 1.3;
+        float marginGlow = smoothstep (0.06, 0.0, abs (q.y - rimY)) * step (abs (q.x), 1.0) * (0.6 + 0.4 * beat);
+        // oral arms: three ruffled ribbons from the centre
+        float tt = clamp (-q.y / 3.2, 0.0, 1.0);
+        float arms = 0.0;
+        for (int k = -1; k <= 1; k++)
+        {
+            float ax = q.x - float (k) * 0.16 - sin (uTime * 0.9 - tt * 7.0 + fj + float (k)) * 0.22 * tt;
+            float w = 0.11 * (1.0 - 0.7 * tt) * (0.75 + 0.25 * sin (tt * 40.0 + float (k) * 2.0));
+            arms += smoothstep (w, w * 0.2, abs (ax));
+        }
+        arms *= step (q.y, 0.0) * smoothstep (1.0, 0.25, tt);
+        // long fine tentacles hanging from the margin
+        float t2 = clamp ((rimY - q.y) / 5.5, 0.0, 1.0);
+        float tx = q.x + sin (uTime * 1.2 - t2 * 6.0 + fj * 2.0) * 0.35 * t2;
+        float ten = step (q.y, rimY) * step (abs (tx), 0.95) * smoothstep (1.0, 0.0, t2) * pow (abs (sin (tx * 22.0)), 40.0);
+        float halo = exp (-length (q) * 2.2) * 0.18;
+        // translucent: the bell tints what is behind it a little, the light is added on top
+        col = mix (col, col * (0.75 + 0.5 * jcol), inBell * 0.45 * vis);
+        vec3 light = jcol * (edge * 0.9 + inBell * 0.07 + canals + gonads * 0.45 + marginGlow * 0.5 + arms * 0.4 + ten * 0.35 + halo);
+        col += light * vis * (0.7 + 0.5 * uGlow[0]) * (0.75 + 0.35 * beat);
     }
     // seabed: dunes with caustic light, kelp forest swaying (Pad = height)
     float bed = 0.11 + 0.05 * fbm3 (vec2 (p.x * 2.0 + S.x, 0.0)) + 0.02 * sin (p.x * 3.0);
@@ -409,7 +427,7 @@ vec3 scene (vec2 uv)
         vec2 dir = vec2 (sin (ang), cos (ang));
         vec2 rp = p - vec2 (bx, 0.1);
         float along = dot (rp, dir), across = abs (rp.x * dir.y - rp.y * dir.x);
-        col += vec3 (0.8, 0.92, 1.0) * exp (-across * (60.0 / (0.3 + along))) * step (0.0, along) * 0.12 * (0.3 + uPres[3]);
+        col += vec3 (0.8, 0.92, 1.0) * exp (-across * (60.0 / (0.3 + max (along, 0.0))))   /* behind the lamp 'along' < 0 gave inf * 0 = NaN: black wedges */ * step (0.0, along) * 0.12 * (0.3 + uPres[3]);
     }
     // three layers of skyline, far to near, with atmospheric fog
     vec3 glowSum = vec3 (0.0);

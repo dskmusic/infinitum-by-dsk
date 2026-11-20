@@ -576,6 +576,8 @@ SettingsPage::SettingsPage (Context& c, std::function<void (float)> setScale, st
     gpuToggle.setTooltip (gpuStatus().load() < 0 ? L ("Tu tarjeta gráfica no es compatible: se usan los paisajes dibujados", "Your graphics card is not compatible: the painted landscapes are used")
                                                  : L ("Paisajes realistas por shaders en la tarjeta gráfica. Desactívalo si tu equipo va justo.", "Realistic shader landscapes on the graphics card. Turn it off on a slow computer."));
     gpuToggle.onClick = [this] { ctx.settings.setGpu (gpuToggle.getToggleState()); if (ctx.languageChanged) ctx.languageChanged(); /* rebuilds the pages */ };
+    fpsToggle.setToggleState (ctx.settings.fps(), juce::dontSendNotification);
+    fpsToggle.onClick = [this] { showFps() = fpsToggle.getToggleState(); ctx.settings.setFps (showFps()); };
     preview.setToggleState (ctx.settings.previewOnSelect(), juce::dontSendNotification);
     preview.onClick = [this] { ctx.settings.setPreviewOnSelect (preview.getToggleState()); };
     historyLimit.setRange (10, 2000, 10);
@@ -592,7 +594,7 @@ SettingsPage::SettingsPage (Context& c, std::function<void (float)> setScale, st
     openFolder.onClick = [] { Library::defaultRoot().startAsProcess(); };
     clearLearn.onClick = [this] { ctx.proc.clearMidiLearn(); if (ctx.toast) ctx.toast (L ("Asignaciones MIDI Learn borradas", "MIDI Learn assignments cleared")); };
     aboutBtn.onClick = std::move (showAbout);
-    for (auto* comp : std::initializer_list<juce::Component*> { &scaleBox, &animBox, &langBox, &gpuToggle, &aiMsgs, &preview, &historyLimit, &starAmount, &openFolder, &clearLearn, &aboutBtn })
+    for (auto* comp : std::initializer_list<juce::Component*> { &scaleBox, &animBox, &langBox, &gpuToggle, &fpsToggle, &aiMsgs, &preview, &historyLimit, &starAmount, &openFolder, &clearLearn, &aboutBtn })
         addAndMakeVisible (comp);
 }
 
@@ -602,10 +604,10 @@ void SettingsPage::paint (juce::Graphics& g)
     drawPanel (g, r);
     g.setColour (col::text);
     g.setFont (font (13.0f, true));
-    const juce::String labels[] { L ("Tamaño de la interfaz", "Interface size"), L ("Animaciones", "Animations"), "Idioma / Language", "", "", "", L ("Límite del historial del generador", "Generator history limit"), L ("Estrellas de las notas", "Note stars") };
+    const juce::String labels[] { L ("Tamaño de la interfaz", "Interface size"), L ("Animaciones", "Animations"), "Idioma / Language", "", "", "", "", L ("Límite del historial del generador", "Generator history limit"), L ("Estrellas de las notas", "Note stars") };
     auto rows = getLocalBounds().reduced (28, 28).removeFromLeft (640);
     for (auto& l : labels) { g.drawText (l, rows.removeFromTop (40), juce::Justification::centredLeft); }
-    rows.removeFromTop (110);
+    rows.removeFromTop (150);
     g.setColour (col::textDim);
     g.setFont (font (12.0f));
     g.drawFittedText (L ("Consejo: clic derecho en cualquier mando para asignarlo a tu controlador (MIDI Learn). En el Standalone, barra espaciadora: Play / Stop.",
@@ -621,6 +623,7 @@ void SettingsPage::resized()
     animBox.setBounds (row().withWidth (220));
     langBox.setBounds (row().withWidth (260));
     gpuToggle.setBounds (rows.removeFromTop (40).reduced (0, 8));
+    fpsToggle.setBounds (rows.removeFromTop (40).reduced (0, 8));
     aiMsgs.setBounds (rows.removeFromTop (40).reduced (0, 8));
     preview.setBounds (rows.removeFromTop (40).reduced (0, 8));
     historyLimit.setBounds (row());

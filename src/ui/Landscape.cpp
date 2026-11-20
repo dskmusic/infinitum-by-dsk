@@ -149,6 +149,7 @@ void Landscape::renderOpenGL()
     if (! glOk.load()) return;
     SceneUniforms u;
     { const juce::SpinLock::ScopedLockType sl (ulock); u = uni; }
+    ++framesDrawn;
     const double sc = gl->getRenderingScale();
     scenes.render (u, juce::roundToInt (sc * getWidth()), juce::roundToInt (sc * getHeight()));
 }
@@ -265,6 +266,11 @@ void Landscape::tick (const Frame& fr)
     if (f.scene != lastScene || f.seed != lastSeedSeen) { if (lastScene >= 0) sceneChangedAt = f.time; lastScene = f.scene; lastSeedSeen = f.seed; }
     { const juce::SpinLock::ScopedLockType sl (ulock); uni = uniforms(); }
     if (gl != nullptr) gl->triggerRepaint();
+    {
+        const double now = juce::Time::getMillisecondCounterHiRes() * 0.001;
+        if (fpsT0 <= 0) fpsT0 = now;
+        else if (now - fpsT0 >= 1.0) { fps = (float) (framesDrawn.exchange (0) / (now - fpsT0)); fpsT0 = now; }
+    }
     for (auto& s : sparks) { s.x += s.vx * (float) dt; s.y += s.vy * (float) dt; s.life -= (float) dt / (s.kind == 2 ? 14.0f : 4.0f); }
     sparks.erase (std::remove_if (sparks.begin(), sparks.end(), [&] (const Spark& s) { return s.life <= 0 || s.x < -40 || s.x > b.getWidth() + 40; }), sparks.end());
     if (sparks.size() > 80) sparks.erase (sparks.begin(), sparks.begin() + (long) (sparks.size() - 80));
@@ -296,6 +302,7 @@ void Landscape::paint (juce::Graphics& g)
             g.fillPath (corners);
         }
         if (showOverlay) paintOverlay (g, b);
+        paintFps (g, b);
         return;
     }
     g.saveState();
@@ -338,6 +345,17 @@ void Landscape::paint (juce::Graphics& g)
     if (dim > 0.01f) { g.setColour (juce::Colours::black.withAlpha (dim)); g.fillRect (b); }
     g.restoreState();
     if (showOverlay) paintOverlay (g, b);
+    ++framesDrawn;
+    paintFps (g, b);
+}
+
+void Landscape::paintFps (juce::Graphics& g, juce::Rectangle<float> b)
+{
+    if (! showFps() || external.isValid()) return;   // never in exported videos or screenshots
+    const auto r = juce::Rectangle<float> (b.getX() + 14.0f, b.getBottom() - (fullBleed ? 26.0f : 50.0f), 70.0f, 16.0f);
+    g.setColour (juce::Colours::white.withAlpha (0.45f));
+    g.setFont (juce::FontOptions (11.0f));
+    g.drawText (juce::String (juce::roundToInt (fps)) + " FPS" + (glOk.load() ? " GPU" : ""), r, juce::Justification::centredLeft);
 }
 
 // ---- Valley: sky, sun/moon, clouds, shooting stars, aurora, mountain ranges, forest, lake, birds, mist, dust

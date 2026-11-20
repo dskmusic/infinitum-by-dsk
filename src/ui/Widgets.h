@@ -30,6 +30,8 @@ public:
     }
     bool gpu() const { return props->getBoolValue ("gpu", true); }
     void setGpu (bool b) { props->setValue ("gpu", b); props->saveIfNeeded(); }
+    bool fps() const { return props->getBoolValue ("fps", false); }
+    void setFps (bool b) { props->setValue ("fps", b); props->saveIfNeeded(); }
     float noteStars() const { return (float) props->getDoubleValue ("noteStars", 0.3); }
     void setNoteStars (float v) { props->setValue ("noteStars", v); props->saveIfNeeded(); }
     bool previewOnSelect() const { return props->getBoolValue ("preview", true); }
