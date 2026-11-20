@@ -20,10 +20,12 @@ public:
     bool init (juce::OpenGLContext&);   // compiles the shaders; false = not supported (use the CPU landscapes)
     void release();
     void render (const SceneUniforms&, int width, int height);
+    bool has (int scene) const { return scene >= 0 && scene < numScenes && ok[scene].load(); }   // false: that landscape uses the CPU painter
     juce::String error;
 private:
     juce::OpenGLContext* ctx = nullptr;
     std::unique_ptr<juce::OpenGLShaderProgram> prog[numScenes];
+    std::atomic<bool> ok[numScenes] {};
     juce::uint32 vbo = 0;
 };
 

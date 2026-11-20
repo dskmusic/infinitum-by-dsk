@@ -331,11 +331,20 @@ void kelp (inout vec3 col, vec2 p, vec2 uv, float layer, float asp, float L)
         col = mix (col, under, smoothstep (mound + 0.002, mound - 0.003, uv.y));
     }
 }
+)GLSL" R"GLSL(
 // moon jellyfish (Aurelia): a living, slightly asymmetric bell that contracts and glides up, four horseshoe gonads,
 // radial canals, a fringe of fine tentacles that ripples with each pulse, frilly oral arms; far ones small and hazy
-void jelly (inout vec3 col, vec2 p, float fj, float asp)
+void jelly (inout vec3 col, vec2 p, float fj, float asp, float ray)
 {
-    float z = 1.0 - fj / 4.0;                                    // 0 near ... 1 far (drawn far to near)
+    bool closeUp = fj > 4.5;                                      // the rare one drifting right past the camera
+    float z = closeUp ? -0.8 : 1.0 - fj / 4.0;                    // 0 near ... 1 far (drawn far to near)
+    float pass = 1.0;
+    if (closeUp)
+    {
+        float w = fract (uTime / 75.0 + hash12 (S + 11.0));
+        pass = smoothstep (0.0, 0.06, w) * smoothstep (0.32, 0.24, w);
+        if (pass <= 0.0) return;
+    }
     float rate = 0.32 + 0.1 * hash12 (S + vec2 (fj, 5.0));
     float ph = uTime * rate + hash12 (S + vec2 (fj, 6.0)) * 7.0;
     float f = fract (ph);
@@ -345,7 +354,7 @@ void jelly (inout vec3 col, vec2 p, float fj, float asp)
     float bob = 0.018 * (smoothstep (0.0, 0.45, f) - f);         // glides up on each pulse, sinks a little in between
     vec2 jc = vec2 ((0.1 + 0.8 * fract (hash12 (S + vec2 (fj, 3.0)) + fj * 0.23)) * asp + sin (uTime * 0.07 + fj * 2.0) * 0.06,
                     0.32 + 0.56 * life + bob);
-    float vis = smoothstep (0.0, 0.1, life) * smoothstep (1.0, 0.88, life);
+    float vis = smoothstep (0.0, 0.1, life) * smoothstep (1.0, 0.88, life) * pass;
     if (vis <= 0.0) return;
     float R = (0.075 + 0.03 * hash12 (vec2 (fj, 2.0))) * (1.0 - 0.5 * z) * (0.85 + 0.3 * uPres[0]);
     vec2 q = (p - jc) / R;
@@ -358,7 +367,7 @@ void jelly (inout vec3 col, vec2 p, float fj, float asp)
     float wob = 1.0 + 0.045 * sin (3.0 * th + uTime * 0.9 + fj) + 0.03 * sin (5.0 * th - uTime * 1.3 + fj * 2.0) + 0.02 * noise (vec2 (th * 4.0, uTime * 0.5 + fj));
     float rimY = -0.16 * q.x * q.x - 0.06 * c * q.x * q.x + 0.035 * (noise (vec2 (q.x * 5.0 + fj * 3.0, uTime * 0.8)) - 0.5);
     float dome = length (vec2 (q.x, max (q.y, 0.0) * 0.95)) / wob;
-    float soft = 0.04 + 0.12 * z;                                // far ones are out of focus
+    float soft = closeUp ? 0.4 : 0.04 + 0.12 * z;               // depth of field: far ones and the close one are soft
     float body = smoothstep (1.0, 1.0 - soft - 0.03, dome) * smoothstep (rimY - 0.04 - soft, rimY + 0.04, q.y);
     float edge = body * pow (clamp (dome, 0.0, 1.0), 6.0);       // light gathers where the gel is seen edge-on
     float milk = body * (0.025 + 0.04 * smoothstep (0.9, 0.2, dome));
@@ -378,9 +387,12 @@ void jelly (inout vec3 col, vec2 p, float fj, float asp)
     // the bell margin glows a little and flutters
     float margin = smoothstep (0.07, 0.0, abs (q.y - rimY)) * smoothstep (1.05, 0.85, abs (q.x)) * (0.6 + 0.4 * c);
     // fine marginal tentacles: dense short fringe + a few long ones; a wave runs down them after each pulse
-    float t2 = clamp ((rimY - q.y) / 5.0, 0.0, 1.0);
-    float wave = sin (uTime * 1.3 - t2 * 7.0 + fj * 2.0) * (0.25 + 0.2 * c) * t2 + 0.15 * sin (uTime * 0.5 + fj) * t2 * t2;
-    float tx = q.x * (1.0 - 0.15 * t2) + wave;
+    float t2 = clamp ((rimY - q.y) / (5.0 * (1.0 + 0.2 * c)), 0.0, 1.0);
+    float drift = cos (uTime * 0.07 + fj * 2.0);                  // the bell's sideways motion: the tentacles trail behind it
+    float wave = sin (uTime * 1.3 - t2 * 7.0 + fj * 2.0) * (0.25 + 0.1 * c) * t2 * (1.0 - 0.45 * c)
+               + 0.15 * sin (uTime * 0.5 + fj) * t2 * t2 - drift * 0.55 * t2 * t2
+               + 0.07 * sin (uTime * 0.9 + floor (q.x * 4.2) * 2.3) * t2;          // neighbours drift apart and cross
+    float tx = q.x * (1.0 - 0.15 * t2 - 0.1 * c * t2) + wave;
     float u = tx * 4.2 + fj * 0.37;                               // ~8 tentacles per bell width, drawn as anti-aliased lines
     float dl = abs (fract (u) - 0.5) / 4.2 * R * uRes.y;          // distance to the nearest tentacle, in pixels
     float fringe = smoothstep (0.6 + 0.9 * (1.0 - t2) + 2.5 * soft, 0.0, dl) * (0.55 + 0.45 * (1.0 - t2));
@@ -400,11 +412,40 @@ void jelly (inout vec3 col, vec2 p, float fj, float asp)
     }
     arms *= step (q.y, 0.05) * smoothstep (1.0, 0.3, t3);
     float halo = exp (-length (q * vec2 (1.0, 0.8)) * 2.4) * 0.12;
+    float pulse = exp (-pow ((t2 - f * 0.9) * 9.0, 2.0)) * (1.0 - f) * (0.4 + 1.3 * uGlow[0]);
+    float bio = (ten + margin * 0.6) * pulse + margin * (0.25 + 0.75 * c) * (0.3 + 0.9 * uGlow[0]) * 0.4;
+    vec3 n = normalize (vec3 (q.x * 0.9, max (q.y, 0.0) * 0.9, sqrt (max (0.0, 1.0 - dome * dome)) + 0.05));
+    float spec = pow (max (dot (n, normalize (vec3 (-0.35, 0.75, 0.55))), 0.0), 22.0) * body * (0.25 + 1.6 * ray);
     vec3 tint = mix (vec3 (0.75, 0.92, 1.0), fj == 1.0 ? vec3 (1.0, 0.7, 0.9) : (fj == 3.0 ? vec3 (0.8, 0.75, 1.0) : vec3 (0.7, 1.0, 0.95)), 0.45);
     vec3 gonC = mix (vec3 (0.95, 0.55, 0.85), vec3 (0.75, 0.6, 1.0), hash12 (vec2 (fj, 8.0)));
     float k = vis * (1.0 - 0.55 * z) * (0.75 + 0.45 * uGlow[0]);
-    col *= 1.0 - 0.18 * body * vis;                              // the gel dims what is behind it a little
-    col += (tint * (edge * 0.7 + milk + canals + margin * 0.4 + ten * 0.45 + arms * 0.26 + halo) + gonC * gon * 0.35) * k * (0.85 + 0.25 * c);
+    col *= 1.0 - 0.18 * body * vis;                              // the gel dims what is behind it a little...
+    col += col * body * 0.3 * smoothstep (0.9, 0.2, dome) * vis;  // ...and focuses it like a lens near the centre
+    col += (tint * (edge * 0.7 + milk + canals + margin * 0.4 + ten * 0.45 + arms * 0.26 + halo) * (1.0 + 0.8 * ray)
+           + gonC * gon * 0.35 + vec3 (0.3, 0.9, 1.0) * bio + vec3 (0.9, 1.0, 1.0) * spec) * k * (0.85 + 0.25 * c);
+}
+)GLSL" R"GLSL(
+// one layer of drifting particles: irregular flakes that sink slowly and wander, brighter in the light rays
+float snowLayer (vec2 p, float scale, float sink, float size, float seed, float density)
+{
+    vec2 q = p * scale + vec2 (sin (uTime * 0.05 + seed) * 0.6, uTime * sink * scale) + seed * 17.0;
+    vec2 id = floor (q), f = fract (q) - 0.5;
+    float h = hash12 (id + seed);
+    if (h > density) return 0.0;
+    float hb = hash12 (id * 1.7 + seed);
+    vec2 o = (hash22 (id + seed) - 0.5) * 0.5 + 0.14 * vec2 (sin (uTime * (0.3 + hb) + h * 30.0), cos (uTime * (0.25 + h) + hb * 20.0));
+    vec2 d = (f - o) * vec2 (1.0, 1.0 + 0.6 * hb);
+    float r = size * (0.5 + hb);
+    return smoothstep (r, r * 0.25, length (d)) * (0.5 + 0.5 * hb);
+}
+float bokeh (vec2 p, float scale, float size, float seed)
+{
+    vec2 q = p * scale + vec2 (uTime * 0.008, -uTime * 0.02) * scale + seed * 9.0;
+    vec2 id = floor (q), f = fract (q) - 0.5;
+    if (hash12 (id + seed) > 0.18) return 0.0;
+    vec2 o = (hash22 (id + seed * 3.0) - 0.5) * 0.4 + 0.05 * vec2 (sin (uTime * 0.2 + id.x), cos (uTime * 0.17 + id.y));
+    float d = length (f - o), r = size * (0.7 + 0.6 * hash12 (id * 2.3 + seed));
+    return smoothstep (r, r * 0.9, d) * (0.55 + 0.45 * smoothstep (r * 0.55, r * 0.95, d));   // soft disc, brighter rim
 }
 vec3 scene (vec2 uv)
 {
@@ -460,30 +501,25 @@ vec3 scene (vec2 uv)
         }
     }
     kelp (col, p, uv, 0.0, asp, L);
-    jelly (col, p, 0.0, asp);
-    jelly (col, p, 1.0, asp);
+    jelly (col, p, 0.0, asp, rays * pow (uv.y, 1.3));
+    jelly (col, p, 1.0, asp, rays * pow (uv.y, 1.3));
     kelp (col, p, uv, 1.0, asp, L);
-    // marine snow drifting (Texture)
-    for (int i = 0; i < 2; i++)
-    {
-        float fi = float (i);
-        vec2 q = (p + vec2 (uMus * 0.004 * (1.0 + fi), -uTime * 0.006 * (1.0 + fi))) * (40.0 + 30.0 * fi) + S;
-        col += vec3 (0.6, 0.95, 0.9) * stars (q, 0.12, 0.06) * (0.1 + 0.3 * uPres[2]) * (0.6 + 0.4 * uGlow[2]);
-    }
-    jelly (col, p, 2.0, asp);
-    jelly (col, p, 3.0, asp);
-    jelly (col, p, 4.0, asp);
+    // marine snow at three depths (Texture), brighter where the light rays cross it, plankton glinting
+    float lit = 0.35 + 2.2 * rays * pow (uv.y, 1.3);
+    float dens = 0.35 + 0.4 * uPres[2];
+    col += vec3 (0.55, 0.8, 0.85) * snowLayer (p, 70.0, 0.006, 0.06, 1.0, dens) * 0.22 * lit;
+    col += vec3 (0.65, 0.88, 0.9) * snowLayer (p, 38.0, 0.009, 0.09, 2.0, dens * 0.8) * 0.3 * lit;
+    float gl = snowLayer (p, 55.0, 0.004, 0.05, 3.0, 0.08);
+    col += vec3 (0.75, 1.0, 1.0) * gl * pow (0.5 + 0.5 * sin (uTime * 4.0 + p.x * 90.0 + p.y * 40.0), 6.0) * 0.6 * lit * (0.6 + 0.6 * uGlow[2]);
+    float rayHere = rays * pow (uv.y, 1.3);
+    jelly (col, p, 2.0, asp, rayHere);
+    jelly (col, p, 3.0, asp, rayHere);
+    jelly (col, p, 4.0, asp, rayHere);
     kelp (col, p, uv, 2.0, asp, L);
-    // out-of-focus specks right in front of the camera
-    {
-        vec2 bq = (p + vec2 (uTime * 0.004, -uTime * 0.012)) * 5.0;
-        vec2 id = floor (bq), fq = fract (bq) - 0.5;
-        if (hash12 (id + S) > 0.8)
-        {
-            vec2 o = (hash22 (id) - 0.5) * 0.6;
-            col += vec3 (0.55, 0.85, 0.9) * smoothstep (0.13, 0.02, length (fq - o)) * 0.05 * (0.5 + L);
-        }
-    }
+    col += vec3 (0.7, 0.9, 0.92) * snowLayer (p, 18.0, 0.012, 0.11, 4.0, dens * 0.6) * 0.32 * lit;   // nearest flakes
+    jelly (col, p, 5.0, asp, rayHere);
+    // out-of-focus particles right in front of the lens: soft discs with a brighter rim
+    col += vec3 (0.55, 0.85, 0.9) * (bokeh (p, 4.0, 0.16, 1.0) * 0.05 + bokeh (p, 7.0, 0.12, 2.0) * 0.035) * (0.5 + L) * (0.7 + 0.8 * rays);
     col = mix (col, deep, (1.0 - uv.y) * 0.2);
     return col;
 }
@@ -583,7 +619,9 @@ float holoImg (vec2 g, float id)
     else if (kind < 2.5)       // equaliser that follows the music
     {
         float bi = floor (g.x * 12.0), bf = fract (g.x * 12.0);
-        float lvl = 0.15 + 0.45 * noise (vec2 (bi * 1.7, t * 4.0)) + 0.5 * uGlow[int (mod (bi, 8.0))];
+        float ge = 0.0;
+        for (int i = 0; i < 8; i++) if (float (i) == mod (bi, 8.0)) ge = uGlow[i];   // constant indices only (strict drivers)
+        float lvl = 0.15 + 0.45 * noise (vec2 (bi * 1.7, t * 4.0)) + 0.5 * ge;
         float seg = step (0.25, fract (g.y * 14.0));
         v = step (0.15, bf) * step (bf, 0.85) * step (g.y, lvl) * seg * (0.6 + 0.4 * g.y);
     }
@@ -594,6 +632,7 @@ float holoImg (vec2 g, float id)
     }
     return clamp (v, 0.0, 1.0);
 }
+)GLSL" R"GLSL(
 // one layer of the city (0 far ... 4 near): colour + coverage, and the light its signs throw around
 vec4 city (vec2 p, vec2 uv, float l, float ground, out vec3 glowAdd)
 {
@@ -876,12 +915,12 @@ vec3 curtain (vec2 p, float y, float depth, float seed)
     float upper = exp (-max (dy, 0.0) / h);
     float drift = x * 90.0 - t * 0.9 + 4.0 * sin (x * 3.0 + t * 0.4);
     float rays = 0.55 + 0.45 * pow (noise (vec2 (drift * 0.6, t * 0.25 + seed)), 1.4) * (0.7 + 0.3 * noise (vec2 (drift * 0.15, dy * 4.0 - t * 0.3)));
-    float patch = smoothstep (0.35, 0.7, fbm3 (vec2 (x * 0.45 + seed * 2.0 - t * 0.02, seed)));   // the curtain is not everywhere
+    float cover = smoothstep (0.35, 0.7, fbm3 (vec2 (x * 0.45 + seed * 2.0 - t * 0.02, seed)));   // the curtain is not everywhere
     float wave = 0.65 + 0.35 * sin (x * 6.0 - t * 0.7 + seed) * sin (x * 2.1 + t * 0.33);
     vec3 green = vec3 (0.16, 1.0, 0.48), magenta = vec3 (0.85, 0.22, 0.75);
     vec3 c = mix (green, magenta, smoothstep (0.04, h * 1.6, dy));
     c = mix (c, vec3 (1.0, 0.35, 0.65), smoothstep (0.012, 0.0, abs (dy)) * 0.35);       // pink lower fringe
-    return c * lower * upper * rays * wave * patch * (0.6 + 0.7 * fold) * (1.0 - 0.45 * depth) * 1.4;
+    return c * lower * upper * rays * wave * cover * (0.6 + 0.7 * fold) * (1.0 - 0.45 * depth) * 1.4;
 }
 vec3 auroraSky (vec2 p, float y, float power)
 {
@@ -1039,6 +1078,7 @@ vec3 scene (vec2 uv)
 bool GpuScenes::init (juce::OpenGLContext& c)
 {
     ctx = &c;
+    error.clear();
     const char* bodies[numScenes] {};
     bodies[scValley] = valley; bodies[scStarfield] = starfield; bodies[scUnderwater] = underwater;
     bodies[scNeon] = neon; bodies[scOcean] = ocean; bodies[scAurora] = aurora;
@@ -1050,13 +1090,28 @@ bool GpuScenes::init (juce::OpenGLContext& c)
             || ! p->addFragmentShader (juce::OpenGLHelpers::translateFragmentShaderToV3 (fs))
             || ! p->link())
         {
-            error = "scene " + juce::String (i) + ": " + p->getLastError();
+            // this landscape falls back to the CPU painter; the others keep their shaders. The reason is logged.
+            error << "scene " << i << ": " << p->getLastError() << "\n";
             DBG (error);
-            release();
-            return false;
+            ok[i] = false;
+            continue;
         }
         prog[i] = std::move (p);
+        ok[i] = true;
     }
+    {
+        auto log = juce::File::getSpecialLocation (juce::File::userDocumentsDirectory).getChildFile ("DSK Music").getChildFile ("Infinitum").getChildFile ("gpu-log.txt");
+        if (error.isNotEmpty())
+        {
+            log.getParentDirectory().createDirectory();
+            log.replaceWithText ("Infinitum GPU landscapes\nOpenGL: " + juce::String ((const char*) glGetString (GL_VERSION)) + "  " + juce::String ((const char*) glGetString (GL_RENDERER))
+                                 + "\n\n" + error);
+        }
+        else log.deleteFile();
+    }
+    bool any = false;
+    for (auto& o : ok) any |= o.load();
+    if (! any) { release(); return false; }
     const GLfloat quad[] { -1.0f, -1.0f, 1.0f, -1.0f, -1.0f, 1.0f, 1.0f, 1.0f };
     glGenBuffers (1, &vbo);
     glBindBuffer (GL_ARRAY_BUFFER, vbo);
@@ -1068,6 +1123,7 @@ bool GpuScenes::init (juce::OpenGLContext& c)
 void GpuScenes::release()
 {
     for (auto& p : prog) p.reset();
+    for (auto& o : ok) o = false;
     if (vbo != 0 && ctx != nullptr) glDeleteBuffers (1, &vbo);
     vbo = 0;
 }
@@ -1075,6 +1131,7 @@ void GpuScenes::release()
 void GpuScenes::render (const SceneUniforms& u, int w, int h)
 {
     auto* p = prog[juce::jlimit (0, numScenes - 1, u.scene)].get();
+    if (p == nullptr) return;
     if (p == nullptr || vbo == 0) return;
     glViewport (0, 0, w, h);
     glDisable (GL_BLEND);
@@ -1171,6 +1228,7 @@ juce::Image OffscreenGpu::render (const SceneUniforms& u, int w, int h)
         juce::OpenGLFrameBuffer fb;
         if (! fb.initialise (c, w, h)) return;
         fb.makeCurrentRenderingTarget();
+        if (! hst->scenes.has (u.scene)) return;   // that landscape is painted on the CPU
         hst->scenes.render (u, w, h);
         const juce::Image::BitmapData bd (img, juce::Image::BitmapData::writeOnly);
         std::vector<juce::PixelARGB> px ((size_t) (w * h));

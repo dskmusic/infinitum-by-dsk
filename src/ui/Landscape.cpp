@@ -331,7 +331,7 @@ void Landscape::paint (juce::Graphics& g)
     if (key != cacheKey) rebuildCache();
     juce::Path clip;
     clip.addRoundedRectangle (b, fullBleed ? 0.0f : 10.0f);
-    if (glOk.load() || external.isValid())
+    if ((glOk.load() && scenes.has (f.scene)) || external.isValid())
     {
         // the scene comes from the GPU: only the note stars, the rounded corners and the texts are painted here
         if (external.isValid()) { g.saveState(); g.reduceClipRegion (clip); g.drawImage (external, b); g.restoreState(); }
