@@ -328,22 +328,74 @@ vec3 planetPal (float k, float t)
     if (k < 0.75) return mix (vec3 (0.10, 0.05, 0.22), vec3 (0.6, 0.45, 0.85), t);
     return mix (vec3 (0.02, 0.12, 0.10), vec3 (0.35, 0.75, 0.62), t);
 }
+vec3 atmoColour (float k)   // the colour of the scattered light at the limb
+{
+    if (k < 0.25) return vec3 (0.35, 0.6, 1.0);
+    if (k < 0.5)  return vec3 (1.0, 0.6, 0.35);
+    if (k < 0.75) return vec3 (0.7, 0.55, 1.0);
+    return vec3 (0.4, 1.0, 0.8);
+}
+// a moon: a lit sphere with craters, its phase set by the light direction
+vec3 moonAt (vec2 p, vec2 mc, float mr, vec3 ldir, vec3 col, float seed)
+{
+    vec2 md = (p - mc) / mr;
+    float m2 = dot (md, md);
+    if (m2 >= 1.0) return col;
+    vec3 mn = vec3 (md, sqrt (1.0 - m2));
+    float mdif = smoothstep (-0.05, 0.35, dot (mn, ldir));
+    float crat = fbm (md * 3.0 + S + seed);
+    float pits = smoothstep (0.55, 0.6, fbm3 (md * 6.0 + seed * 3.0)) * 0.3;
+    vec3 c = vec3 (0.72, 0.7, 0.76) * (0.55 + 0.45 * crat - pits) * (0.015 + mdif);
+    return mix (col, c, smoothstep (1.0, 0.96, m2));
+}
+)GLSL" R"GLSL(
 vec3 scene (vec2 uv)
 {
     float asp = uRes.x / uRes.y;
     vec2 p = vec2 (uv.x * asp, uv.y);
-    vec3 col = mix (vec3 (0.004, 0.006, 0.018), vec3 (0.015, 0.02, 0.05), uv.y);
-    // faint nebular gas (Shimmer) behind everything
+    vec3 col = mix (vec3 (0.003, 0.005, 0.015), vec3 (0.012, 0.016, 0.04), uv.y);
+    // nebula: soft gas with filaments and dark dust lanes (Shimmer)
     float n1 = fbm (p * 1.4 + S + vec2 (uMus * 0.002, 0.0)), n2 = fbm (p * 2.7 - S.yx);
-    col += vec3 (0.16, 0.08, 0.28) * pow (n1, 3.0) * 1.4 + vec3 (0.03, 0.14, 0.22) * pow (n2, 4.0) * (1.0 + 2.0 * uPres[3]);
+    float fil = pow (ridged (p * 1.8 + S * 1.3 + n1), 3.0);
+    float dust = smoothstep (0.45, 0.7, fbm3 (p * 3.0 + S * 2.0));
+    vec3 gas = vec3 (0.16, 0.08, 0.28) * pow (n1, 3.0) * 1.4 + vec3 (0.03, 0.14, 0.22) * pow (n2, 4.0) * (1.0 + 2.0 * uPres[3]) + vec3 (0.25, 0.12, 0.3) * fil * 0.12 * (0.6 + uPres[3]);
+    col += gas * (1.0 - 0.7 * dust);
     // three depths of stars, drifting with Evolution
     for (int i = 0; i < 3; i++)
     {
         float fi = float (i);
         vec2 q = (p + vec2 (uMus * (0.0015 + 0.003 * fi) * (0.5 + uEvo), 0.0)) * (45.0 + 40.0 * fi) + S * (fi + 1.0);
-        col += vec3 (0.85, 0.9, 1.0) * stars (q, 0.10, 0.07) * (0.35 + 0.3 * fi);
+        col += vec3 (0.85, 0.9, 1.0) * stars (q, 0.10, 0.07) * (0.35 + 0.3 * fi) * (1.0 - 0.5 * dust);
     }
-    // planet (Drone): lit sphere, cloud bands, atmosphere, rings
+    // a few bright stars with diffraction spikes, like a telescope photo
+    for (int i = 0; i < 6; i++)
+    {
+        float fi = float (i);
+        vec2 sp = vec2 (hash12 (S + vec2 (fi, 1.0)) * asp, 0.15 + 0.8 * hash12 (S + vec2 (fi, 2.0)));
+        vec2 d = (p - sp) * uRes.y;
+        float tw = 0.8 + 0.2 * sin (uTime * (1.0 + fi * 0.3) + fi);
+        vec3 tint = mix (vec3 (0.75, 0.85, 1.0), vec3 (1.0, 0.85, 0.65), hash12 (vec2 (fi, 7.0)));
+        float core = exp (-length (d) * 0.45);
+        float spikes = (exp (-abs (d.x) * 0.9) * exp (-abs (d.y) * 0.035) + exp (-abs (d.y) * 0.9) * exp (-abs (d.x) * 0.035)) * 0.5;
+        col += tint * (core * 1.2 + spikes * 0.45 + exp (-length (d) * 0.08) * 0.05) * tw * (0.5 + 0.5 * hash12 (vec2 (fi, 3.0)));
+    }
+    // a meteor now and then, fading as it burns out
+    {
+        float w = fract (uTime / 23.0 + hash12 (S + 8.0));
+        float id = floor (uTime / 23.0 + hash12 (S + 8.0));
+        if (w < 0.06)
+        {
+            float t = w / 0.06;
+            vec2 m0 = vec2 (hash12 (vec2 (id, 1.0)) * asp, 0.6 + 0.35 * hash12 (vec2 (id, 2.0)));
+            vec2 dir = normalize (vec2 (hash12 (vec2 (id, 3.0)) < 0.5 ? -1.0 : 1.0, -0.45));
+            vec2 head = m0 + dir * t * 0.5;
+            vec2 rel = p - head;
+            float along = dot (rel, -dir), across = abs (rel.x * dir.y - rel.y * dir.x);
+            float trail = step (0.0, along) * exp (-along * 9.0) * smoothstep (0.0025, 0.0, across);
+            col += vec3 (0.85, 0.9, 1.0) * trail * sin (t * 3.14159) * 1.2;
+        }
+    }
+    // planet (Drone): Rayleigh-blue or warm limb on the lit side, a soft terminator, storms, night-side lightning and polar aurora
     float k = hash12 (S);
     vec2 c = vec2 (asp * (k < 0.5 ? 0.27 : 0.74), 0.02 + 0.25 * hash12 (S + 3.0));
     float R = 0.42 + 0.18 * hash12 (S + 5.0);
@@ -354,46 +406,62 @@ vec3 scene (vec2 uv)
     float ca = cos (-0.3), sa = sin (-0.3);
     vec2 rd = vec2 (ca * d.x - sa * d.y, sa * d.x + ca * d.y);
     float re = length (vec2 (rd.x, rd.y / 0.24));
-    float ringBand = hasRing ? smoothstep (1.35, 1.4, re) * smoothstep (1.95, 1.88, re) * (0.55 + 0.45 * fbm3 (vec2 (re * 40.0, 0.0))) : 0.0;
+    // rings with divisions and fine dust, in the planet's shadow behind it
+    float ringBand = 0.0;
+    if (hasRing)
+    {
+        float rr = smoothstep (1.32, 1.38, re) * smoothstep (2.0, 1.92, re);
+        float divisions = 0.55 + 0.45 * sin (re * 38.0) * sin (re * 11.0 + 1.0);
+        float cassini = 1.0 - 0.85 * smoothstep (0.03, 0.0, abs (re - 1.7));
+        ringBand = rr * cassini * (0.45 + 0.55 * divisions) * (0.7 + 0.3 * fbm3 (vec2 (re * 60.0, 0.0)));
+    }
+    vec2 l2 = normalize (ldir.xy);
+    float behindLit = dot (d, -l2);
+    float inShadow = step (0.0, behindLit) * step (abs (d.x * l2.y - d.y * l2.x), 1.0);
     vec3 ringCol = planetPal (k, 0.85) * 0.9;
-    // ring behind the planet (upper half)
-    if (ringBand > 0.0 && rd.y > 0.0 && r2 > 1.0) col = mix (col, ringCol * (0.4 + 0.6 * max (dot (vec3 (0.0, 0.0, 1.0), ldir), 0.2)), ringBand * 0.8);
-    float atm = exp (-max (sqrt (r2) - 1.0, 0.0) * 12.0) * step (1.0, r2);
-    col += planetPal (k, 0.9) * atm * (0.25 + 0.4 * uGlow[0]);
+    float pulse = 0.4 + 0.6 * uGlow[0] + 0.4 * uGlow[6];
+    if (ringBand > 0.0 && rd.y > 0.0 && r2 > 1.0) col = mix (col, ringCol * 0.55 * (1.0 - 0.85 * inShadow), ringBand * 0.8);
+    float atm = exp (-max (sqrt (r2) - 1.0, 0.0) * 14.0);   // also under the anti-aliased edge (no dark outline)
+    float litSide = clamp (dot (normalize (vec3 (d, 0.0)), ldir) * 0.7 + 0.45, 0.0, 1.0);
+    col += atmoColour (k) * atm * litSide * (0.35 + 0.35 * pulse);
     if (r2 < 1.0)
     {
         float zz = sqrt (1.0 - r2);
         vec3 n = vec3 (d, zz);
-        float dif = max (dot (n, ldir), 0.0);
+        float ndl = dot (n, ldir);
+        float dif = smoothstep (-0.12, 0.4, ndl);                                    // soft terminator
         float lon = atan (n.x, n.z) + uTime * 0.008, lat = n.y;
         float bands = fbm (vec2 (lon * 1.5, lat * 9.0 + fbm3 (vec2 (lon * 3.0, lat * 4.0)) * 1.5) + S);
         vec3 base = planetPal (k, bands);
         float storm = smoothstep (0.72, 0.8, fbm3 (vec2 (lon * 4.0 + 2.0, lat * 6.0)));
         base = mix (base, planetPal (k, 1.0) * 1.2, storm * 0.5);
-        vec3 pc = base * (0.03 + 1.25 * pow (dif, 0.9));
-        pc += planetPal (k, 0.95) * pow (1.0 - zz, 3.0) * 0.9 * (0.4 + uGlow[0]);              // atmosphere rim
-        // ring shadow on the planet
-        col = pc;
+        vec3 pc = base * (0.015 + 1.25 * pow (dif, 1.1));
+        // the atmosphere scatters light at the limb, strongest on the day side, a thin bright arc at the terminator
+        float limb = pow (1.0 - zz, 2.5);
+        pc += atmoColour (k) * limb * (0.15 + 0.85 * smoothstep (-0.2, 0.5, ndl)) * 0.8 * pulse;
+        pc += atmoColour (k) * smoothstep (0.15, 0.0, abs (ndl)) * limb * 0.4;
+        // night side: lightning flickering inside storms, aurora around the poles
+        float night = smoothstep (0.05, -0.25, ndl);
+        vec2 cell = floor (vec2 (lon * 6.0, lat * 8.0));
+        float flash = step (0.985, hash12 (cell + floor (uTime * 6.0))) * smoothstep (0.6, 0.75, fbm3 (vec2 (lon * 4.0, lat * 6.0)));
+        pc += vec3 (0.7, 0.8, 1.0) * flash * night * (0.5 + uGlow[5]);
+        float pole = smoothstep (0.78, 0.9, abs (lat)) * (0.5 + 0.5 * sin (lon * 18.0 + uTime * 0.5));
+        pc += vec3 (0.2, 1.0, 0.55) * pole * night * (0.25 + 0.6 * uPres[3]);
+        // the rings' shadow across the planet
+        if (hasRing) pc *= 1.0 - 0.45 * smoothstep (0.04, 0.0, abs (rd.y - 0.08 * sign (ldir.y) - 0.0)) * step (0.0, ndl) * smoothstep (0.0, 0.3, abs (rd.x));
+        col = mix (col, pc, smoothstep (1.0, 0.985, r2));
     }
-    // ring in front (lower half)
+    // ring in front of the planet (lower half)
     if (ringBand > 0.0 && (rd.y <= 0.0 || r2 > 1.0) && !(rd.y > 0.0 && r2 > 1.0))
     {
         float lightOnRing = 0.35 + 0.65 * clamp (0.5 + 0.5 * rd.x * sign (ldir.x), 0.0, 1.0);
-        col = mix (col, ringCol * lightOnRing, ringBand * 0.85);
+        col = mix (col, ringCol * lightOnRing * (1.0 - 0.85 * inShadow * step (1.0, r2)), ringBand * 0.85);
     }
-    // a small moon (Pad) orbiting slowly
+    // two moons at different distances: their phases follow the sunlight
     float ma = uEvoT * 0.02 + S.x;
-    vec2 mc = c + vec2 (cos (ma) * R * 2.3, R * 0.85 + sin (ma) * R * 0.35);
-    float mr = R * 0.11 * (0.7 + 0.3 * uPres[1]);
-    vec2 md = (p - mc) / mr;
-    float m2 = dot (md, md);
-    if (m2 < 1.0)
-    {
-        vec3 mn = vec3 (md, sqrt (1.0 - m2));
-        float mdif = max (dot (mn, ldir), 0.0);
-        float crat = fbm (md * 3.0 + S);
-        col = vec3 (0.75, 0.72, 0.8) * (0.6 + 0.4 * crat) * (0.02 + mdif);
-    }
+    col = moonAt (p, c + vec2 (cos (ma) * R * 2.3, R * 0.85 + sin (ma) * R * 0.35), R * 0.11 * (0.7 + 0.3 * uPres[1]), ldir, col, 1.0);
+    float mb = uEvoT * 0.011 + S.y;
+    col = moonAt (p, c + vec2 (-cos (mb) * R * 3.4, R * 1.5 + sin (mb) * R * 0.2), R * 0.05, ldir, col, 4.0);
     return col;
 }
 )GLSL";
