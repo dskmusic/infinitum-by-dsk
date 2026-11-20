@@ -636,6 +636,124 @@ void jelly (inout vec3 col, vec2 p, float fj, float asp, float ray)
            + gonC * gon * 0.35 + vec3 (0.3, 0.9, 1.0) * bio + vec3 (0.9, 1.0, 1.0) * spec) * k * (0.85 + 0.25 * c);
 }
 )GLSL" R"GLSL(
+// a manta ray or a sea turtle gliding slowly across now and then (they take turns)
+void visitor (inout vec3 col, vec2 p, float asp, float L)
+{
+    float cyc = uTime / 80.0 + hash12 (S + 13.0);
+    float w = fract (cyc);
+    if (w > 0.5) return;
+    float t = w / 0.5;
+    bool manta = mod (floor (cyc), 2.0) < 0.5;
+    float dirx = hash12 (vec2 (floor (cyc), 2.0)) < 0.5 ? 1.0 : -1.0;
+    vec2 c = vec2 (mix (-0.35, asp + 0.35, dirx > 0.0 ? t : 1.0 - t), 0.52 + 0.12 * sin (t * 3.14159 + floor (cyc)) + 0.02 * sin (uTime * 0.4));
+    float sz = manta ? 0.13 : 0.075;
+    vec2 q = (p - c) / sz;
+    if (abs (q.x) > 2.5 || abs (q.y) > 2.0) return;
+    q.x *= dirx;                                      // q.x > 0: forward
+    float fade = smoothstep (0.0, 0.08, t) * smoothstep (1.0, 0.92, t);
+    vec3 dark = vec3 (0.015, 0.035, 0.05), light = vec3 (0.18, 0.32, 0.36) * (0.5 + 0.6 * L);
+    float a = 0.0; vec3 c2 = dark;
+    if (manta)
+    {
+        // seen from below as it glides past: a diamond with swept-back wings that slowly beat
+        float span = 1.5;
+        float flap = sin (uTime * 1.1);
+        vec2 mq = (p - c) / sz;                                       // wings spread left-right, head up-screen
+        float tipLift = 0.28 * flap * pow (abs (mq.x) / span, 2.0);
+        q = vec2 ((mq.y - tipLift) / 0.75, mq.x);                      // q.x: forward (towards the head), q.y: along the span
+        float yy = q.y;
+        float s = clamp (abs (yy) / span, 0.0, 1.0);
+        float lead = 0.45 - 0.75 * pow (s, 1.7) + 0.05 * flap * s;             // curved leading edge, swept back towards the tips
+        float chord = 0.85 * pow (1.0 - s, 1.1) + 0.04;                         // thin, pointed tips, concave trailing edge
+        float wing = smoothstep (-0.03, 0.03, lead - q.x) * smoothstep (-0.03, 0.03, q.x - (lead - chord)) * step (abs (yy), span);
+        float horns = smoothstep (0.07, 0.03, length ((vec2 (q.x - 0.55, abs (q.y) - 0.13)) * vec2 (0.8, 1.6)));
+        float tail = smoothstep (0.025, 0.0, abs (q.y)) * step (q.x, -0.4) * step (-1.7, q.x);
+        a = clamp (wing + horns + tail * 0.8, 0.0, 1.0);
+        float gills = smoothstep (0.02, 0.0, abs (fract ((abs (q.y) - 0.12) * 18.0) - 0.5) - 0.42) * step (abs (q.y), 0.32) * step (0.08, abs (q.y)) * smoothstep (0.15, 0.0, abs (q.x - 0.1));
+        vec3 bellyC = vec3 (0.42, 0.55, 0.58) * (0.5 + 0.5 * L);                // pale belly seen from below, dark margins
+        c2 = mix (bellyC, dark, smoothstep (0.35, 0.95, s) * 0.85 + 0.3 * smoothstep (0.0, 0.08, -(q.x - (lead - chord)) + 0.08) * 0.0);
+        c2 = mix (c2, dark, smoothstep (0.06, 0.0, lead - q.x) * 0.5 + gills * 0.5);
+        c2 *= 0.9 + 0.2 * fbm3 (q * 4.0);
+        c2 += vec3 (0.15, 0.3, 0.32) * smoothstep (0.08, 0.0, abs (q.x - lead)) * (1.0 - s) * 0.4;   // light catching the leading edge
+    }
+    else
+    {
+        float paddle = sin (uTime * 1.6);
+        float shell = smoothstep (1.0, 0.92, length (q * vec2 (0.95, 1.35)));
+        vec2 hq = q * 5.0;
+        float plates = smoothstep (0.04, 0.0, abs (fract (hq.x + 0.5 * floor (hq.y)) - 0.5) - 0.45) + smoothstep (0.06, 0.0, abs (fract (hq.y) - 0.5) - 0.44);
+        float head = smoothstep (1.0, 0.8, length ((q - vec2 (1.18, 0.05 * sin (uTime * 0.5))) / vec2 (0.26, 0.2)));
+        float fl1 = smoothstep (1.0, 0.8, length ((q - vec2 (0.35 - 0.1 * paddle, 0.85 + 0.2 * paddle)) / vec2 (0.5, 0.16)));
+        float fl2 = smoothstep (1.0, 0.8, length ((q - vec2 (0.35 - 0.1 * paddle, -0.85 - 0.2 * paddle)) / vec2 (0.5, 0.16)));
+        float fl3 = smoothstep (1.0, 0.8, length ((q - vec2 (-0.85, 0.5 - 0.1 * paddle)) / vec2 (0.25, 0.12)));
+        float fl4 = smoothstep (1.0, 0.8, length ((q - vec2 (-0.85, -0.5 + 0.1 * paddle)) / vec2 (0.25, 0.12)));
+        a = clamp (shell + head + fl1 + fl2 + fl3 + fl4, 0.0, 1.0);
+        vec3 shellC = mix (vec3 (0.16, 0.13, 0.07), vec3 (0.5, 0.42, 0.24), fbm3 (q * 3.0)) * (0.7 + 0.6 * L);
+        c2 = mix (mix (vec3 (0.3, 0.32, 0.24), light, 0.3) * (0.6 + 0.6 * L), shellC * (1.0 - 0.45 * clamp (plates, 0.0, 1.0)), shell);
+    }
+    col = mix (col, mix (c2, col, 0.3), a * fade);               // seen through the water: a little hazy, blue
+}
+// rising bubbles from the seabed: thin streams that wobble, with a bright rim (Bass sends bursts)
+void bubbles (inout vec3 col, vec2 p, float asp, float L)
+{
+    for (int v = 0; v < 3; v++)
+    {
+        float fv = float (v);
+        float vx = (0.15 + 0.7 * hash12 (S + vec2 (fv, 21.0))) * asp;
+        if (abs (p.x - vx) > 0.08) continue;
+        for (int b = 0; b < 12; b++)
+        {
+            float fb = float (b);
+            float speed = 0.05 + 0.03 * hash12 (vec2 (fv, fb));
+            float ph = fract (uTime * speed + fb / 12.0 + hash12 (vec2 (fb, fv * 3.0)));
+            float on = step (0.35 - 0.3 * uGlow[6], hash12 (vec2 (fb, floor (uTime * speed + fb / 12.0 + hash12 (vec2 (fb, fv * 3.0))) + fv)));
+            vec2 bc = vec2 (vx + 0.012 * sin (ph * 20.0 + fb) * ph, 0.2 + ph * 0.75);
+            float r = (0.0025 + 0.0035 * hash12 (vec2 (fb, 5.0))) * (1.0 + 0.6 * ph);
+            float d = length (p - bc);
+            float rim = smoothstep (r, r * 0.7, d) * (0.35 + 0.65 * smoothstep (r * 0.5, r * 0.95, d));
+            float hl = smoothstep (r * 0.35, 0.0, length (p - bc - vec2 (-0.35, 0.35) * r));
+            col += vec3 (0.7, 0.95, 1.0) * (rim * 0.35 + hl * 0.6) * on * (0.5 + 0.6 * L) * smoothstep (1.0, 0.8, ph);
+        }
+    }
+}
+// corals and anemones on the rocks of the seabed, colours muted by the water, tentacles swaying in the current
+void reef (inout vec3 col, vec2 p, vec2 uv, float asp, float L)
+{
+    for (int k = 0; k < 8; k++)
+    {
+        float fk = float (k);
+        float x0 = (fk + 0.1 + 0.8 * hash12 (S + vec2 (fk, 31.0))) / 8.0 * asp;
+        if (abs (p.x - x0) > 0.09) continue;
+        float base = bedAt (x0) - 0.02 - 0.05 * hash12 (S + vec2 (fk, 32.0));
+        vec2 q = vec2 (p.x - x0, uv.y - base);
+        q *= 0.65;                                          // a bit bigger
+        if (q.y < -0.01 || q.y > 0.07) continue;
+        vec3 tint = hash12 (vec2 (fk, 33.0)) < 0.5 ? vec3 (0.85, 0.35, 0.4) : vec3 (0.95, 0.6, 0.3);
+        if (hash12 (vec2 (fk, 34.0)) < 0.55)
+        {   // branching coral
+            float r = length (q * vec2 (1.0, 1.4));
+            float br = smoothstep (0.55, 0.75, ridged (q * vec2 (60.0, 45.0) + fk * 7.0)) * smoothstep (0.045, 0.03, r) * step (0.0, q.y);
+            vec3 c = tint * (0.25 + 0.35 * L) * (0.7 + 0.5 * fbm3 (q * 200.0));
+            col = mix (col, mix (c, col, 0.35), br);
+        }
+        else
+        {   // anemone: a soft column with swaying tentacles
+            float stem = smoothstep (0.009, 0.006, abs (q.x)) * step (0.0, q.y) * step (q.y, 0.012);
+            float ten = 0.0;
+            for (int t = 0; t < 7; t++)
+            {
+                float ft = float (t) - 3.0;
+                float ang = ft * 0.28 + 0.15 * sin (uTime * (0.6 + 0.4 * uPres[4]) + ft + fk);
+                vec2 dir = vec2 (sin (ang), cos (ang));
+                vec2 rq = q - vec2 (0.0, 0.012);
+                float along = dot (rq, dir), across = abs (rq.x * dir.y - rq.y * dir.x);
+                ten = max (ten, smoothstep (0.0025, 0.0008, across) * step (0.0, along) * smoothstep (0.03, 0.022, along));
+            }
+            vec3 c = tint * (0.3 + 0.4 * L);
+            col = mix (col, mix (c, col, 0.3), clamp (stem + ten, 0.0, 1.0));
+        }
+    }
+}
 // one layer of drifting particles: irregular flakes that sink slowly and wander, brighter in the light rays
 float snowLayer (vec2 p, float scale, float sink, float size, float seed, float density)
 {
@@ -711,10 +829,13 @@ vec3 scene (vec2 uv)
             col = mix (col, mix (sand, col, (1.0 - d) * 0.7 + 0.08), a);
         }
     }
+    reef (col, p, uv, asp, L);
     kelp (col, p, uv, 0.0, asp, L);
     jelly (col, p, 0.0, asp, rays * pow (uv.y, 1.3));
     jelly (col, p, 1.0, asp, rays * pow (uv.y, 1.3));
     kelp (col, p, uv, 1.0, asp, L);
+    visitor (col, p, asp, L);
+    bubbles (col, p, asp, L);
     // marine snow at three depths (Texture), brighter where the light rays cross it, plankton glinting
     float lit = 0.35 + 2.2 * rays * pow (uv.y, 1.3);
     float dens = 0.35 + 0.4 * uPres[2];
