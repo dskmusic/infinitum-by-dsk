@@ -838,7 +838,7 @@ vec3 scene (vec2 uv)
     bubbles (col, p, asp, L);
     // marine snow at three depths (Texture), brighter where the light rays cross it, plankton glinting
     float lit = 0.35 + 2.2 * rays * pow (uv.y, 1.3);
-    float dens = 0.35 + 0.4 * uPres[2];
+    float dens = 0.35 + 0.4 * uPres[2] + 0.25 * wHaze();
     col += vec3 (0.55, 0.8, 0.85) * snowLayer (p, 70.0, 0.006, 0.06, 1.0, dens) * 0.22 * lit;
     col += vec3 (0.65, 0.88, 0.9) * snowLayer (p, 38.0, 0.009, 0.09, 2.0, dens * 0.8) * 0.3 * lit;
     float gl = snowLayer (p, 55.0, 0.004, 0.05, 3.0, 0.08);
@@ -852,7 +852,7 @@ vec3 scene (vec2 uv)
     jelly (col, p, 5.0, asp, rayHere);
     // out-of-focus particles right in front of the lens: soft discs with a brighter rim
     col += vec3 (0.55, 0.85, 0.9) * (bokeh (p, 4.0, 0.16, 1.0) * 0.05 + bokeh (p, 7.0, 0.12, 2.0) * 0.035) * (0.5 + L) * (0.7 + 0.8 * rays);
-    col = mix (col, deep, (1.0 - uv.y) * 0.2);
+    col = mix (col, deep + mid * 0.3, clamp ((1.0 - uv.y) * 0.2 + wHaze () * 0.18, 0.0, 0.5));   // depth haze, murkier with the weather
     return col;
 }
 )GLSL";
@@ -1060,6 +1060,8 @@ vec3 scene (vec2 uv)
     vec3 glowC = mix (vec3 (0.85, 0.36, 0.16), vec3 (0.6, 0.16, 0.5), 0.5 + 0.5 * sin (uTime * 0.05));
     // sky: the city glow from below, black above
     vec3 col = mix (glowC * (0.32 + 0.3 * L), vec3 (0.008, 0.01, 0.025), pow (clamp ((uv.y - ground) / 0.9, 0.0, 1.0), 0.55));
+    float dusk = smoothstep (0.55, 1.0, L);                     // high Light: the last light of dusk behind the towers
+    col = mix (col, mix (vec3 (0.95, 0.45, 0.25), vec3 (0.12, 0.1, 0.3), pow (clamp ((uv.y - ground) / 0.8, 0.0, 1.0), 0.6)), dusk * 0.7);
     // low clouds lit from beneath by the city
     float cl = fbm (vec2 (p.x * 1.2 + uTime * 0.006, uv.y * 3.2 - uTime * 0.002) + S);
     float cd = smoothstep (0.42, 0.82, cl) * smoothstep (0.42, 0.72, uv.y);
@@ -1130,7 +1132,7 @@ vec3 scene (vec2 uv)
         vec2 rq = vec2 (p.x * 14.0, uv.y * 70.0);
         vec2 rid = floor (rq), rf = fract (rq) - 0.5;
         float rt = fract (uTime * 0.7 + hash12 (rid + S));
-        float ring = smoothstep (0.05, 0.0, abs (length (rf * vec2 (1.0, 2.2)) - rt * 0.45)) * (1.0 - rt) * step (0.6, hash12 (rid));
+        float ring = smoothstep (0.05, 0.0, abs (length (rf * vec2 (1.0, 2.2)) - rt * 0.45)) * (1.0 - rt) * step (0.6 - 0.25 * uGlow[6], hash12 (rid));
         col += (glowSum * 0.5 + vec3 (0.05, 0.06, 0.08)) * ring * 0.5;
     }
     // rain, tinted by the neon around it
@@ -1146,7 +1148,7 @@ vec3 scene (vec2 uv)
         float tt = uv.y * (2.0 + h2) + uTime * rate * (2.0 + h2) + h2 * 17.0;
         float did = floor (tt), fy = fract (tt);
         float len = 0.16 + 0.12 * fl;
-        float exists = step (0.62 - 0.08 * uPres[4], hash12 (vec2 (cid + 0.37, did + fl * 31.0)));
+        float exists = step (0.68 - 0.08 * uPres[4] - 0.2 * wRain(), hash12 (vec2 (cid + 0.37, did + fl * 31.0)));
         float streak = exists * smoothstep (0.09 + 0.05 * fl, 0.0, abs (fx - 0.5)) * step (fy, len) * (1.0 - fy / len);
         col += rainC * streak * (0.05 + 0.045 * fl) * (0.7 + 0.6 * uPres[4]) * (0.6 + 1.0 * clamp (length (glowSum), 0.0, 1.0));
     }
@@ -1358,6 +1360,7 @@ vec3 nightSky (vec2 p, float y, float L, float power)
     col += auroraSky (p, y, power);
     return col;
 }
+vec3 gAuroraLight;   // the aurora's light falling on the land below this column (set per pixel)
 // snowy range: snow on the gentle slopes, dark rock on the steep faces, moon-lit and aurora-tinted, blue shadows
 float rangeH (float x, float fi, float hor)
 {
@@ -1383,7 +1386,7 @@ vec4 mountains (vec2 p, float y, float hor, float L, float power)
             float snow = smoothstep (0.18, -0.12, (n - 0.5) * 0.9 + (gullies - 0.5) * 0.8 - 0.25 * smoothstep (0.0, 0.08, h - y) + 0.1);
             float lit = clamp (0.1 + 0.9 * faces, 0.0, 1.2);
             vec3 snowC = mix (vec3 (0.05, 0.08, 0.17), vec3 (0.52, 0.6, 0.76), lit) * (0.3 + 0.45 * L);
-            snowC += vec3 (0.12, 0.6, 0.35) * power * 0.12 * (0.5 + 0.5 * lit);
+            snowC += vec3 (0.12, 0.6, 0.35) * power * 0.05 * (0.5 + 0.5 * lit) + gAuroraLight * (0.6 + 0.4 * lit) * 0.9;   // lit green by the aurora overhead
             vec3 rockC = vec3 (0.02, 0.025, 0.04) * (0.5 + 0.9 * faces);
             vec3 m = mix (rockC, snowC, snow);
             float haze = 0.45 - 0.18 * fi;
@@ -1421,7 +1424,7 @@ vec4 shore (vec2 p, float y, float hor, out vec3 warm)
         }
     }
     float ground = smoothstep (hor + 0.006, hor, y);
-    if (ground > 0.0 && res.a < 0.5) res = vec4 (vec3 (0.25, 0.3, 0.4), ground);
+    if (ground > 0.0 && res.a < 0.5) res = vec4 (vec3 (0.25, 0.3, 0.4) + gAuroraLight * 0.8, ground);
     // cabin
     float cx0 = (0.2 + 0.6 * hash12 (S + 2.0)) * uRes.x / uRes.y;
     vec2 q = p - vec2 (cx0, hor);
@@ -1440,18 +1443,34 @@ vec3 scene (vec2 uv)
     float L = uLight, asp = uRes.x / uRes.y;
     vec2 p = vec2 (uv.x * asp, uv.y);
     float hor = 0.3;
-    float power = 0.55 + 0.55 * uPres[3] + 0.3 * uPres[1] + 0.6 * uGlow[3];
+    float power = (0.55 + 0.55 * uPres[3] + 0.3 * uPres[1] + 0.6 * uGlow[3] + 0.4 * uGlow[6]) * (1.0 - 0.5 * smoothstep (0.6, 1.0, L));
     vec3 col = nightSky (p, uv.y, L, power);
+    col += mix (vec3 (0.25, 0.32, 0.55), vec3 (0.6, 0.45, 0.5), smoothstep (0.4, 0.0, uv.y - hor)) * smoothstep (0.6, 1.0, L) * smoothstep (1.0, hor, uv.y) * 0.4;   // polar twilight
     // small moon with a halo
     vec2 mc = vec2 (asp * (0.12 + 0.76 * hash12 (S)), 0.86);
     float md = length (p - mc);
     col += vec3 (0.75, 0.82, 1.0) * (0.0025 / (md * md + 0.0025)) * 0.4;
     col = mix (col, vec3 (0.93, 0.95, 1.0), smoothstep (0.02, 0.017, md) * smoothstep (0.014, 0.021, length (p - mc - vec2 (0.008, 0.005))));
+    gAuroraLight = auroraSky (vec2 (p.x, 0.0), 0.68, power) * 0.55;     // what the curtains above shine down here
     vec4 m = mountains (p, uv.y, hor, L, power);
     col = mix (col, m.rgb, m.a);
     vec3 warm;
     vec4 sh = shore (p, uv.y, hor, warm);
     col = mix (col, sh.rgb, sh.a) + warm;
+    // smoke curling up from the cabin's chimney, drifting with the wind, lit by the moon and a little by the window
+    {
+        float cx0 = (0.2 + 0.6 * hash12 (S + 2.0)) * asp;
+        vec2 rel = p - vec2 (cx0 + 0.014, hor + 0.036);
+        if (rel.y > 0.0 && rel.y < 0.3 && abs (rel.x) < 0.2)
+        {
+            float centre = rel.y * rel.y * (1.5 + 2.0 * uPres[4]) + 0.012 * sin (rel.y * 22.0 - uTime * 1.2);
+            float wdt = 0.004 + rel.y * 0.13;
+            float dens = smoothstep (0.35, 0.75, fbm3 (vec2 ((rel.x - centre) * 35.0, rel.y * 22.0 - uTime * 0.7) + S)) + 0.25;
+            float smoke = smoothstep (wdt * 1.4, 0.0, abs (rel.x - centre)) * dens * exp (-rel.y * 5.0) * smoothstep (0.0, 0.006, rel.y);
+            vec3 smokeC = vec3 (0.5, 0.55, 0.62) * (0.45 + 0.5 * L) + vec3 (0.3, 0.15, 0.06) * exp (-rel.y * 40.0) + gAuroraLight * 0.6;
+            col = mix (col, smokeC, clamp (smoke * 0.85, 0.0, 0.75));
+        }
+    }
     // still lake: a dark mirror of the sky, the mountains and the window, broken by slow ripples, under drifting mist
     if (uv.y < hor)
     {
@@ -1471,7 +1490,7 @@ vec3 scene (vec2 uv)
     }
     // mist drifting over the water and the shore (Wind)
     float mist = smoothstep (0.12, 0.0, abs (uv.y - hor + 0.01)) * fbm3 (vec2 (p.x * 2.5 - uTime * 0.02, uv.y * 12.0) + S);
-    col = mix (col, vec3 (0.25, 0.32, 0.42) * (0.5 + 0.5 * L) + vec3 (0.02, 0.12, 0.07) * power, mist * (0.18 + 0.35 * uPres[4]));
+    col = mix (col, vec3 (0.25, 0.32, 0.42) * (0.5 + 0.5 * L) + vec3 (0.02, 0.12, 0.07) * power, mist * (0.18 + 0.35 * uPres[4] + 0.3 * wHaze()));
     // snowfall at three depths, the nearest flakes soft and large
     for (int k = 0; k < 3; k++)
     {
@@ -1479,7 +1498,7 @@ vec3 scene (vec2 uv)
         vec2 q = vec2 (p.x + sin (uTime * 0.3 + p.y * 4.0 + fk) * 0.02, p.y + uTime * (0.02 + 0.02 * fk)) * (45.0 - 12.0 * fk) + S + fk * 7.0;
         vec2 id = floor (q), f = fract (q) - 0.5;
         vec2 o = (hash22 (id + fk) - 0.5) * 0.6;
-        float has = step (0.92 - 0.08 * uPres[4], hash12 (id * 1.31 + fk));
+        float has = step (0.92 - 0.08 * uPres[4] - 0.12 * wRain(), hash12 (id * 1.31 + fk));
         float r = 0.06 + 0.06 * fk;
         col += vec3 (0.85, 0.9, 1.0) * has * smoothstep (r, r * (0.3 - 0.1 * fk), length (f - o)) * (0.35 + 0.1 * fk);
     }
