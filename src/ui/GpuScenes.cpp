@@ -493,101 +493,237 @@ vec3 scene (vec2 uv)
 const char* neon = R"GLSL(
 vec3 signColour (float h)
 {
-    if (h < 0.2) return vec3 (1.0, 0.25, 0.65);
-    if (h < 0.4) return vec3 (0.25, 0.95, 1.0);
-    if (h < 0.6) return vec3 (1.0, 0.7, 0.25);
-    if (h < 0.8) return vec3 (0.65, 0.42, 1.0);
-    return vec3 (1.0, 0.3, 0.3);
+    if (h < 0.2) return vec3 (1.0, 0.22, 0.62);
+    if (h < 0.4) return vec3 (0.2, 0.92, 1.0);
+    if (h < 0.6) return vec3 (1.0, 0.62, 0.2);
+    if (h < 0.8) return vec3 (0.62, 0.38, 1.0);
+    return vec3 (1.0, 0.25, 0.28);
 }
-// one layer of buildings: returns colour + alpha (inside a building)
-vec4 city (vec2 p, vec2 uv, float layer, out vec3 glowAdd)
+// abstract sign characters (invented, never real text): strokes on a 3 x 4 grid
+float glyph (vec2 g, float seed)
+{
+    if (g.x < 0.12 || g.x > 0.88 || g.y < 0.08 || g.y > 0.92) return 0.0;
+    vec2 q = (g - vec2 (0.12, 0.08)) / vec2 (0.76, 0.84) * vec2 (3.0, 4.0);
+    vec2 c = floor (q), f = fract (q);
+    float h = hash12 (c + seed * 7.13);
+    if (h < 0.4) return 0.0;
+    return h < 0.7 ? smoothstep (0.26, 0.14, abs (f.x - 0.5)) : smoothstep (0.26, 0.14, abs (f.y - 0.5));
+}
+// building parameters of one cell of one layer
+void building (float id, float l, float ground, out float hgt, out float bc, out float hw)
+{
+    float h0 = hash12 (vec2 (id, l + 0.3));
+    hgt = ground + (0.12 + 0.6 * pow (h0, 1.5)) * (0.55 + 0.11 * l);
+    float bw = 0.6 + 0.32 * hash12 (vec2 (id, l + 1.7));
+    bc = 0.5 + (hash12 (vec2 (id, l + 2.9)) - 0.5) * (1.0 - bw);
+    hw = 0.5 * bw;
+}
+// the neon sign of a building (vertical strip of glyphs, or a wide holographic billboard on near buildings)
+// returns false if it has none
+bool signOf (float id, float l, float ground, out vec2 lo, out vec2 hi, out vec3 sc, out float kind, out float on)
+{
+    lo = vec2 (0.0); hi = vec2 (0.0); sc = vec3 (0.0); kind = 0.0; on = 0.0;
+    float sh = hash12 (vec2 (id, l + 0.5));
+    if (l < 1.5 || sh < 0.42) return false;
+    float hgt, bc, hw;
+    building (id, l, ground, hgt, bc, hw);
+    float hh = hgt - ground;
+    sc = signColour (fract (sh * 7.0));
+    float fail = hash12 (vec2 (id, l + 8.8));
+    on = fail > 0.85 ? step (0.35, fract (sin (floor (uTime * 9.0) * 0.731 + id) * 43.7)) * (0.6 + 0.4 * step (0.5, fract (uTime * 0.3 + id))) : 1.0;
+    if (l > 2.5 && sh > 0.86)                                   // holographic billboard
+    {
+        kind = 1.0;
+        float y0 = ground + hh * (0.45 + 0.2 * hash12 (vec2 (id, 4.4)));
+        lo = vec2 (bc - hw * 0.8, y0); hi = vec2 (bc + hw * 0.8, y0 + hh * 0.16);
+        return true;
+    }
+    float side = hash12 (vec2 (id, 3.3)) < 0.5 ? -1.0 : 1.0;
+    float sx = bc + side * hw * 0.78, sw = 0.11;
+    float y0 = ground + hh * (0.2 + 0.35 * hash12 (vec2 (id, 4.0)));
+    lo = vec2 (sx - sw * 0.5, y0); hi = vec2 (sx + sw * 0.5, y0 + hh * (0.22 + 0.2 * hash12 (vec2 (id, 4.7))));
+    return true;
+}
+// one layer of the city (0 far ... 4 near): colour + coverage, and the light its signs throw around
+vec4 city (vec2 p, vec2 uv, float l, float ground, out vec3 glowAdd)
 {
     glowAdd = vec3 (0.0);
-    float cw = 0.06 + 0.05 * layer;
-    float x = p.x / cw + layer * 17.0 + uMus * 0.02 * (1.0 + layer);
+    float cw = 0.042 * (1.0 + 0.6 * l);
+    float scroll = (uMus * 0.004 + uTime * 0.0012) * (0.3 + 0.45 * l);    // parallax: near layers drift faster
+    float x = (p.x + scroll) / cw + l * 17.3;
     float id = floor (x), fx = fract (x);
-    float gap = 0.06;
-    float hgt = 0.18 + (0.55 - 0.15 * layer) * pow (hash12 (vec2 (id, layer)), 1.4);
-    float inB = step (gap, fx) * step (fx, 1.0 - gap) * step (uv.y, hgt);
-    // neon sign glow from this and the neighbouring buildings
+    float aa = 1.0 / (cw * uRes.y), aay = 1.0 / uRes.y;
+    // signs of this and the neighbouring buildings light the air, the facades and the rain
     for (int n = -1; n <= 1; n++)
     {
-        float nid = id + float (n);
-        float sh = hash12 (vec2 (nid, layer + 0.5));
-        if (sh > 0.45 && layer > 0.5)
+        vec2 lo, hi; vec3 sc; float kind, on;
+        if (signOf (id + float (n), l, ground, lo, hi, sc, kind, on))
         {
-            float nh = 0.18 + (0.55 - 0.15 * layer) * pow (hash12 (vec2 (nid, layer)), 1.4);
-            float sy = nh * (0.55 + 0.3 * hash12 (vec2 (nid, 4.0)));
-            float sxc = (nid + 0.5 - layer * 17.0 - uMus * 0.02 * (1.0 + layer)) * cw;
-            vec2 sd = vec2 (abs (p.x - sxc) / (cw * 0.35), abs (uv.y - sy) / 0.02);
-            float flick = step (0.03, fract (sin (uTime * 3.0 + nid) * 43.7)) * (0.7 + 0.3 * uPres[1]);
-            vec3 scol = signColour (fract (sh * 7.0));
-            float box = smoothstep (1.05, 0.95, max (sd.x, sd.y));
-            glowAdd += scol * (box * 1.2 + exp (-length (sd * vec2 (0.35, 0.12)) * 1.6) * 0.18) * flick;
+            vec2 q = vec2 (fx - float (n), uv.y);
+            vec2 d = max (max (lo - q, q - hi), 0.0) * vec2 (cw, 1.0);
+            float dist = length (d);
+            glowAdd += sc * on * (exp (-dist * 45.0) * 0.32 + exp (-dist * 12.0) * 0.045) * (0.7 + 0.3 * uPres[1]) * (kind > 0.5 ? 0.6 : 1.0);
         }
     }
-    // windows
-    float wx = floor (fx * 7.0), wy = floor (uv.y * (90.0 - 25.0 * layer));
-    float wl = step (0.72 - 0.08 * layer, hash12 (vec2 (id * 13.0 + wx, wy + layer * 91.0)));
-    float wm = step (0.3, fract (fx * 7.0)) * step (0.35, fract (uv.y * (90.0 - 25.0 * layer)));
-    vec3 wc = mix (vec3 (1.0, 0.82, 0.55), vec3 (0.5, 0.9, 1.0), step (0.8, hash12 (vec2 (id, wy))));
-    vec3 body = mix (vec3 (0.03, 0.04, 0.09), vec3 (0.10, 0.12, 0.22), 0.3 * (2.0 - layer)) * (0.7 + 0.3 * fbm3 (vec2 (fx * 4.0, uv.y * 20.0)));
-    vec3 c = body + wc * wl * wm * (0.7 - 0.15 * layer);
-    return vec4 (c, inB);
+    float hgt, bc, hw;
+    building (id, l, ground, hgt, bc, hw);
+    float yrel = (uv.y - ground) / (hgt - ground);
+    float tier = 1.0;
+    if (hash12 (vec2 (id, l + 5.1)) > 0.3) tier = yrel > 0.88 ? 0.5 : (yrel > 0.7 ? 0.78 : 1.0);   // set-backs near the top
+    float w = hw * tier;
+    float inside = smoothstep (w + aa, w - aa, abs (fx - bc)) * smoothstep (hgt + aay, hgt - aay, uv.y);
+    // antenna / spire with a blinking red aviation light
+    float ah = hash12 (vec2 (id, l + 6.2));
+    if (ah > 0.5)
+    {
+        float axp = bc + (hash12 (vec2 (id, 6.9)) - 0.5) * w;
+        float top = hgt + (0.03 + 0.09 * ah) * (0.6 + 0.15 * l);
+        float ant = smoothstep (1.3 * aa, 0.4 * aa, abs (fx - axp)) * step (hgt - 0.01, uv.y) * step (uv.y, top);
+        inside = max (inside, ant * 0.9);
+        float blink = smoothstep (0.0, 0.1, fract (uTime * 0.5 + ah * 3.0)) * smoothstep (0.45, 0.25, fract (uTime * 0.5 + ah * 3.0));
+        float dpx = length (vec2 ((fx - axp) * cw, uv.y - top)) * uRes.y;
+        glowAdd += vec3 (1.0, 0.12, 0.08) * blink * (smoothstep (3.0, 0.5, dpx) * 1.5 + exp (-dpx * 0.08) * 0.25);
+    }
+    if (inside <= 0.0) return vec4 (0.0);
+    // facade: a lit face and a face in shadow (volume), vertical ribs, floor bands
+    float corner = bc - w + 2.0 * w * (0.3 + 0.4 * hash12 (vec2 (id, l + 7.7)));
+    float lit = smoothstep (corner + aa, corner - aa, fx);
+    vec3 face = mix (vec3 (0.016, 0.018, 0.035), vec3 (0.06, 0.055, 0.1), lit);
+    float ncol = 7.0 + floor (10.0 * hash12 (vec2 (id, l + 8.1))) + 3.0 * l;
+    float u = (fx - (bc - w)) / (2.0 * w) * ncol;
+    float floorH = (0.0048 + 0.0011 * l) * (0.85 + 0.3 * hash12 (vec2 (id, 9.3)));
+    float v = (uv.y - ground) / floorH;
+    vec2 wc = floor (vec2 (u, v)), wf = fract (vec2 (u, v));
+    face *= 0.85 + 0.15 * step (0.88, fract (u)) + 0.08 * step (0.9, wf.y);
+    // windows: lit in clusters of rooms and floors; tungsten, fluorescent and the odd flickering screen
+    float cluster = noise (wc * vec2 (0.4, 0.23) + vec2 (id * 3.1, l * 7.0));
+    float litW = step (0.5 + 0.015 * l, cluster) * step (0.35, hash12 (wc + id * 1.37 + l)) * (0.55 + 0.45 * hash12 (wc * 3.1 + id));
+    float hh = hash12 (wc * 1.7 + id);
+    vec3 wcol = hh < 0.6 ? vec3 (1.0, 0.72, 0.42) : (hh < 0.9 ? vec3 (0.75, 0.9, 1.0) : vec3 (0.45, 0.65, 1.0) * (0.6 + 0.4 * noise (vec2 (uTime * 7.0, hh * 50.0))));
+    float mask = smoothstep (0.18, 0.3, wf.x) * smoothstep (0.82, 0.7, wf.x) * smoothstep (0.22, 0.34, wf.y) * smoothstep (0.8, 0.68, wf.y);
+    mask = mix (0.45, mask, clamp (floorH * uRes.y / 4.0, 0.0, 1.0));   // windows smaller than a few pixels: average them
+    vec3 c = face + wcol * litW * mask * (0.75 - 0.08 * l) * (0.55 + 0.45 * lit) * (1.0 - 0.6 * smoothstep (0.86, 1.0, yrel));
+    // the building's own sign
+    vec2 lo, hi; vec3 sc; float kind, on;
+    if (signOf (id, l, ground, lo, hi, sc, kind, on) && fx > lo.x && fx < hi.x && uv.y > lo.y && uv.y < hi.y)
+    {
+        vec2 g = (vec2 (fx, uv.y) - lo) / (hi - lo);
+        if (kind > 0.5)   // holographic billboard: drifting colour, scanlines, a soft face of light
+        {
+            float img = fbm3 (g * vec2 (3.0, 1.5) + vec2 (uTime * 0.12, sin (uTime * 0.2)) + id);
+            vec3 hc = mix (sc, signColour (fract (hash12 (vec2 (id, 2.2)) * 5.0)), smoothstep (0.35, 0.75, img));
+            c = hc * (0.75 + 0.25 * sin (uv.y * uRes.y * 2.2)) * (0.45 + 0.7 * img) * on * 0.9 * (0.85 + 0.15 * noise (vec2 (uTime * 3.0, id)));
+        }
+        else
+        {
+            float cellH = (hi.x - lo.x) * cw * 1.25;
+            float gy = (uv.y - lo.y) / cellH;
+            float gl = glyph (vec2 (g.x, fract (gy)), floor (gy) + id * 3.7 + l);
+            c = mix (vec3 (0.02, 0.01, 0.03), sc * 1.7, gl * on) + sc * 0.08 * on;
+        }
+    }
+    return vec4 (c, inside);
 }
 vec3 scene (vec2 uv)
 {
     float L = uLight, asp = uRes.x / uRes.y;
     vec2 p = vec2 (uv.x * asp, uv.y);
-    vec3 glowC = mix (vec3 (0.75, 0.32, 0.18), vec3 (0.55, 0.15, 0.45), 0.5 + 0.5 * sin (uTime * 0.05));
-    vec3 col = mix (glowC * (0.35 + 0.35 * L), vec3 (0.012, 0.016, 0.04), pow (uv.y, 0.7));
-    col += glowC * 0.25 * fbm (vec2 (p.x * 1.2 + uTime * 0.01, uv.y * 3.0) + S) * (1.0 - uv.y);   // smog
-    // searchlights (Shimmer)
+    float ground = 0.16;
+    vec3 glowC = mix (vec3 (0.85, 0.36, 0.16), vec3 (0.6, 0.16, 0.5), 0.5 + 0.5 * sin (uTime * 0.05));
+    // sky: the city glow from below, black above
+    vec3 col = mix (glowC * (0.32 + 0.3 * L), vec3 (0.008, 0.01, 0.025), pow (clamp ((uv.y - ground) / 0.9, 0.0, 1.0), 0.55));
+    // low clouds lit from beneath by the city
+    float cl = fbm (vec2 (p.x * 1.2 + uTime * 0.006, uv.y * 3.2 - uTime * 0.002) + S);
+    float cd = smoothstep (0.42, 0.82, cl) * smoothstep (0.42, 0.72, uv.y);
+    vec3 cloudC = glowC * (0.25 + 0.35 * L) * (1.3 - uv.y) + vec3 (0.02, 0.02, 0.04);
+    col = mix (col, cloudC, cd * 0.85);
+    // searchlights sweeping, brighter where they hit the clouds (Shimmer)
     for (int b = 0; b < 3; b++)
     {
         float fb = float (b);
-        float bx = asp * (0.2 + 0.3 * fb), ang = sin (uTime * (0.11 + 0.04 * fb) + fb * 2.0) * 0.5;
+        float bx = asp * (0.18 + 0.32 * fb), ang = sin (uTime * (0.09 + 0.035 * fb) + fb * 2.0) * 0.5;
         vec2 dir = vec2 (sin (ang), cos (ang));
-        vec2 rp = p - vec2 (bx, 0.1);
+        vec2 rp = p - vec2 (bx, ground + 0.15);
         float along = dot (rp, dir), across = abs (rp.x * dir.y - rp.y * dir.x);
-        col += vec3 (0.8, 0.92, 1.0) * exp (-across * (60.0 / (0.3 + max (along, 0.0))))   /* behind the lamp 'along' < 0 gave inf * 0 = NaN: black wedges */ * step (0.0, along) * 0.12 * (0.3 + uPres[3]);
+        float beam = exp (-across * (55.0 / (0.3 + max (along, 0.0)))) * step (0.0, along);
+        col += vec3 (0.8, 0.9, 1.0) * beam * (0.06 + 0.3 * cd) * (0.3 + uPres[3]);
     }
-    // three layers of skyline, far to near, with atmospheric fog
+    // spinners: flying cars far away, white lights and a red blink, one closer with a headlight
+    for (int k = 0; k < 5; k++)
+    {
+        float fk = float (k);
+        float dirk = hash12 (vec2 (fk, 1.1)) < 0.5 ? -1.0 : 1.0;
+        float spd = (0.006 + 0.012 * hash12 (vec2 (fk, 2.2))) * dirk;
+        vec2 cp = vec2 (fract (hash12 (vec2 (fk, 3.3)) + uTime * spd) * (asp + 0.4) - 0.2, 0.5 + 0.38 * hash12 (vec2 (fk, 4.4)) + 0.01 * sin (uTime * 0.3 + fk));
+        float near = fk == 0.0 ? 1.0 : 0.0;
+        float dpx = length ((p - cp) * vec2 (1.0, 1.6)) * uRes.y;
+        col += vec3 (1.0, 0.95, 0.85) * (smoothstep (2.2 + 2.0 * near, 0.4, dpx) + exp (-dpx * 0.12) * 0.2);
+        float blink = step (0.85, fract (uTime * 1.3 + fk * 0.37));
+        float dr = length ((p - cp - vec2 (-dirk * 0.006, 0.0))) * uRes.y;
+        col += vec3 (1.0, 0.1, 0.1) * blink * smoothstep (2.5, 0.3, dr);
+        if (near > 0.5)
+        {
+            vec2 rp = p - cp;
+            float cone = smoothstep (0.0, 0.02, rp.x * dirk) * exp (-abs (rp.y + rp.x * dirk * 0.35) * 60.0 / (0.05 + abs (rp.x)));
+            col += vec3 (0.8, 0.85, 1.0) * cone * 0.05 * smoothstep (0.4, 0.0, abs (rp.x));
+        }
+    }
+    // five layers of city, far to near, dissolving into luminous smog
     vec3 glowSum = vec3 (0.0);
-    for (int l = 0; l < 3; l++)
+    for (int l = 0; l < 5; l++)
     {
+        float fl = float (l);
         vec3 ga;
-        vec4 b = city (p, uv, float (l), ga);
-        float fog = 0.55 - 0.22 * float (l);
-        col = mix (col, mix (b.rgb, glowC * 0.4, fog), b.a);
-        glowSum += ga;
+        vec4 bl = city (p, uv, fl, ground, ga);
+        float fog = 0.84 - 0.17 * fl;
+        vec3 haze = glowC * (0.3 + 0.25 * L) * (1.15 - 0.6 * clamp ((uv.y - ground) * 1.5, 0.0, 1.0)) + vec3 (0.01, 0.01, 0.02);
+        col = mix (col, mix (bl.rgb, haze, fog), bl.a);
+        glowSum += ga * (1.0 - 0.6 * fog);
+        // smog between the layers
+        col = mix (col, haze, 0.08 * (1.0 - fl / 4.0) * smoothstep (0.6, ground, uv.y));
     }
-    col += glowSum * 0.9;
-    // wet street reflecting the signs
-    if (uv.y < 0.09)
+    col += glowSum * 0.55;
+    // wet street: stretched, rippled reflections of the near city and its signs, rain rings on the puddles
+    if (uv.y < ground)
     {
-        float rip = (fbm3 (vec2 (p.x * 30.0, uv.y * 80.0 - uTime)) - 0.5) * 0.02;
-        vec3 ga; vec4 b = city (vec2 (p.x + rip, 0.0), vec2 (uv.x, 0.18 - uv.y * 1.2), 2.0, ga);
-        col = vec3 (0.01, 0.012, 0.02) + ga * 0.45 + b.rgb * 0.15 + glowC * 0.08;
+        float dy = ground - uv.y;
+        float rip = (fbm3 (vec2 (p.x * 26.0, uv.y * 90.0 - uTime * 1.4)) - 0.5) * 0.018;
+        vec3 refl = vec3 (0.0), rg = vec3 (0.0);
+        for (int l = 2; l < 5; l++)
+        {
+            vec3 ga;
+            vec4 bl = city (vec2 (p.x + rip, 0.0), vec2 (uv.x, ground + dy * 3.2 + 0.004), float (l), ground, ga);
+            refl = mix (refl, bl.rgb, bl.a);
+            rg += ga;
+        }
+        vec3 asphalt = vec3 (0.012, 0.013, 0.02) * (0.7 + 0.6 * fbm (p * vec2 (40.0, 120.0)));
+        float wet = 0.55 + 0.35 * smoothstep (0.45, 0.6, fbm3 (vec2 (p.x * 6.0, uv.y * 30.0) + S));
+        col = asphalt + (refl * 0.45 + rg * 0.5 + glowC * 0.05) * wet * (1.0 - dy * 3.0);
+        vec2 rq = vec2 (p.x * 14.0, uv.y * 70.0);
+        vec2 rid = floor (rq), rf = fract (rq) - 0.5;
+        float rt = fract (uTime * 0.7 + hash12 (rid + S));
+        float ring = smoothstep (0.05, 0.0, abs (length (rf * vec2 (1.0, 2.2)) - rt * 0.45)) * (1.0 - rt) * step (0.6, hash12 (rid));
+        col += (glowSum * 0.5 + vec3 (0.05, 0.06, 0.08)) * ring * 0.5;
     }
-    // rain
-    for (int l = 0; l < 3; l++)   // far (fine, slow) to near (thicker, fast); every column has its own speed and phase
+    // rain, tinted by the neon around it
+    vec3 rainC = mix (vec3 (0.6, 0.72, 1.0), glowSum / (0.001 + max (max (glowSum.r, glowSum.g), glowSum.b)), clamp (length (glowSum) * 2.5, 0.0, 0.8));
+    for (int l = 0; l < 3; l++)
     {
         float fl = float (l);
         float cols = 150.0 - 40.0 * fl;
-        float cx = p.x * cols + uv.y * (5.0 + 3.0 * fl);              // slight slant
+        float cx = p.x * cols + uv.y * (5.0 + 3.0 * fl);
         float cid = floor (cx), fx = fract (cx);
         float h1 = hash12 (vec2 (cid, 3.0 + fl)), h2 = hash12 (vec2 (cid, 7.0 + fl));
-        float rate = (0.9 + 0.8 * h1) * (0.8 + 0.45 * fl);           // screen heights per second
+        float rate = (0.9 + 0.8 * h1) * (0.8 + 0.45 * fl);
         float tt = uv.y * (2.0 + h2) + uTime * rate * (2.0 + h2) + h2 * 17.0;
         float did = floor (tt), fy = fract (tt);
         float len = 0.16 + 0.12 * fl;
         float exists = step (0.62 - 0.08 * uPres[4], hash12 (vec2 (cid + 0.37, did + fl * 31.0)));
         float streak = exists * smoothstep (0.09 + 0.05 * fl, 0.0, abs (fx - 0.5)) * step (fy, len) * (1.0 - fy / len);
-        col += vec3 (0.6, 0.72, 1.0) * streak * (0.1 + 0.07 * fl) * (0.7 + 0.6 * uPres[4]);
+        col += rainC * streak * (0.05 + 0.045 * fl) * (0.7 + 0.6 * uPres[4]) * (0.6 + 1.0 * clamp (length (glowSum), 0.0, 1.0));
     }
-    // low fog (Wind)
-    col = mix (col, glowC * 0.55, uPres[4] * 0.35 * smoothstep (0.35, 0.0, uv.y) * fbm3 (vec2 (p.x * 2.0 - uMus * 0.02, uv.y * 4.0)));
+    // low fog rolling over the street (Wind)
+    col = mix (col, glowC * 0.5, uPres[4] * 0.35 * smoothstep (0.35, 0.0, uv.y) * fbm3 (vec2 (p.x * 2.0 - uMus * 0.02, uv.y * 4.0)));
     return col;
 }
 )GLSL";
