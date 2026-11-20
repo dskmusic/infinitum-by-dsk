@@ -226,6 +226,14 @@ void Landscape::paint (juce::Graphics& g)
     clip.addRoundedRectangle (b, fullBleed ? 0.0f : 10.0f);
     g.saveState();
     g.reduceClipRegion (clip);
+    flareAmt = 0;
+    {   // slow cinematic camera: a gentle push-in and drift (scene drawn 3-5 % larger, edges never show)
+        const float tt = (float) f.time;
+        const float z = 1.035f + 0.015f * std::sin (tt * 0.021f);
+        const float dx = std::sin (tt * 0.013f) * b.getWidth() * 0.008f, dy = std::sin (tt * 0.017f + 1.0f) * b.getHeight() * 0.006f;
+        g.saveState();
+        g.addTransform (juce::AffineTransform::scale (z, z, b.getCentreX(), b.getCentreY()).translated (dx, dy));
+    }
     switch (f.scene)
     {
         case scStarfield: paintStarfield (g, b); break;
@@ -236,6 +244,8 @@ void Landscape::paint (juce::Graphics& g)
         default: paintValley (g, b); break;
     }
     paintSparks (g);
+    g.restoreState();   // end of camera
+    paintPost (g, b);
     if (fadeFrom.isValid())
     {
         const float a = 1.0f - (float) ((f.time - fadeStart) / 1.2);
@@ -293,6 +303,7 @@ void Landscape::paintValley (juce::Graphics& g, juce::Rectangle<float> b)
         const bool sun = lt > 0.5f;
         const auto c = sun ? juce::Colour (0xffffd27a) : juce::Colour (0xffdfe6ff);
         const float rad = 15.0f + 8.0f * lt, gl = 90.0f + 110.0f * f.energy;
+        flarePos = { x, y }; flareCol = c; flareAmt = 0.6f + 0.4f * f.energy;
         g.setGradientFill (juce::ColourGradient (c.withAlpha (0.35f), x, y, c.withAlpha (0.0f), x + gl, y, true));
         g.fillEllipse (x - gl, y - gl, gl * 2, gl * 2);
         g.setColour (c);
@@ -637,23 +648,15 @@ void Landscape::paintUnderwater (juce::Graphics& g, juce::Rectangle<float> b)
         g.setColour (juce::Colour (0xffcffaff).withAlpha (a));
         g.drawLine (x, y, x + 10.0f + 8.0f * hashF ((uint32_t) i, 2103), y + 2.0f * std::sin ((float) i), 1.0f);
     }
-    // a whale crossing far away, once every ~90 s
+    // a whale crossing far away, once every ~90 s (humpback silhouette, slow tail beat, lost in the blue haze)
     {
-        const float period = 90.0f, slot = std::floor (t / period), ph = (t - slot * period) / 40.0f;
+        const float period = 90.0f, slot = std::floor (t / period), ph = (t - slot * period) / 45.0f;
         if (ph < 1.0f && hashF ((uint32_t) f.seed, (uint32_t) slot) < 0.8f)
         {
             const bool ltr = hashF ((uint32_t) slot, 7) < 0.5f;
-            const float x = ltr ? -w * 0.3f + ph * w * 1.6f : w * 1.3f - ph * w * 1.6f, y = h * (0.35f + 0.1f * hashF ((uint32_t) slot, 9));
-            const float L = w * 0.28f, dir = ltr ? 1.0f : -1.0f;
-            juce::Path wh;
-            wh.startNewSubPath (x + dir * L * 0.5f, y);
-            wh.quadraticTo (x + dir * L * 0.3f, y - L * 0.12f, x - dir * L * 0.2f, y - L * 0.06f);
-            wh.quadraticTo (x - dir * L * 0.45f, y - L * 0.02f, x - dir * L * 0.6f, y - L * 0.09f + std::sin (t * 0.8f) * L * 0.03f);
-            wh.lineTo (x - dir * L * 0.56f, y + L * 0.02f);
-            wh.quadraticTo (x - dir * L * 0.2f, y + L * 0.1f, x + dir * L * 0.5f, y);
-            wh.closeSubPath();
-            g.setColour (deep.withAlpha (0.35f));
-            g.fillPath (wh);
+            const float x = ltr ? -w * 0.35f + ph * w * 1.7f : w * 1.35f - ph * w * 1.7f, y = h * (0.32f + 0.12f * hashF ((uint32_t) slot, 9));
+            const float fade = juce::jmin (1.0f, juce::jmin (ph, 1.0f - ph) * 6.0f);
+            paintWhale (g, x, y, w * 0.34f, ltr ? 1.0f : -1.0f, t, mid.interpolatedWith (deep, 0.55f).withAlpha (0.55f * fade));
         }
     }
     // school of fish (Wind)
@@ -946,10 +949,11 @@ void Landscape::paintSparks (juce::Graphics& g)
         // in the Starfield, notes pass behind the planet
         if (f.scene == scStarfield && s.kind == 1 && planetPos.getDistanceFrom ({ s.x, s.y }) < planetR * 1.02f) continue;
         const float life = juce::jlimit (0.0f, 1.0f, s.life);
-        const float a = juce::jlimit (0.0f, 1.0f, (life * 1.4f) * (0.35f + 0.65f * pres[lyBells]));
+        const float k = noteStarIntensity();
+        const float a = juce::jlimit (0.0f, 1.0f, (life * 1.4f) * (0.35f + 0.65f * pres[lyBells])) * k;
         if (a < 0.01f) continue;
         const float tw = 0.75f + 0.25f * std::sin ((float) f.time * 6.0f + s.size * 13.0f);   // gentle twinkle
-        const float R = s.size * (2.2f + 1.2f * life);
+        const float R = s.size * (1.0f + 0.6f * life) * (0.5f + 0.9f * k);
         if (s.kind == 1) // comet: tapered, fading tail
         {
             const float len = 70.0f + 30.0f * life;
@@ -1061,6 +1065,7 @@ void Landscape::paintOcean (juce::Graphics& g, juce::Rectangle<float> b)
     const auto sc = sun ? juce::Colour (0xffffd27a) : juce::Colour (0xffe6ecff);
     {
         const float rad = 16.0f + 8.0f * lt, gl = 110.0f + 120.0f * f.energy;
+        flarePos = { sx, sy }; flareCol = sc; flareAmt = 0.7f + 0.4f * f.energy;
         softBlob (g, sx, sy, gl, gl, sc.withAlpha (0.35f));
         g.setColour (sc);
         g.fillEllipse (sx - rad, sy - rad, rad * 2, rad * 2);
@@ -1261,6 +1266,113 @@ void Landscape::paintAurora (juce::Graphics& g, juce::Rectangle<float> b)
         const float x = w * hashF ((uint32_t) i, 1601), y = horizon * (0.3f + 0.7f * hashF ((uint32_t) i, 1602));
         g.setColour (juce::Colour (0xffcff8ff).withAlpha (juce::jlimit (0.0f, 0.9f, ia * (0.5f + 0.5f * std::sin (t * 2.5f + (float) i)))));
         g.fillRect (x, y, 1.5f, 1.5f);
+    }
+}
+
+// ---- humpback whale silhouette, facing 'dir' (+1 right), length L
+void Landscape::paintWhale (juce::Graphics& g, float x, float y, float L, float dir, float t, juce::Colour body)
+{
+    const float sway = std::sin (t * 0.55f) * 0.035f;
+    auto P = [&] (float u, float v) { return juce::Point<float> (x + dir * u * L, y + v * L); };
+    juce::Path p;
+    p.startNewSubPath (P (0.50f, 0.01f));
+    p.cubicTo (P (0.48f, -0.07f), P (0.33f, -0.115f), P (0.12f, -0.12f));       // head and back
+    p.cubicTo (P (-0.10f, -0.125f), P (-0.28f, -0.075f), P (-0.40f, -0.025f + sway * 0.3f)); // back to the tail stock
+    p.cubicTo (P (-0.45f, -0.06f + sway), P (-0.52f, -0.11f + sway), P (-0.56f, -0.09f + sway)); // upper fluke
+    p.quadraticTo (P (-0.50f, -0.035f + sway), P (-0.47f, -0.005f + sway));
+    p.quadraticTo (P (-0.50f, 0.03f + sway), P (-0.56f, 0.07f + sway));             // lower fluke
+    p.cubicTo (P (-0.51f, 0.075f + sway), P (-0.45f, 0.035f + sway), P (-0.40f, 0.012f + sway * 0.3f));
+    p.cubicTo (P (-0.25f, 0.05f), P (-0.02f, 0.11f), P (0.20f, 0.10f));            // belly
+    p.cubicTo (P (0.36f, 0.095f), P (0.47f, 0.06f), P (0.50f, 0.01f));
+    p.closeSubPath();
+    // long pectoral fin (humpback signature), slowly flapping
+    const float flap = std::sin (t * 0.4f) * 0.04f;
+    juce::Path fin;
+    fin.startNewSubPath (P (0.24f, 0.075f));
+    fin.cubicTo (P (0.18f, 0.16f + flap), P (0.06f, 0.24f + flap), P (-0.02f, 0.26f + flap));
+    fin.cubicTo (P (0.06f, 0.20f + flap), P (0.14f, 0.13f), P (0.15f, 0.085f));
+    fin.closeSubPath();
+    const auto top = body.darker (0.4f), belly = body.brighter (0.25f);
+    g.setGradientFill (juce::ColourGradient (top, x, y - L * 0.12f, belly, x, y + L * 0.12f, false));
+    g.fillPath (p);
+    g.fillPath (fin);
+    // ventral grooves: a few faint lines under the jaw
+    g.setColour (belly.brighter (0.4f).withAlpha (body.getFloatAlpha() * 0.35f));
+    for (int k = 0; k < 4; ++k)
+    {
+        juce::Path gr;
+        gr.startNewSubPath (P (0.45f, 0.035f + 0.012f * (float) k));
+        gr.quadraticTo (P (0.33f, 0.07f + 0.012f * (float) k), P (0.18f, 0.08f + 0.01f * (float) k));
+        g.strokePath (gr, juce::PathStrokeType (0.8f));
+    }
+    // sunlight on the back
+    g.setColour (juce::Colour (0xffbff4ff).withAlpha (body.getFloatAlpha() * 0.25f));
+    juce::Path rim;
+    rim.startNewSubPath (P (0.46f, -0.05f));
+    rim.cubicTo (P (0.33f, -0.11f), P (0.12f, -0.12f), P (-0.10f, -0.115f));
+    g.strokePath (rim, juce::PathStrokeType (1.2f));
+}
+
+// ---- cinematic finish: anamorphic flare, colour grade, foreground bokeh, film grain
+void Landscape::paintPost (juce::Graphics& g, juce::Rectangle<float> b)
+{
+    const float w = b.getWidth(), h = b.getHeight(), t = (float) f.time;
+    // anamorphic flare: a long thin horizontal streak through the sun / moon + two soft ghosts
+    if (flareAmt > 0.01f)
+    {
+        const auto fp = flarePos;
+        const float a = 0.18f * flareAmt;
+        juce::ColourGradient st (flareCol.withAlpha (0.0f), fp.x - w * 0.45f, fp.y, flareCol.withAlpha (0.0f), fp.x + w * 0.45f, fp.y, false);
+        st.addColour (0.5, flareCol.brighter (0.6f).withAlpha (a));
+        g.setGradientFill (st);
+        g.fillRect (fp.x - w * 0.45f, fp.y - 1.2f, w * 0.9f, 2.4f);
+        st.addColour (0.5, flareCol.withAlpha (a * 0.4f));
+        g.setGradientFill (st);
+        g.fillRect (fp.x - w * 0.3f, fp.y - 6.0f, w * 0.6f, 12.0f);
+        const auto c = b.getCentre();
+        for (int k = 1; k <= 2; ++k)   // ghosts mirrored through the centre
+        {
+            const float u = 0.6f * (float) k;
+            const float gx = fp.x + (c.x - fp.x) * (1.0f + u), gy = fp.y + (c.y - fp.y) * (1.0f + u);
+            softBlob (g, gx, gy, 18.0f * (float) k, 18.0f * (float) k, flareCol.withAlpha (0.05f * flareAmt));
+        }
+    }
+    // colour grade: cool shadows below, warm air above (very light, unifies every scene)
+    {
+        juce::ColourGradient cg (juce::Colour (0xffffb27a).withAlpha (0.045f), 0, 0, juce::Colour (0xff1c6b8a).withAlpha (0.07f), 0, h, false);
+        cg.addColour (0.5, juce::Colours::transparentBlack);
+        g.setGradientFill (cg);
+        g.fillRect (b);
+    }
+    // foreground bokeh: big out-of-focus specks drifting slowly in front of the scene
+    if (! f.reduced)
+        for (int i = 0; i < 9; ++i)
+        {
+            const float sp = 4.0f + 6.0f * hashF ((uint32_t) i, 4001);
+            const float x = std::fmod (w * hashF ((uint32_t) f.seed, (uint32_t) i + 4002) + t * sp, w * 1.3f) - w * 0.15f;
+            const float y = h * hashF ((uint32_t) f.seed, (uint32_t) i + 4003) + std::sin (t * 0.2f + (float) i) * 12.0f;
+            const float r = h * (0.04f + 0.06f * hashF ((uint32_t) i, 4004));
+            const float a = (0.025f + 0.035f * hashF ((uint32_t) i, 4005)) * (0.6f + 0.6f * f.energy);
+            const auto c = (i % 3 == 0 ? col::accent2 : i % 3 == 1 ? juce::Colours::white : col::accent);
+            softBlob (g, x, y, r, r, c.withAlpha (a));
+        }
+    // film grain (static tile, jittered every frame)
+    {
+        if (! grain.isValid())
+        {
+            grain = juce::Image (juce::Image::ARGB, 192, 192, true);
+            juce::Random r (99);
+            for (int y = 0; y < 192; ++y)
+                for (int x = 0; x < 192; ++x)
+                {
+                    const auto v = (juce::uint8) r.nextInt (256);
+                    grain.setPixelAt (x, y, juce::Colour (v, v, v, (juce::uint8) 5));
+                }
+        }
+        const int ox = (int) (hashF ((uint32_t) (t * 24.0f), 1) * 192.0f), oy = (int) (hashF ((uint32_t) (t * 24.0f), 2) * 192.0f);
+        for (int y = -oy; y < (int) h; y += 192)
+            for (int x = -ox; x < (int) w; x += 192)
+                g.drawImageAt (grain, x, y);
     }
 }
 }

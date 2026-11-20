@@ -71,6 +71,7 @@ private:
     std::vector<juce::RangedAudioParameter*> paramPtrs;
     std::vector<float> snapshot;
     std::atomic<bool> playRequested { false }, hostPlaying { false }, switchRequested { false };
+    bool standaloneStateSkipped = false;
     enum class Duck { None, Out, In } duck = Duck::None;
     float duckGain = 1.0f, lastPeak = 0.0f;
     juce::AbstractFifo scopeFifo { 32768 };

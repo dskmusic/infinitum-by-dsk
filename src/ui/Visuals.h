@@ -119,8 +119,14 @@ private:
     std::vector<Sign> signs;
     juce::Point<float> arcology;
     juce::Image fadeFrom;   // previous picture during a scene / seed transition
+    juce::Image grain;      // film grain tile
+    juce::Point<float> flarePos; juce::Colour flareCol; float flareAmt = 0;   // anamorphic flare of the sun / moon
+    void paintPost (juce::Graphics&, juce::Rectangle<float>);
+    void paintWhale (juce::Graphics&, float x, float y, float L, float dir, float t, juce::Colour body);
     double fadeStart = 0;
 };
 
 juce::String chordName (int rootPc, int scale, int degree, float harmony); // "Am7", "Fmaj9"...
+// Visual intensity of the stars that appear with the notes (Settings, 0..1)
+inline float& noteStarIntensity() { static float v = 0.3f; return v; }
 }

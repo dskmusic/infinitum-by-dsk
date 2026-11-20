@@ -578,10 +578,16 @@ SettingsPage::SettingsPage (Context& c, std::function<void (float)> setScale, st
     historyLimit.setSliderStyle (juce::Slider::LinearHorizontal);
     historyLimit.setTextBoxStyle (juce::Slider::TextBoxRight, false, 60, 20);
     historyLimit.onValueChange = [this] { ctx.settings.setHistoryLimit ((int) historyLimit.getValue()); };
+    starAmount.setRange (0.0, 1.0, 0.01);
+    starAmount.setValue (ctx.settings.noteStars(), juce::dontSendNotification);
+    starAmount.setSliderStyle (juce::Slider::LinearHorizontal);
+    starAmount.setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
+    starAmount.setTooltip (L ("Cuánto destacan las estrellas que aparecen con las notas en los paisajes (0 = ocultas)", "How much the stars that appear with the notes stand out (0 = hidden)"));
+    starAmount.onValueChange = [this] { noteStarIntensity() = (float) starAmount.getValue(); ctx.settings.setNoteStars ((float) starAmount.getValue()); };
     openFolder.onClick = [] { Library::defaultRoot().startAsProcess(); };
     clearLearn.onClick = [this] { ctx.proc.clearMidiLearn(); if (ctx.toast) ctx.toast (L ("Asignaciones MIDI Learn borradas", "MIDI Learn assignments cleared")); };
     aboutBtn.onClick = std::move (showAbout);
-    for (auto* comp : std::initializer_list<juce::Component*> { &scaleBox, &animBox, &langBox, &aiMsgs, &preview, &historyLimit, &openFolder, &clearLearn, &aboutBtn })
+    for (auto* comp : std::initializer_list<juce::Component*> { &scaleBox, &animBox, &langBox, &aiMsgs, &preview, &historyLimit, &starAmount, &openFolder, &clearLearn, &aboutBtn })
         addAndMakeVisible (comp);
 }
 
@@ -591,7 +597,7 @@ void SettingsPage::paint (juce::Graphics& g)
     drawPanel (g, r);
     g.setColour (col::text);
     g.setFont (font (13.0f, true));
-    const juce::String labels[] { L ("Tamaño de la interfaz", "Interface size"), L ("Animaciones", "Animations"), "Idioma / Language", "", "", L ("Límite del historial del generador", "Generator history limit") };
+    const juce::String labels[] { L ("Tamaño de la interfaz", "Interface size"), L ("Animaciones", "Animations"), "Idioma / Language", "", "", L ("Límite del historial del generador", "Generator history limit"), L ("Estrellas de las notas", "Note stars") };
     auto rows = getLocalBounds().reduced (28, 28).removeFromLeft (640);
     for (auto& l : labels) { g.drawText (l, rows.removeFromTop (40), juce::Justification::centredLeft); }
     rows.removeFromTop (70);
@@ -612,6 +618,7 @@ void SettingsPage::resized()
     aiMsgs.setBounds (rows.removeFromTop (40).reduced (0, 8));
     preview.setBounds (rows.removeFromTop (40).reduced (0, 8));
     historyLimit.setBounds (row());
+    starAmount.setBounds (row());
     rows.removeFromTop (16);
     auto b = rows.removeFromTop (34);
     openFolder.setBounds (b.removeFromLeft (200).reduced (2));

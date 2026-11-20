@@ -28,6 +28,8 @@ public:
         if (s == "en" || s == "es") return s;
         return juce::SystemStats::getUserLanguage().startsWithIgnoreCase ("es") || juce::SystemStats::getDisplayLanguage().startsWithIgnoreCase ("es") ? "es" : "en";
     }
+    float noteStars() const { return (float) props->getDoubleValue ("noteStars", 0.3); }
+    void setNoteStars (float v) { props->setValue ("noteStars", v); props->saveIfNeeded(); }
     bool previewOnSelect() const { return props->getBoolValue ("preview", true); }
     void setPreviewOnSelect (bool b) { props->setValue ("preview", b); props->saveIfNeeded(); }
     juce::PropertiesFile& file() { return *props; }

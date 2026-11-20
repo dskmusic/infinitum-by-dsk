@@ -454,13 +454,11 @@ int runVideo (int argc, char** argv)
                "Exporta audio de hasta 3 horas o un MP4 del paisaje", "modo Dormir · temporizador · 432 Hz · sincronía con el tempo");
     d.click (d.button ("EXPORT"), 3.4);
 
-    // ---- closing highlight: Rising Citadel
-    d.caption ("Rising Citadel", "Cinematic · Epic", "Rising Citadel", "Cine · Épico");
+    // ---- the finale: Rising Citadel over the neon city
+    d.caption ("Follows your DAW. Bounces match playback.", "VST3 · AU · Standalone", "Sigue a tu DAW: lo que exportas suena igual que lo que oíste", "");
     d.loadName ("Rising Citadel");
     d.click (d.button ("LANDSCAPE"), 0.3);
-    d.click (d.button ("Valley"), 3.5);
-    d.caption ("Follows your DAW. Bounces match playback.", "VST3 · AU · Standalone", "Sigue a tu DAW: lo que exportas suena igual que lo que oíste", "");
-    d.wait (4.5);
+    d.click (d.button ("Neon Rain"), 6.0);
     d.clearCaption();
     d.wait (1.5);
     d.proc.setParamPlain (P::fadeOut, 3.0f);

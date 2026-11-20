@@ -1,5 +1,9 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#if __has_include(<BinaryData.h>)
+ #include <BinaryData.h>
+ #define GX_HAS_BINARYDATA 1
+#endif
 
 InfinitumProcessor::InfinitumProcessor()
     : AudioProcessor (BusesProperties().withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
@@ -12,6 +16,18 @@ InfinitumProcessor::InfinitumProcessor()
     }
     clearMidiLearn();
     snapshot.assign (raw.size(), 0.0f);
+#if GX_HAS_BINARYDATA
+    // every new instance starts with a random factory preset (and its landscape); a saved project / state replaces it
+    int size = 0;
+    if (auto* data = BinaryData::getNamedResource ("factory_infinitumbank", size))
+        if (auto* arr = juce::JSON::parse (juce::String::fromUTF8 (data, size)).getProperty ("presets", {}).getArray(); arr != nullptr && ! arr->isEmpty())
+        {
+            auto p = gx::Preset::fromVar ((*arr)[juce::Random::getSystemRandom().nextInt (arr->size())]);
+            for (int i = 0; i < gx::P::numParams; ++i)
+                if (auto* prm = paramPtrs[(size_t) i]) prm->setValueNotifyingHost (prm->convertTo0to1 (p.params[(size_t) i]));
+            currentMeta = p.meta;
+        }
+#endif
 }
 
 InfinitumProcessor::~InfinitumProcessor() = default;
@@ -131,6 +147,8 @@ void InfinitumProcessor::getStateInformation (juce::MemoryBlock& mb)
 
 void InfinitumProcessor::setStateInformation (const void* data, int size)
 {
+    // the Standalone opens with a fresh random preset each time instead of the last session
+    if (wrapperType == juce::AudioProcessor::wrapperType_Standalone && ! standaloneStateSkipped) { standaloneStateSkipped = true; return; }
     gx::Preset p;
     const auto text = juce::String::fromUTF8 (static_cast<const char*> (data), size);
     if (gx::Preset::fromJson (text, p))

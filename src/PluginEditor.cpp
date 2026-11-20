@@ -21,6 +21,7 @@ InfinitumEditor::InfinitumEditor (InfinitumProcessor& p)
       frames (p)
 {
     gx::uiEnglish() = settings.messageLanguage() == "en"; // before any page builds its labels
+    gx::ui::noteStarIntensity() = settings.noteStars();
     setLookAndFeel (&lnf);
     juce::LookAndFeel::setDefaultLookAndFeel (&lnf);
     ctx.toast = [this] (const juce::String& m) { toast (m); };
