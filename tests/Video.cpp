@@ -376,69 +376,65 @@ int runVideo (int argc, char** argv)
     d.card (false, 0.0, 3.4, 0.9);
 
     // ---- landscape + macros
-    d.caption ("A landscape of sound that never repeats", "Six layers drift in and out on their own",
-               "Un paisaje sonoro que nunca se repite", "seis capas que entran y salen solas");
+    d.caption ("A landscape of sound that never repeats", "Seven layers drift in and out on their own",
+               "Un paisaje sonoro que nunca se repite", "siete capas que entran y salen solas");
     d.wait (3.0);
     d.caption ("Light: from deep night to midday", "", "Luz: de noche cerrada a mediodía");
     d.turn (P::light, 0.85f, 2.2);
-    d.turn (P::light, 0.25f, 2.0);
+    d.turn (P::light, 0.3f, 2.0);
     d.caption ("Evolution, Density, Space", "Four big macros shape the whole journey", "Evolución, Densidad, Espacio", "cuatro macros grandes dan forma al viaje");
-    d.turn (P::evolution, 0.8f, 1.4);
+    d.turn (P::evolution, 0.75f, 1.4);
     d.turn (P::space, 0.95f, 1.4);
-    d.wait (1.0);
+    d.wait (0.8);
 
-    // ---- scenes
-    d.caption ("Six living landscapes", "Valley · Starfield · Nebula · Neon Rain · Ocean · Aurora", "Seis paisajes vivos", "Valle · Campo estelar · Nebulosa · Neón · Océano · Aurora");
+    // ---- landscapes (every preset change dips smoothly: no clicks)
+    d.caption ("Six living landscapes", "Valley · Starfield · Underwater · Neon · Ocean · Aurora", "Seis paisajes vivos", "Valle · Campo estelar · Bajo el agua · Neón · Océano · Aurora");
+    d.load ("Deep Blue");
+    d.click (d.button ("Underwater"), 4.0);
+    d.load ("Celestial");
+    d.click (d.button ("Aurora"), 3.4);
     d.load ("Deep Space");
-    d.click (d.button ("Starfield"), 2.6);
-    d.load ("Alien");
-    d.click (d.button ("Nebula"), 2.6);
+    d.click (d.button ("Starfield"), 3.0);
 
     // ---- neo-noir
-    d.caption ("Rain-soaked neon nights", "Analog 80s pads, glassy bells, endless city rain", "Noches de neón bajo la lluvia", "pads analógicos de los 80, campanas de cristal y lluvia sin fin");
+    d.caption ("Neon nights", "Analog 80s pads, ensemble chorus, glassy bell phrases", "Noches de neón", "pads analógicos de los 80, chorus de ensemble y frases de campanas de cristal");
     d.load ("Neo-Noir", 1);
-    d.click (d.button ("Neon Rain"), 6.5);
+    d.click (d.button ("Neon Rain"), 6.0);
 
     // ---- derelict
     d.caption ("Or a derelict ship in deep space...", "", "O una nave abandonada en el espacio...");
     d.load ("Derelict", 2);
-    d.click (d.button ("Starfield"), 4.5);
+    d.click (d.button ("Starfield"), 4.0);
     d.caption ("Freeze the moment", "", "Congela el momento");
     d.click (d.button ("FREEZE"), 2.4);
     d.click (d.button ("FREEZE"), 0.6);
 
     // ---- sound page
-    d.caption ("Drone · Pad · Texture · Shimmer · Wind · Bells", "Spectral Mutation drone, granular clouds and shimmer up front",
-               "Drone · Pad · Textura · Shimmer · Viento · Campanas", "drone Spectral Mutation, nubes granulares y shimmer en primer plano");
-    d.load ("Glow");
-    d.click (d.button ("SOUND"), 4.2);
+    d.caption ("Drone · Pad · Texture · Shimmer · Wind · Bells · Bass", "Noise generator: pink, brown, white, ocean waves, vinyl",
+               "Drone · Pad · Textura · Shimmer · Viento · Campanas · Bajo", "generador de ruido: rosa, marrón, blanco, olas, vinilo");
+    d.load ("Golden Hour");
+    d.click (d.button ("SOUND"), 4.0);
 
     // ---- generator
-    d.caption ("Mood generator", "8 moods: Cinematic, Ambient, Meditation, Dark, Sci-Fi, Ethereal, Oceanic, Nostalgia", "Generador por estados de ánimo", "8 estados: Cine, Ambient, Meditación, Oscuro, Sci-Fi, Etéreo, Océano, Nostalgia");
+    d.caption ("12 moods, 256 presets", "Epic · Forest · Desert · Sleep · Ethereal · Oceanic · Nostalgia...", "12 estados de ánimo, 256 presets", "Épico · Bosque · Desierto · Dormir · Etéreo · Océano · Nostalgia...");
     d.click (d.button ("GENERATOR"), 0.4);
-    d.click (d.button ("Meditation", &d.ed->generatorPage()), 0.3);
+    d.click (d.button ("Epic", &d.ed->generatorPage()), 0.3);
     d.generate();
     d.wait (3.0);
-    d.click (d.button ("Sci-Fi", &d.ed->generatorPage()), 0.3);
+    d.click (d.button ("Forest", &d.ed->generatorPage()), 0.3);
     d.generate();
     d.wait (3.0);
 
-    // ---- presets
-    d.caption ("136 factory presets", "Tags, favourites, ratings, instant search", "136 presets de fábrica", "etiquetas, favoritos, valoraciones y búsqueda instantánea");
-    d.click (d.button ("PRESETS"), 0.4);
-    d.type (d.find<juce::TextEditor> (d.ed.get()), "ocean");
-    d.selectRow (d.find<juce::ListBox> (d.ed.get(), [] (juce::ListBox* l) { return l->getName() == "presets"; }), 1);
-    d.wait (3.0);
+    // ---- export
+    d.caption ("Export audio up to 3 hours, or an MP4 of the landscape", "Sleep mode · session timer · 432 Hz · tempo sync",
+               "Exporta audio de hasta 3 horas o un MP4 del paisaje", "modo Dormir · temporizador · 432 Hz · sincronía con el tempo");
+    d.click (d.button ("EXPORT"), 3.4);
 
-    // ---- export + session
-    d.caption ("Export up to 3 hours", "WAV · FLAC · OGG  -  session timer  -  432 Hz", "Exporta hasta 3 horas", "WAV · FLAC · OGG  -  temporizador  -  432 Hz");
-    d.click (d.button ("EXPORT"), 3.2);
-
-    // ---- back to the landscape, full of rain
+    // ---- back to the landscape
     d.caption ("Follows your DAW. Bounces match playback.", "VST3 · AU · Standalone", "Sigue a tu DAW: lo que exportas suena igual que lo que oíste", "");
-    d.load ("Neo-Noir", 4);
+    d.load ("Shoreline");
     d.click (d.button ("LANDSCAPE"), 0.3);
-    d.click (d.button ("Neon Rain"), 4.5);
+    d.click (d.button ("Ocean"), 4.5);
     d.clearCaption();
     d.wait (1.0);
     d.proc.setParamPlain (P::fadeOut, 3.0f);

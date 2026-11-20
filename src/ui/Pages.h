@@ -1,5 +1,6 @@
 #pragma once
 #include "Visuals.h"
+#include "VideoExport.h"
 #include <thread>
 
 namespace gx::ui
@@ -91,6 +92,10 @@ private:
     juce::TextButton fullscreen;
     PlayButton play;
     ParamToggle freeze;
+    juce::OwnedArray<juce::TextButton> memButtons;
+    void recallMemory (int slot);
+    void storeMemory (int slot);
+    struct Morph { std::vector<float> from, to; double start = -1; bool switched = false; } morph;
     juce::Label seedLabel;
     juce::TextButton dice { L ("Nueva semilla", "New seed") }, seedPrev { "<" }, seedNext { ">" };
     Box harmony, macros, session;
@@ -115,6 +120,19 @@ private:
     double lastT = 0, helpUntil = 6.0, toastUntil = 0;
     bool helpPinned = false;
     juce::String toastText;
+};
+
+// Help: a short, friendly guide (both languages).
+class HelpPage : public Page
+{
+public:
+    explicit HelpPage (Context& c);
+    void resized() override;
+    void paint (juce::Graphics&) override;
+private:
+    struct Body : public juce::Component { void paint (juce::Graphics&) override; int layoutHeight (int width); };
+    juce::Viewport view;
+    Body body;
 };
 
 // Layer strips + master effects.
@@ -192,10 +210,13 @@ public:
     ~ExportPage() override;
     void resized() override;
     void paint (juce::Graphics&) override;
-    bool isBusy() const { return busy.load(); }
+    bool isBusy() const { return busy.load() || video.running(); }
 private:
     void timerCallback() override;
     void start();
+    void startVideo();
+    void updateFfmpegStatus();
+    void installFfmpeg();
     juce::ComboBox duration, format, rate;
     juce::TextButton exportAudio { L ("Exportar audio…", "Export audio…") }, cancel { L ("Cancelar", "Cancel") };
     juce::TextButton exportPreset { L ("Exportar preset .infinitum", "Export .infinitum preset") }, importPreset { L ("Importar preset o banco", "Import preset or bank") };
@@ -206,6 +227,15 @@ private:
     juce::String result, status;
     juce::File target;
     double startedAt = 0;
+    // video
+    juce::ComboBox vDuration, vRes;
+    juce::TextButton exportVideo { L ("Exportar vídeo…", "Export video…") }, cancelVideo { L ("Cancelar", "Cancel") },
+                     ffmpegInstall { L ("Instalar ffmpeg", "Install ffmpeg") }, ffmpegChoose { L ("Elegir ffmpeg…", "Choose ffmpeg…") };
+    VideoExporter video;
+    juce::File ffmpeg, videoTarget;
+    juce::String videoStatus;
+    std::unique_ptr<juce::ChildProcess> installer;
+    double videoStart = 0;
 };
 
 class SettingsPage : public Page

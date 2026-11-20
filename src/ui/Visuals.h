@@ -87,13 +87,14 @@ public:
     void paint (juce::Graphics&) override;
     void resized() override { cacheKey = {}; }
     bool showOverlay = true;                 // chord / key / clock texts
+    bool fullBleed = false;                  // no rounded corners (full screen, video)
     std::function<void()> onClick;
     void mouseUp (const juce::MouseEvent& e) override { if (onClick && e.mouseWasClicked()) onClick(); }
 private:
     struct Spark { float x, y, vx, vy, life, size; juce::Colour c; int kind; };
     void paintValley (juce::Graphics&, juce::Rectangle<float>);
     void paintStarfield (juce::Graphics&, juce::Rectangle<float>);
-    void paintNebula (juce::Graphics&, juce::Rectangle<float>);
+    void paintUnderwater (juce::Graphics&, juce::Rectangle<float>);
     void paintNeon (juce::Graphics&, juce::Rectangle<float>);
     void paintOcean (juce::Graphics&, juce::Rectangle<float>);
     void paintAurora (juce::Graphics&, juce::Rectangle<float>);
@@ -117,6 +118,8 @@ private:
     struct Sign { juce::Rectangle<float> r; juce::Colour c; float phase; int layer; };
     std::vector<Sign> signs;
     juce::Point<float> arcology;
+    juce::Image fadeFrom;   // previous picture during a scene / seed transition
+    double fadeStart = 0;
 };
 
 juce::String chordName (int rootPc, int scale, int degree, float harmony); // "Am7", "Fmaj9"...

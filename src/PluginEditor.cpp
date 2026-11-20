@@ -72,9 +72,10 @@ void InfinitumEditor::buildUi()
     generator = std::make_unique<gx::ui::GeneratorPage> (ctx);
     presets = std::make_unique<gx::ui::PresetsPage> (ctx);
     exportPage = std::make_unique<gx::ui::ExportPage> (ctx);
+    helpPage = std::make_unique<gx::ui::HelpPage> (ctx);
     settingsPage = std::make_unique<gx::ui::SettingsPage> (ctx, [this] (float s) { setUiScale (s); }, [this] { about->setVisible (true); about->toFront (false); });
     about = std::make_unique<gx::ui::AboutOverlay>();
-    pages = { landscapePage.get(), soundPage.get(), generator.get(), presets.get(), exportPage.get(), settingsPage.get() };
+    pages = { landscapePage.get(), soundPage.get(), generator.get(), presets.get(), exportPage.get(), settingsPage.get(), helpPage.get() };
     root.addAndMakeVisible (*header);
     for (auto* pg : pages) root.addChildComponent (pg);
     root.addChildComponent (*about);
@@ -103,7 +104,7 @@ void InfinitumEditor::rebuildUi()
     const auto genState = generator->uiState();
     const int page = currentPage;
     pages.clear();
-    header.reset(); landscapePage.reset(); soundPage.reset(); generator.reset(); presets.reset(); exportPage.reset(); settingsPage.reset(); about.reset();
+    header.reset(); landscapePage.reset(); soundPage.reset(); generator.reset(); presets.reset(); exportPage.reset(); helpPage.reset(); settingsPage.reset(); about.reset();
     buildUi();
     generator->setUiState (genState);
     resized();

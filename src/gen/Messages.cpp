@@ -38,6 +38,14 @@ const std::map<juce::String, std::pair<List, List>> byMood {
                    { "Measuring the tide…", "Counting waves…", "Diving to the seafloor…", "Lighting the lighthouse…", "Letting the foam breathe…", "Following the currents…" } } },
     { "Nostalgia", { { "Rebobinando una cinta vieja…", "Quitando el polvo al vinilo…", "Buscando una foto de verano…", "Calentando la radio del salón…", "Recordando una tarde dorada…", "Desafinando la cinta con cariño…" },
                      { "Rewinding an old tape…", "Dusting off the vinyl…", "Looking for a summer photo…", "Warming up the living-room radio…", "Remembering a golden afternoon…", "Wobbling the tape lovingly…" } } },
+    { "Epic", { { "Afinando cien metales graves…", "Levantando el telón del tráiler…", "Reuniendo al ejército de cuerdas…", "Encendiendo las antorchas…", "Midiendo el tamaño de la batalla…", "Preparando el crescendo final…" },
+                { "Tuning a hundred low brasses…", "Raising the trailer curtain…", "Gathering the army of strings…", "Lighting the torches…", "Measuring the size of the battle…", "Preparing the final crescendo…" } } },
+    { "Forest", { { "Escuchando a los pájaros…", "Dejando que el viento mueva las hojas…", "Buscando musgo blando…", "Siguiendo el arroyo…", "Contando luciérnagas…", "Abriendo un claro de luz…" },
+                  { "Listening to the birds…", "Letting the wind move the leaves…", "Looking for soft moss…", "Following the brook…", "Counting fireflies…", "Opening a clearing of light…" } } },
+    { "Desert", { { "Levantando dunas…", "Calentando el horizonte…", "Dibujando un espejismo…", "Guiando la caravana…", "Escuchando el viento seco…", "Buscando el oasis…" },
+                  { "Raising dunes…", "Heating the horizon…", "Drawing a mirage…", "Guiding the caravan…", "Listening to the dry wind…", "Looking for the oasis…" } } },
+    { "Sleep", { { "Bajando las luces…", "Mullendo la almohada…", "Respirando más despacio…", "Arropando cada nota…", "Apagando el ruido del día…", "Preparando dulces sueños…" },
+                 { "Dimming the lights…", "Fluffing the pillow…", "Breathing more slowly…", "Tucking in every note…", "Switching off the noise of the day…", "Preparing sweet dreams…" } } },
     { "Sci-Fi", { { "Estableciendo órbita…", "Recibiendo una señal lejana…", "Calibrando el reactor…", "Despresurizando la estación…", "Traduciendo un idioma alienígena…", "Saltando al hiperespacio…" },
                   { "Establishing orbit…", "Receiving a distant signal…", "Calibrating the reactor…", "Depressurising the station…", "Translating an alien language…", "Jumping to hyperspace…" } } },
 };
@@ -50,6 +58,10 @@ const std::map<juce::String, std::pair<List, List>> finals {
     { "Ethereal", { { "Listo. Deja que te eleve.", "La luz está lista." }, { "Ready. Let it lift you.", "The light is ready." } } },
     { "Oceanic", { { "El mar está listo. Escucha.", "Listo: marea alta." }, { "The sea is ready. Listen.", "Done: high tide." } } },
     { "Nostalgia", { { "Listo. Pulsa Play y recuerda.", "Tu cinta está lista." }, { "Done. Press Play and remember.", "Your tape is ready." } } },
+    { "Epic", { { "Listo para la batalla.", "Tu tráiler empieza ahora." }, { "Ready for battle.", "Your trailer starts now." } } },
+    { "Forest", { { "El bosque te espera.", "Listo: respira hondo." }, { "The forest is waiting.", "Done: breathe in deep." } } },
+    { "Desert", { { "El desierto está listo.", "Listo: sigue la caravana." }, { "The desert is ready.", "Done: follow the caravan." } } },
+    { "Sleep", { { "Listo. Que descanses.", "Buenas noches." }, { "Done. Rest well.", "Good night." } } },
     { "Sci-Fi", { { "Transmisión establecida.", "Listo para el despegue." }, { "Transmission established.", "Ready for lift-off." } } },
 };
 } // namespace

@@ -36,6 +36,20 @@ LandscapePage::LandscapePage (Context& c)
         b->onClick = [this, s] { ctx.proc.setParamPlain (P::scene, (float) s); };
         addAndMakeVisible (b);
     }
+    for (int m = 0; m < 8; ++m)
+    {
+        auto* b = memButtons.add (new juce::TextButton (juce::String (m + 1)));
+        b->setTooltip (L ("Memoria rápida: clic para recuperar (con fundido), clic derecho o Mayús+clic para guardar el sonido actual",
+                          "Quick memory: click to recall (with a crossfade), right-click or Shift+click to store the current sound"));
+        b->onClick = [this, m]
+        {
+            const auto mods = juce::ModifierKeys::getCurrentModifiersRealtime();
+            if (mods.isShiftDown() || mods.isPopupMenu() || ctx.proc.memories[(size_t) m].isVoid()) storeMemory (m);
+            else recallMemory (m);
+        };
+        b->getProperties().set ("small", true);
+        addAndMakeVisible (b);
+    }
     fullscreen.setButtonText (L ("Pantalla completa", "Full screen"));
     for (auto* b : sceneButtons) b->getProperties().set ("small", true);
     fullscreen.setTooltip (L ("Paisaje a pantalla completa (Esc para salir, H para ver los atajos)", "Full-screen landscape (Esc to exit, H for shortcuts)"));
@@ -66,8 +80,11 @@ LandscapePage::LandscapePage (Context& c)
     auto& oct = harmony.add<ParamKnob> (c, P::octave, L ("OCTAVA", "OCTAVE"), L ("Registro del drone y del pad", "Register of the drone and pad"));
     auto& harm = harmony.add<ParamKnob> (c, P::harmony, L ("ARMONÍA", "HARMONY"), L ("De quintas abiertas (0) a acordes de 7ª y 9ª (100 %)", "From open fifths (0) to 7th and 9th chords (100 %)"));
     auto& chords = harmony.add<ParamKnob> (c, P::chordRate, L ("ACORDES", "CHORDS"), L ("Cada cuánto cambia el acorde: de ~48 s a ~6 s", "How often the chord changes: ~48 s down to ~6 s"));
+    auto& sync = harmony.add<ParamToggle> (c, P::syncChords, L ("SINCRO TEMPO", "TEMPO SYNC"));
+    sync.setTooltip (L ("Cambia de acorde cada N compases del tempo de tu DAW (sin DAW: 120 BPM)", "Change chords every N bars of your DAW tempo (without a DAW: 120 BPM)"));
+    auto& bars = harmony.add<ParamCombo> (c, P::chordBars);
     for (auto* k : { &oct, &harm, &chords }) k->setAccent (col::accent3);
-    harmony.layout = [&keyL, &scaleL, &key, &scale, &oct, &harm, &chords] (juce::Rectangle<int> r)
+    harmony.layout = [&keyL, &scaleL, &key, &scale, &oct, &harm, &chords, &sync, &bars] (juce::Rectangle<int> r)
     {
         auto labels = r.removeFromTop (14);
         keyL.setBounds (labels.removeFromLeft (r.getWidth() * 2 / 5));
@@ -75,8 +92,11 @@ LandscapePage::LandscapePage (Context& c)
         auto row = r.removeFromTop (26);
         key.setBounds (row.removeFromLeft (r.getWidth() * 2 / 5).withTrimmedRight (6));
         scale.setBounds (row);
-        r.removeFromTop (8);
-        rowKnobs ({ &oct, &harm, &chords }, r, 110);
+        r.removeFromTop (4);
+        auto srow = r.removeFromBottom (22);
+        sync.setBounds (srow.removeFromLeft (srow.getWidth() / 2).withTrimmedLeft (4));
+        bars.setBounds (srow.reduced (2, 0));
+        rowKnobs ({ &oct, &harm, &chords }, r, 100);
     };
     addAndMakeVisible (harmony);
 
@@ -110,8 +130,10 @@ LandscapePage::LandscapePage (Context& c)
     midi.setTooltip (L ("Teclado MIDI: cambiar la tonalidad, tocar notas encima, o ambas", "MIDI keyboard: set the key, play notes on top, or both"));
     auto& timer = session.add<ParamKnob> (c, P::timer, L ("TEMPORIZADOR", "TIMER"), L ("Minutos hasta que se apague solo con un fundido (0 = sin límite)", "Minutes until it fades out and stops by itself (0 = no limit)"));
     auto& vol = session.add<ParamKnob> (c, P::master, L ("VOLUMEN", "VOLUME"));
+    auto& sleep = session.add<ParamToggle> (c, P::sleepMode, L ("MODO DORMIR", "SLEEP MODE"));
+    sleep.setTooltip (L ("Con el temporizador: el paisaje se oscurece, se calma y se apaga poco a poco hasta el silencio", "With the timer: the landscape darkens, calms down and slowly fades to silence"));
     for (auto* k : { &timer, &vol }) k->setAccent (col::accent2);
-    session.layout = [&tunL, &midiL, &tun, &midi, &timer, &vol] (juce::Rectangle<int> r)
+    session.layout = [&tunL, &midiL, &tun, &midi, &timer, &vol, &sleep] (juce::Rectangle<int> r)
     {
         auto labels = r.removeFromTop (14);
         tunL.setBounds (labels.removeFromLeft (r.getWidth() / 2));
@@ -119,15 +141,56 @@ LandscapePage::LandscapePage (Context& c)
         auto row = r.removeFromTop (26);
         tun.setBounds (row.removeFromLeft (r.getWidth() / 2).withTrimmedRight (6));
         midi.setBounds (row);
-        r.removeFromTop (8);
-        rowKnobs ({ &timer, &vol }, r, 110);
+        r.removeFromTop (4);
+        sleep.setBounds (r.removeFromBottom (22).withTrimmedLeft (4));
+        rowKnobs ({ &timer, &vol }, r, 100);
     };
     addAndMakeVisible (session);
+}
+
+void LandscapePage::storeMemory (int slot)
+{
+    ctx.proc.memories[(size_t) slot] = Preset::capture (ctx.proc).toVar();
+    if (ctx.toast) ctx.toast (L ("Guardado en la memoria ", "Stored in memory ") + juce::String (slot + 1));
+}
+
+// Recall: float parameters glide over 2 s; switches / choices change half-way, under a short dip (no clicks)
+void LandscapePage::recallMemory (int slot)
+{
+    const auto target = Preset::fromVar (ctx.proc.memories[(size_t) slot]);
+    morph.from = Preset::capture (ctx.proc).params;
+    morph.to = target.params;
+    morph.start = nowSeconds();
+    morph.switched = false;
+    ctx.proc.currentMeta.name = target.meta.name;
+    if (ctx.toast) ctx.toast (L ("Memoria ", "Memory ") + juce::String (slot + 1) + ": " + target.meta.name);
 }
 
 void LandscapePage::tick (const Frame& f)
 {
     Page::tick (f);
+    for (int m = 0; m < memButtons.size(); ++m)
+        memButtons[m]->setColour (juce::TextButton::buttonColourId, ctx.proc.memories[(size_t) m].isVoid() ? col::panelHi : col::accent3.withAlpha (0.55f));
+    if (morph.start >= 0)
+    {
+        const float k = (float) juce::jlimit (0.0, 1.0, (nowSeconds() - morph.start) / 2.0);
+        const float e = k * k * (3.0f - 2.0f * k);
+        const auto& defs = paramDefs();
+        if (k >= 0.5f && ! morph.switched)
+        {
+            morph.switched = true;
+            bool anyStep = false;
+            for (auto& d : defs) anyStep |= d.kind != pkFloat && morph.from[(size_t) d.index] != morph.to[(size_t) d.index];
+            if (anyStep) ctx.proc.beginPresetSwitch();
+            for (auto& d : defs) if (d.kind != pkFloat) ctx.proc.setParamPlain (d.index, morph.to[(size_t) d.index]);
+        }
+        for (auto& d : defs)
+            if (d.kind == pkFloat && d.index != P::master)
+                ctx.proc.setParamPlain (d.index, d.range.convertFrom0to1 (d.range.convertTo0to1 (morph.from[(size_t) d.index]) * (1.0f - e)
+                                                                          + d.range.convertTo0to1 (morph.to[(size_t) d.index]) * e));
+        ctx.proc.setParamPlain (P::master, morph.from[(size_t) P::master] + (morph.to[(size_t) P::master] - morph.from[(size_t) P::master]) * e);
+        if (k >= 1.0f) morph.start = -1;
+    }
     for (int s = 0; s < sceneButtons.size(); ++s) sceneButtons[s]->setToggleState (s == f.scene, juce::dontSendNotification);
     if (f.seed != lastSeed) { lastSeed = f.seed; seedLabel.setText (L ("SEMILLA ", "SEED ") + juce::String (f.seed), juce::dontSendNotification); }
 }
@@ -157,7 +220,13 @@ void LandscapePage::resized()
     harmony.setBounds (r.removeFromLeft (330));
     r.removeFromLeft (8);
     auto mid = r.removeFromLeft (250).reduced (10, 8);
-    play.setBounds (mid.removeFromTop (150).withSizeKeepingCentre (150, 150));
+    play.setBounds (mid.removeFromTop (116).withSizeKeepingCentre (116, 116));
+    mid.removeFromTop (4);
+    {
+        auto row = mid.removeFromTop (24);
+        const int bw = row.getWidth() / 8;
+        for (auto* b : memButtons) b->setBounds (row.removeFromLeft (bw).reduced (1, 0));
+    }
     mid.removeFromTop (6);
     auto seedRow = mid.removeFromTop (26);
     seedPrev.setBounds (seedRow.removeFromLeft (26));
@@ -177,20 +246,22 @@ void LandscapePage::resized()
 SoundPage::Strip::Strip (Context& c, int l) : Box (c, layerName (l), layerIds()[l]), layer (l)
 {
     accent = col::layer[l];
-    const juce::String tone[] { L ("BRILLO", "BRIGHT"), L ("FILTRO", "FILTER"), L ("TONO", "PITCH"), L ("BRILLO", "BRIGHT"), L ("COLOR", "COLOUR"), L ("CRISTAL", "GLASS") };
-    const juce::String chr[] { L ("MUTACIÓN", "MUTATION"), L ("ANALÓGICO", "ANALOG"), L ("GRANO", "GRAIN"), L ("QUINTA", "FIFTH"), L ("RÁFAGAS", "GUSTS"), L ("DENSIDAD", "DENSITY") };
+    const juce::String tone[] { L ("BRILLO", "BRIGHT"), L ("FILTRO", "FILTER"), L ("TONO", "PITCH"), L ("BRILLO", "BRIGHT"), L ("COLOR", "COLOUR"), L ("CRISTAL", "GLASS"), L ("FILTRO", "FILTER") };
+    const juce::String chr[] { L ("MUTACIÓN", "MUTATION"), L ("ANALÓGICO", "ANALOG"), L ("GRANO", "GRAIN"), L ("QUINTA", "FIFTH"), L ("RÁFAGAS", "GUSTS"), L ("DENSIDAD", "DENSITY"), L ("GRIT", "GRIT") };
     const juce::String toneTip[] { L ("Brillo del espectro en mutación", "Brightness of the mutating spectrum"),
                                    L ("Apertura del filtro del pad", "Pad filter opening"),
                                    L ("Grave: granos a la octava; agudo: quintas y octavas arriba", "Low: octave grains; high: fifths and octaves above"),
                                    L ("Brillo de la cola de shimmer", "Brightness of the shimmer tail"),
                                    L ("Altura del viento: de un rumor grave a un silbido", "Wind pitch: from a low rumble to a whistle"),
-                                   L ("De campanas suaves a cristal brillante (índice FM)", "From soft bells to bright glass (FM index)") };
+                                   L ("De campanas suaves a cristal brillante (índice FM)", "From soft bells to bright glass (FM index)"),
+                                   L ("Apertura del filtro del bajo", "Bass filter opening") };
     const juce::String chrTip[] { L ("Velocidad y caos con que mutan los armónicos", "Speed and chaos of the harmonic mutation"),
                                   L ("Carácter analógico de los 80: desafinación, vibrato lento y apertura del filtro en cada acorde", "80s analog character: detune, slow vibrato and a filter bloom on every chord"),
                                   L ("Granos pequeños y densos o grandes y lentos", "Small dense grains or big slow ones"),
                                   L ("Mezcla del shimmer de octava con octava + quinta", "Blend of octave shimmer with octave + fifth"),
                                   L ("Intensidad de las ráfagas y resonancia", "Gust intensity and resonance"),
-                                  L ("Cuántas campanas caen", "How many bells fall") };
+                                  L ("Cuántas campanas caen", "How many bells fall"),
+                                  L ("Saturación y mordida del bajo", "Bass saturation and bite") };
     auto& on = add<ParamToggle> (c, P::layer (l, P::lOn), L ("ACTIVA", "ON"));
     auto& lvl = add<ParamKnob> (c, P::layer (l, P::lLevel), L ("NIVEL", "LEVEL"));
     auto& pres = add<ParamKnob> (c, P::layer (l, P::lPresence), L ("PRESENCIA", "PRESENCE"),
@@ -285,6 +356,7 @@ FullscreenView::FullscreenView (Context& c, std::function<void()> onClose) : ctx
     setOpaque (true);
     setWantsKeyboardFocus (true);
     view.setInterceptsMouseClicks (false, false);
+    view.fullBleed = true;
     addAndMakeVisible (view);
 }
 
@@ -339,6 +411,7 @@ bool FullscreenView::keyPressed (const juce::KeyPress& k)
             return true;
         }
         case 'H': helpPinned = ! helpPinned; helpUntil = helpPinned ? 1.0e9 : 0.0; return true;
+        case 'T': view.showOverlay = ! view.showOverlay; helpPinned = false; helpUntil = 0.0; say (view.showOverlay ? L ("TEXTOS", "TEXTS") : L ("MODO RELAX", "RELAX MODE")); return true;
         default: return false;
     }
 }
@@ -354,7 +427,7 @@ void FullscreenView::paintOverChildren (juce::Graphics& g)
     }
     const float a = (float) juce::jlimit (0.0, 1.0, helpUntil - lastT);
     if (a <= 0.01f) return;
-    auto box = juce::Rectangle<float> (b.getRight() - 360, b.getBottom() - 310, 330, 270);
+    auto box = juce::Rectangle<float> (b.getRight() - 360, b.getBottom() - 330, 330, 290);
     g.setColour (juce::Colours::black.withAlpha (0.55f * a));
     g.fillRoundedRectangle (box, 10.0f);
     g.setColour (col::accent.withAlpha (a));
@@ -366,7 +439,7 @@ void FullscreenView::paintOverChildren (juce::Graphics& g)
     const juce::String lines[] { L ("Espacio: Play / Stop", "Space: Play / Stop"), L ("Esc: salir", "Esc: exit"), L ("F: congelar", "F: freeze"),
                                  L ("1 a 6: paisaje", "1 to 6: landscape"), L ("N: nueva semilla", "N: new seed"), L ("Izquierda / derecha: luz", "Left / right: light"),
                                  L ("Arriba / abajo: evolución", "Up / down: evolution"), L ("A / Z: densidad", "A / Z: density"), L ("S / X: espacio", "S / X: space"),
-                                 L ("R: tipo de ruido", "R: noise type"), L ("H: mostrar / ocultar ayuda", "H: show / hide help") };
+                                 L ("R: tipo de ruido", "R: noise type"), L ("T: modo relax (solo el paisaje)", "T: relax mode (landscape only)"), L ("H: mostrar / ocultar ayuda", "H: show / hide help") };
     for (auto& l : lines) g.drawText (l, in.removeFromTop (20), juce::Justification::centredLeft);
 }
 }

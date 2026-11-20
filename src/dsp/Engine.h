@@ -17,8 +17,9 @@ constexpr int kChordVoices = 5, kMidiVoices = 6, kPadVoices = kChordVoices + kMi
 
 struct HostInfo
 {
-    bool hostPlaying = false, hasPosition = false, internalPlay = false;
+    bool hostPlaying = false, hasPosition = false, internalPlay = false, hasPpq = false;
     int64_t hostSample = 0;
+    double ppq = 0, bpm = 120;
 };
 
 // Values published to the UI (relaxed atomics, written once per control tick / block).
@@ -92,7 +93,17 @@ private:
     double sessionT = 0;
     int64_t expectedHost = 0;
     bool wasHost = false, wasInternal = false, running = false, idle = true;
-    float runGain = 0, runInc = 0, freezeAmt = 0, tailGain = 1, tailCoef = 0.99f;
+    float runGain = 0, runInc = 0, freezeAmt = 0, tailGain = 1, tailCoef = 0.99f, dlyNow = 20000;
+    std::array<float, kNumLayers> onS {};
+    // effective macros (Sleep mode lowers them over the session), glue compressor
+    float effLight = 0.5f, effDensity = 0.5f, effEvo = 0.5f, sleepGain = 1.0f, compEnv = 0, compGain = 1, compTarget = 1;
+    // tempo sync of the chord changes
+    double hostPpq = 0, hostBpm = 120; bool hostHasPpq = false, internalOnly = false; int blockPos = 0;
+    // bass layer
+    float bassPh[2] {}, bassNote = 36, bassTarget = 36, bassInc[2] {}, bassDrive = 1;
+    Svf bassF;
+    // pad PWM
+    float pwmPh = 0;
     double silentFor = 0;
 
     // evolution

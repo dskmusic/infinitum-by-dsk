@@ -233,6 +233,50 @@ static void testLiveChanges()
     check (e1.tele.running.load() && e1.tele.runGain.load() > 0.99f, "no stop / fade on a live change");
 }
 
+static void testFeatures()
+{
+    std::puts ("[features]");
+    // every noise type is finite and audible
+    for (int nt = 1; nt < 6; ++nt)
+    {
+        gx::Preset p;
+        for (int l = 0; l < gx::kNumLayers; ++l) p.params[(size_t) gx::P::layer (l, gx::P::lOn)] = 0;
+        p.params[(size_t) gx::P::noiseType] = (float) nt;
+        p.params[(size_t) gx::P::noiseLevel] = 0.8f;
+        const auto st = analyse (render (p, 6.0), 48000 * 2);
+        check (st.finite && st.rms > 0.0003f && st.peak < 1.0f, "noise type " + juce::String (nt));
+    }
+    // sleep mode: with a 1-minute timer the second half is clearly quieter than the start
+    {
+        gx::Preset p;
+        p.params[(size_t) gx::P::timer] = 1; p.params[(size_t) gx::P::sleepMode] = 1;
+        const auto b = render (p, 58.0);
+        const float early = analyse (b, 48000 * 8, 48000 * 8).rms, late = analyse (b, 48000 * 50, 48000 * 6).rms;
+        std::printf ("    sleep mode: %.1f dB -> %.1f dB\n", 20.0 * std::log10 (early + 1e-9), 20.0 * std::log10 (late + 1e-9));
+        check (late < early * 0.5f, "sleep mode fades out over the timer");
+    }
+    // tempo sync: chords change exactly on the bar grid of the host
+    {
+        gx::Engine e;
+        e.prepare (48000, 512);
+        gx::Preset p;
+        p.params[(size_t) gx::P::syncChords] = 1; p.params[(size_t) gx::P::chordBars] = 0; p.params[(size_t) gx::P::harmony] = 0.7f;
+        juce::AudioBuffer<float> b (2, 512);
+        juce::MidiBuffer none;
+        gx::HostInfo hi; hi.hostPlaying = true; hi.hasPosition = true; hi.hasPpq = true; hi.bpm = 120;
+        int changes = 0, last = -1;
+        for (int k = 0; k < (int) (48000 * 16 / 512); ++k)
+        {
+            hi.hostSample = (int64_t) k * 512; hi.ppq = (double) hi.hostSample / 48000.0 * 2.0;
+            e.process (b.getWritePointer (0), b.getWritePointer (1), 512, none, p.params.data(), hi);
+            const int d = e.tele.chordNotes[0].load() * 100 + e.tele.chordDegree.load();
+            if (d != last) { ++changes; last = d; }
+        }
+        std::printf ("    tempo sync: %d chord changes in 8 bars\n", changes);
+        check (changes >= 4 && changes <= 9, "tempo-synced chords change about once per bar");
+    }
+}
+
 static void testMidi()
 {
     std::puts ("[midi]");
@@ -320,6 +364,7 @@ int runAll()
     testDeterminism();
     testTransport();
     testLiveChanges();
+    testFeatures();
     testMidi();
     testExport();
     testStress();

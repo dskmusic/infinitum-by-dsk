@@ -3,6 +3,11 @@
 ## [Unreleased]
 
 ### Added
+- Bass layer (follows the chord root), PWM pad with ensemble chorus, hall reverb with pre-delay, glue compressor, melodic bell phrases.
+- 12 moods / 256 factory presets (Epic, Forest, Desert, Sleep added); generator keeps the best of several candidates.
+- Underwater landscape (replaces Nebula); richer Ocean, Valley, Neon, Aurora and Starfield; smooth scene transitions.
+- Sleep mode, tempo-synced chords, 8 quick memories with crossfades, relax mode in full screen, landscape MP4 export (ffmpeg), Help page.
+- Click-free preset changes (automatic dip-and-return), smoothed delay time and layer switches.
 - Living landscape engine: six self-playing layers (Drone, Pad, Texture, Shimmer, Wind, Bells) with Level, Presence, Tone and Character.
 - Seed + timeline driven evolution: identical output for any host block size; DAW bounces match playback.
 - Play / Stop button that also follows the DAW transport; session timer; fade-in / fade-out; Freeze.

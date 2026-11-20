@@ -11,29 +11,30 @@ their own, while harmony, light and space evolve slowly for minutes and hours wi
 
 ## Features
 
-- **Living landscape engine:** six self-playing layers (Drone, Pad, Texture, Shimmer, Wind, Bells). Each one has Level,
+- **Living landscape engine:** seven self-playing layers - Drone, Pad, Texture, Shimmer, Wind, Bells and Bass. Each has Level,
   Presence (how much of the time it is there), Tone and Character; slow, never-repeating modulation decides when it appears.
-- **Spectral Mutation drone:** harmonics that mutate and drift like genes.
-- **Granular texture and Shimmer up front:** a grain cloud tuned to octaves and fifths, and a pitch-shifted feedback reverb
-  (octave or octave + fifth).
-- **Harmony that moves:** 12 scales, any key, from open fifths to 7th and 9th chords, with automatic chord changes and voice-leading.
-- **Four big macros:** Evolution, Density, Light (night to midday) and Space (room to endless cathedral), plus **Freeze**.
-- **Play / Stop** button that also follows your DAW transport. The evolution comes from a **seed** and the timeline position,
-  so a DAW bounce sounds exactly like playback, and the same seed always gives the same journey.
-- **Long audio export:** render 1 minute to 3 hours to **WAV, FLAC or OGG** with a final fade-out (YouTube, meditation, study).
-- **Session timer** with fade-in and fade-out, **432 Hz** tuning option.
-- **Mood generator:** 8 moods - Cinematic, Ambient, Meditation, Dark, Sci-Fi, Ethereal, Oceanic and Nostalgia (three to five sub-moods each), with every result rendered,
-  checked and level-matched before you hear it. Mutate, blend and session history.
-- **136 factory presets** (including rain-soaked neo-noir city nights and derelict spaceships), preset browser with tags, favourites and ratings, A/B compare, undo/redo, MIDI learn.
-- **MIDI:** set the key from your keyboard, play notes on top, or both.
-- **Six animated landscapes** (Valley, Starfield, Nebula, Neon Rain, Ocean, Aurora) that react to every layer, with a **full-screen mode** and keyboard shortcuts.
-- **Noise generator** (pink, brown, white, ocean waves, vinyl crackle), an **analog** 80s pad with ensemble chorus, and bells that play short melodic phrases.
-- Resizable 50–200 %, **English / Español** interface (automatic or manual).
+- **Rich sound:** Spectral Mutation drone, PWM + saw analog pad with ensemble chorus and an 80s filter bloom, granular clouds tuned to
+  octaves and fifths, pitch-shifted shimmer, a chord-following sub bass, melodic bell phrases, and a new hall reverb with pre-delay.
+- **Harmony that moves:** 12 scales, any key, from open fifths to 7th and 9th chords, automatic chord changes with voice-leading,
+  or **chords locked to your DAW tempo** (every 1-16 bars).
+- **Four big macros:** Evolution, Density, Light (night to midday) and Space (room to endless cathedral), plus a click-free **Freeze**.
+- **Play / Stop** that also follows your DAW. Evolution comes from a **seed** and the timeline position: DAW bounces match playback,
+  and the same seed always gives the same journey.
+- **Six animated landscapes** that react to every layer: Valley, Starfield, Underwater, Neon, Ocean and Aurora - with
+  **full-screen mode**, keyboard shortcuts and a text-free **relax mode**.
+- **12 moods, 256 factory presets:** Cinematic, Ambient, Meditation, Dark, Sci-Fi, Ethereal, Oceanic, Nostalgia, Epic, Forest,
+  Desert and Sleep. The generator renders several candidates, checks them and keeps the most alive one.
+- **Long audio export:** 1 minute to 3 hours in WAV, FLAC or OGG. **Landscape video export:** an MP4 with the animated landscape and
+  its sound, ready for YouTube (uses the free ffmpeg; Infinitum finds it or helps you install it).
+- **Sleep mode** and session timer, **432 Hz** tuning, **noise generator** (pink, brown, white, ocean waves, vinyl).
+- **8 quick memories** with smooth 2-second crossfades, preset browser with tags and favourites, A/B, undo/redo, MIDI learn,
+  and every preset change is click-free.
+- Resizable and maximisable, **English / Español** interface (automatic or manual) with a friendly built-in **Help** page.
 
 | | |
 |---|---|
 | ![Neon Rain](docs/screenshots/landscape-neon.png) | ![Starfield](docs/screenshots/landscape-starfield.png) |
-| ![Nebula](docs/screenshots/landscape-nebula.png) | ![Valley](docs/screenshots/landscape-valley.png) |
+| ![Underwater](docs/screenshots/landscape-underwater.png) | ![Valley](docs/screenshots/landscape-valley.png) |
 | ![Ocean](docs/screenshots/landscape-ocean.png) | ![Aurora](docs/screenshots/landscape-aurora.png) |
 | ![Sound](docs/screenshots/sound.png) | ![Generator](docs/screenshots/generator.png) |
 | ![Presets](docs/screenshots/presets.png) | ![Export](docs/screenshots/export.png) |

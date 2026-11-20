@@ -25,9 +25,13 @@ struct DelayLine
 struct Fdn // 8-line feedback delay network reverb
 {
     std::array<DelayLine, 8> line;
-    std::array<float, 8> len {}, lp {}, g {};
-    std::array<DelayLine, 4> ap;
-    std::array<float, 4> apLen {};
+    std::array<float, 8> len {}, lenNow {}, lp {}, g {};
+    std::array<DelayLine, 6> ap;
+    std::array<float, 6> apLen {};
+    DelayLine pre;
+    float preLen = 0, preNow = 0;
+    std::array<float, 6> apNow {};
+    bool primed = false;
     float damp = 0.3f, modPh = 0;
     double sr = 48000;
     void prepare (double s);

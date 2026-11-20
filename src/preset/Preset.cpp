@@ -6,7 +6,7 @@ namespace gx
 {
 const juce::StringArray& categories()
 {
-    static const juce::StringArray c { "Cinematic", "Ambient", "Meditation", "Dark", "Sci-Fi", "Ethereal", "Oceanic", "Nostalgia" };
+    static const juce::StringArray c { "Cinematic", "Ambient", "Meditation", "Dark", "Sci-Fi", "Ethereal", "Oceanic", "Nostalgia", "Epic", "Forest", "Desert", "Sleep" };
     return c;
 }
 const juce::StringArray& subcategories (const juce::String& cat)
@@ -20,6 +20,10 @@ const juce::StringArray& subcategories (const juce::String& cat)
         { "Ethereal", { "Angelic", "Celestial", "Dreamland" } },
         { "Oceanic", { "Shoreline", "Deep Blue", "Tidal" } },
         { "Nostalgia", { "Lo-Fi Memory", "Tape Dream", "Golden Hour" } },
+        { "Epic", { "Trailer", "Heroes", "Battlefield" } },
+        { "Forest", { "Ancient Woods", "Morning Dew", "Fireflies" } },
+        { "Desert", { "Dunes", "Mirage", "Caravan" } },
+        { "Sleep", { "Deep Sleep", "Lullaby", "Night Rain" } },
     };
     static const juce::StringArray none;
     auto it = m.find (cat);
@@ -32,6 +36,10 @@ juce::String categoryLabel (const juce::String& c)
     if (c == "Dark") return L ("Oscuro", "Dark");
     if (c == "Ethereal") return L ("Etéreo", "Ethereal");
     if (c == "Oceanic") return L ("Océano", "Oceanic");
+    if (c == "Epic") return L ("Épico", "Epic");
+    if (c == "Forest") return L ("Bosque", "Forest");
+    if (c == "Desert") return L ("Desierto", "Desert");
+    if (c == "Sleep") return L ("Dormir", "Sleep");
     return c;
 }
 const juce::StringArray& characterTags()
@@ -145,6 +153,7 @@ Preset Preset::capture (InfinitumProcessor& proc)
 
 void Preset::applyTo (InfinitumProcessor& proc) const
 {
+    proc.beginPresetSwitch();
     for (int i = 0; i < P::numParams; ++i) proc.setParamPlain (i, params[(size_t) i]);
     proc.currentMeta = meta;
 }

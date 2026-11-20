@@ -85,6 +85,9 @@ void Engine::reset (uint32_t s)
     runGain = 0; runInc = 0;
     freezeAmt = 0;
     tailGain = 1;
+    compEnv = 0; compGain = compTarget = 1; sleepGain = 1;
+    onS.fill (0); dlyNow = dlySamples;
+    bassPh[0] = bassPh[1] = 0; bassF.reset(); pwmPh = 0;
     silentFor = 0;
     idle = true;
     for (size_t i = 0; i < evoFreq.size(); ++i)
@@ -199,8 +202,19 @@ int Engine::chordDegreeFor (int64_t slot) const
 
 void Engine::updateChord (bool force)
 {
-    const double period = 6.0 * std::pow (8.0, 1.0 - (double) pv (P::chordRate));
-    const int64_t slot = (int64_t) std::floor (musT / period);
+    int64_t slot;
+    if (pv (P::syncChords) > 0.5f)
+    {
+        static const double bars[] { 1, 2, 4, 8, 16 };
+        const double beatsPerChord = 4.0 * bars[juce::jlimit (0, 4, (int) pv (P::chordBars))];
+        const double beats = hostHasPpq ? hostPpq + (double) blockPos / sr * hostBpm / 60.0 : musT * 2.0; // 120 bpm without a DAW
+        slot = (int64_t) std::floor (beats / beatsPerChord + 1.0e-6);
+    }
+    else
+    {
+        const double period = 6.0 * std::pow (8.0, 1.0 - (double) pv (P::chordRate));
+        slot = (int64_t) std::floor (musT / period);
+    }
     rootPc = keyOverride >= 0 ? keyOverride : (int) pv (P::key);
     const int scaleNow = (int) pv (P::scale), octNow = (int) pv (P::octave);
     const float harmNow = pv (P::harmony);
@@ -232,6 +246,14 @@ void Engine::updateChord (bool force)
     }
     std::sort (chordNotes.begin(), chordNotes.end());
     for (int i = 0; i < kChordVoices; ++i) pad[(size_t) i].target = (float) chordNotes[(size_t) i];
+    {
+        const int low = 12 * ((int) pv (P::octave) + 1) + rootPc;
+        int bn = low + degreeSemis (s, d);
+        while (bn > low + 7) bn -= 12;
+        while (bn < low - 5) bn += 12;
+        bassTarget = (float) bn;
+        if (force) bassNote = bassTarget;
+    }
     if (force) for (int i = 0; i < kChordVoices; ++i) pad[(size_t) i].note = pad[(size_t) i].target;
     tele.rootPc.store (rootPc);
     tele.chordDegree.store (d);
@@ -385,7 +407,16 @@ void Engine::control()
 {
     const float dt = (float) kCtrl / (float) sr;
     const bool frozen = pv (P::freeze) > 0.5f;
-    const float evoRate = 0.15f * std::pow (30.0f, pv (P::evolution));
+    {   // Sleep mode: over the session timer the landscape darkens, thins out, slows down, then fades to silence
+        const int timerMin = (int) pv (P::timer);
+        float k = 0;
+        if (pv (P::sleepMode) > 0.5f && timerMin > 0 && internalOnly) k = juce::jlimit (0.0f, 1.0f, (float) (sessionT / (timerMin * 60.0)));
+        effLight = pv (P::light) * (1.0f - 0.75f * k);
+        effDensity = pv (P::density) * (1.0f - 0.6f * k);
+        effEvo = pv (P::evolution) * (1.0f - 0.7f * k);
+        sleepGain = 1.0f - smoothstep (0.55f, 1.0f, k);
+    }
+    const float evoRate = 0.15f * std::pow (30.0f, effEvo);
     if (running && ! frozen) { musT += dt; evoT += dt * evoRate; }
     // Freeze is smoothed (~0.4 s): feedback and reverb times glide instead of jumping (no click)
     freezeAmt += ((frozen ? 1.0f : 0.0f) - freezeAmt) * (1.0f - coefFor (0.4f, sr / kCtrl));
@@ -395,12 +426,12 @@ void Engine::control()
     for (auto& q : bellQueue)
         if (q.tick >= 0 && q.tick <= ctrlTick) { if (running) playBell (q.note, q.vel, q.pan); q.tick = -1; }
     a4 = (int) pv (P::tuning) == 1 ? 432.0f : 440.0f;
-    lightMul = std::pow (2.0f, (pv (P::light) - 0.5f) * 3.0f);
+    lightMul = std::pow (2.0f, (effLight - 0.5f) * 3.0f);
     updateChord (curDegree < 0);
 
     // ---- layer presence (smooth gates over slow incommensurate noise) and evolving tone
-    const float density = pv (P::density);
-    const float evoDepth = 0.35f + 0.65f * pv (P::evolution);
+    const float density = effDensity;
+    const float evoDepth = 0.35f + 0.65f * effEvo;
     const float gainCoef = coefFor (1.2f, sr / kCtrl);
     for (int l = 0; l < kNumLayers; ++l)
     {
@@ -414,12 +445,13 @@ void Engine::control()
             gate = smoothstep (th - 0.14f, th + 0.14f, evoNoise (l * 4, evoT));
         }
         presence[(size_t) l] = gate + gainCoef * (presence[(size_t) l] - gate);
-        const float on = lp (l, P::lOn) > 0.5f ? 1.0f : 0.0f;
+        onS[(size_t) l] += ((lp (l, P::lOn) > 0.5f ? 1.0f : 0.0f) - onS[(size_t) l]) * 0.08f; // ~15 ms ramp when a layer is switched
+        const float on = onS[(size_t) l];
         const float lvl = lp (l, P::lLevel);
         const float target = on * lvl * lvl * presence[(size_t) l] * (l == lyDrone ? droneBreath : 1.0f);
         gainInc[(size_t) l] = (target - gainNow[(size_t) l]) / (float) kCtrl;
         toneEff[(size_t) l] = juce::jlimit (0.0f, 1.0f, lp (l, P::lTone) + (evoNoise (l * 4 + 1, evoT) - 0.5f) * 0.5f * evoDepth
-                                                        + (pv (P::light) - 0.5f) * 0.3f);
+                                                        + (effLight - 0.5f) * 0.3f);
         tele.presence[(size_t) l].store (presence[(size_t) l] * on);
     }
 
@@ -467,6 +499,24 @@ void Engine::control()
             const float cut = juce::jlimit (60.0f, (float) sr * 0.45f, f * (1.5f + 10.0f * tone * tone) * lightMul * (0.75f + 0.5f * wob) * (1.0f + swell * ch * 2.5f));
             for (auto& flt : pvc.f) flt.set (std::tan (kPi * cut / (float) sr), 1.5f);
         }
+    }
+    // ---- bass: chord root, sine + a little saw, low-pass; Character = grit
+    {
+        const float glide = coefFor (0.9f, sr / kCtrl);
+        bassNote = bassTarget + glide * (bassNote - bassTarget);
+        const float f = noteToHz (bassNote, a4);
+        bassInc[0] = f / (float) sr;
+        bassInc[1] = f * 1.003f / (float) sr;
+        const float tone = toneEff[lyBass];
+        const float cut = juce::jlimit (40.0f, 3000.0f, f * (1.5f + 10.0f * tone * tone) * std::sqrt (lightMul));
+        bassF.set (std::tan (kPi * cut / (float) sr), 1.2f);
+        bassDrive = 1.0f + 4.0f * lp (lyBass, P::lChar);
+    }
+    // ---- glue compressor (2:1 above -18 dBFS, slow): computed here, applied per sample
+    {
+        const float lvl = 10.0f * std::log10 (compEnv + 1.0e-10f);
+        const float over = juce::jmax (0.0f, lvl + 18.0f);
+        compTarget = dbToGain (-over * 0.5f);
     }
     // ---- texture
     {
@@ -527,7 +577,7 @@ void Engine::control()
     }
     // ---- master section (cached coefficient updates)
     {
-        const float lc = pv (P::lowCut), hc = pv (P::highCut), tilt = (pv (P::light) - 0.5f) * 8.0f;
+        const float lc = pv (P::lowCut), hc = pv (P::highCut), tilt = std::round ((effLight - 0.5f) * 8.0f * 20.0f) / 20.0f;
         if (lc != cacheLow) { cacheLow = lc; for (auto& b : lowCutF) b.highpass (sr, lc); }
         if (hc != cacheHigh) { cacheHigh = hc; for (auto& b : highCutF) b.lowpass (sr, hc); }
         if (tilt != cacheTilt) { cacheTilt = tilt; for (auto& b : tiltF) b.shelf (sr, 2500.0, tilt, true); }
@@ -538,6 +588,7 @@ void Engine::control()
             rev.set (0.35f + 0.75f * space, damp, 1.0f + 1.5f * fr);
         }
         dlySamples = juce::jlimit (16.0f, (float) dly[0].mask - 16.0f, pv (P::dlyTime) * 0.001f * (float) sr);
+        if (ctrlTick <= 1) dlyNow = dlySamples;
     }
     tele.evoTime.store ((float) evoT);
     tele.musTime.store ((float) musT);
@@ -569,7 +620,19 @@ void Engine::renderChunk (float* L, float* R, int n)
         for (int l = 0; l < kNumLayers; ++l) gainNow[(size_t) l] += gainInc[(size_t) l];
         const float rg = runGain * runGain * (3.0f - 2.0f * runGain); // S-curve fade
 
-        float dl = 0, dr = 0, padL = 0, padR = 0, midiL = 0, midiR = 0, feedL = 0, feedR = 0;
+        float dl = 0, dr = 0, padL = 0, padR = 0, midiL = 0, midiR = 0, feedL = 0, feedR = 0, bsl = 0;
+        pwmPh += 0.13f / (float) sr; if (pwmPh >= 1.0f) pwmPh -= 1.0f;
+        const float duty = 0.5f + 0.32f * fastSin (pwmPh);
+        if (sources > 0 && lp (lyBass, P::lOn) > 0.5f && gainNow[lyBass] > 1.0e-5f)
+        {
+            float sw = 0;
+            for (int k = 0; k < 2; ++k) { bassPh[k] += bassInc[k]; if (bassPh[k] >= 1.0f) bassPh[k] -= 1.0f; }
+            sw = 2.0f * bassPh[1] - 1.0f - polyBlep (bassPh[1], bassInc[1]);
+            float bp, hp;
+            const float y = bassF.tick (fastSin (bassPh[0]) + 0.35f * sw, bp, hp);
+            bsl = fastTanh (y * bassDrive) / std::sqrt (bassDrive) * gainNow[lyBass] * 0.42f;
+        }
+
         // ---- drone
         if (sources > 0 && ((droneOn > 0.5f && gainNow[lyDrone] > 1.0e-5f) || feed))
         {
@@ -604,11 +667,13 @@ void Engine::renderChunk (float* L, float* R, int n)
             pvc.gain = tgt + (tgt > pvc.gain ? pvc.attackCoef : pvc.releaseCoef) * (pvc.gain - tgt);
             if (pvc.gain < 1.0e-5f) continue;
             const float s0 = saw (pvc.ph[0], pvc.inc[0]), s1 = saw (pvc.ph[1], pvc.inc[1]), s2 = saw (pvc.ph[2], pvc.inc[2]);
+            const float sh = pvc.ph[1] + duty >= 1.0f ? pvc.ph[1] + duty - 1.0f : pvc.ph[1] + duty;   // PWM: saw minus a shifted saw = pulse
+            const float pulse = s1 - (2.0f * sh - 1.0f - polyBlep (sh, pvc.inc[1]));
             pvc.ph[3] += pvc.inc[3]; if (pvc.ph[3] >= 1.0f) pvc.ph[3] -= 1.0f;
             const float sub = 0.5f * fastSin (pvc.ph[3]);
             float bp, hp;
-            const float l = pvc.f[0].tick (s0 + 0.6f * s1, bp, hp) + sub;
-            const float r = pvc.f[1].tick (s2 + 0.6f * s1, bp, hp) + sub;
+            const float l = pvc.f[0].tick (s0 + 0.45f * s1 + 0.35f * pulse, bp, hp) + sub;
+            const float r = pvc.f[1].tick (s2 + 0.45f * s1 - 0.35f * pulse, bp, hp) + sub;
             float pl, pr;
             panGains (pvc.pan, pl, pr);
             if (pvc.midi) { midiL += l * pl * pvc.gain; midiR += r * pr * pvc.gain; }
@@ -757,16 +822,18 @@ void Engine::renderChunk (float* L, float* R, int n)
         energyAcc[lyDrone] += dl * dl + dr * dr; energyAcc[lyPad] += padL * padL + padR * padR;
         energyAcc[lyTexture] += tl * tl + tr * tr; energyAcc[lyShimmer] += sl * sl + sr2 * sr2;
         energyAcc[lyWind] += wl * wl + wr * wr + rl * rl + rr * rr; energyAcc[lyBells] += bl * bl + br * br;
+        energyAcc[lyBass] += 2.0f * bsl * bsl;
 
         // ---- mix: layers (faded by the transport) + MIDI voices
-        float xl = (dl + padL + tl + wl + bl + rl) * rg + sl + midiL;
-        float xr = (dr + padR + tr + wr + br + rr) * rg + sr2 + midiR;
+        float xl = (dl + padL + tl + wl + bl + rl + bsl) * rg + sl + midiL;
+        float xr = (dr + padR + tr + wr + br + rr + bsl) * rg + sr2 + midiR;
 
         // ---- delay (bells + texture send), cross feedback
         {
             const float mix = dlyMixS.step (pv (P::dlyMix));
             const float inL = (bl + tl * 0.4f) * rg * mix, inR = (br + tr * 0.4f) * rg * mix;
-            const float yl = dly[0].read (dlySamples), yr = dly[1].read (dlySamples * 1.333f);
+            dlyNow += 0.00005f * (dlySamples - dlyNow);   // delay time glides (no clicks when it changes)
+            const float yl = dly[0].read (dlyNow), yr = dly[1].read (dlyNow * 1.333f);
             dlyLp[0] += dlyToneC * (yl - dlyLp[0]);
             dlyLp[1] += dlyToneC * (yr - dlyLp[1]);
             dly[0].push (fastTanh (inL + dlyLp[1] * dlyFb));
@@ -811,8 +878,14 @@ void Engine::renderChunk (float* L, float* R, int n)
             xl *= tailGain; xr *= tailGain;
         }
         // ---- master + safety limiter
-        const float mg = masterS.step (dbToGain (pv (P::master)));
+        const float mg = masterS.step (dbToGain (pv (P::master)) * sleepGain);
         xl *= mg; xr *= mg;
+        {
+            const float e = 0.5f * (xl * xl + xr * xr);
+            compEnv += (e > compEnv ? 0.0015f : 0.00012f) * (e - compEnv);
+            compGain += 0.0004f * (compTarget - compGain);
+            xl *= compGain; xr *= compGain;
+        }
         const float pk = juce::jmax (std::abs (xl), std::abs (xr));
         const float want = pk > 0.89f ? 0.89f / pk : 1.0f;
         limGain = want < limGain ? want : want + limRel * (limGain - want);
@@ -826,6 +899,10 @@ void Engine::renderChunk (float* L, float* R, int n)
 void Engine::process (float* L, float* R, int n, const juce::MidiBuffer& midi, const float* params, const HostInfo& host)
 {
     p = params;
+    hostHasPpq = host.hostPlaying && host.hasPpq;
+    hostPpq = host.ppq;
+    hostBpm = host.bpm > 1.0 ? host.bpm : 120.0;
+    internalOnly = host.internalPlay && ! host.hostPlaying;
     const uint32_t s = (uint32_t) pv (P::seed);
     // ---- transport: DAW playback resyncs (fresh, reproducible start); internal Play keeps flowing
     if (host.hostPlaying)
@@ -869,6 +946,7 @@ void Engine::process (float* L, float* R, int n, const juce::MidiBuffer& midi, c
         while (it != midi.end() && (*it).samplePosition <= pos) { handleMidi ((*it).getMessage()); ++it; }
         if (ctrlLeft == 0)
         {
+            blockPos = pos;
             control();
             ctrlLeft = kCtrl;
             for (int l = 0; l < kNumLayers; ++l)

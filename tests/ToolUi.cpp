@@ -4,6 +4,7 @@
 #include "gen/Generator.h"
 #include "ui/GeneratorPage.h"
 #include <BinaryData.h>
+#include <set>
 
 static juce::String factoryNotes (const gx::Preset& p)
 {
@@ -20,6 +21,23 @@ int runVideo (int argc, char** argv); // Video.cpp
 int runToolExtras (const juce::String& cmd, int argc, char** argv)
 {
     if (cmd == "video") return runVideo (argc, argv);
+    if (cmd == "landscape-video")
+    {
+        // InfinitumTool landscape-video <out.mp4> [seconds] [scene]: tests the in-plugin MP4 export (needs ffmpeg)
+        const juce::File out = juce::File::getCurrentWorkingDirectory().getChildFile (argc > 2 ? argv[2] : "landscape.mp4");
+        gx::ui::Settings settings;
+        const auto ff = gx::ui::findFfmpeg (settings);
+        std::printf ("ffmpeg: %s\n", ff.getFullPathName().toRawUTF8());
+        gx::Preset p;
+        if (argc > 4) p.params[(size_t) gx::P::scene] = (float) juce::String (argv[4]).getIntValue();
+        gx::ui::VideoExporter v;
+        juce::String err;
+        if (! v.start (p, out, argc > 3 ? juce::String (argv[3]).getDoubleValue() : 8.0, 1280, 720, ff, err)) { std::printf ("cannot start: %s\n", err.toRawUTF8()); return 1; }
+        const auto t0 = juce::Time::getMillisecondCounterHiRes();
+        while (v.step (100.0)) {}
+        std::printf ("%s in %.1f s\n", v.result.isEmpty() ? "ok" : v.result.toRawUTF8(), (juce::Time::getMillisecondCounterHiRes() - t0) / 1000.0);
+        return v.result.isEmpty() ? 0 : 1;
+    }
     if (cmd == "demos")
     {
         // InfinitumTool demos <dir> [minutes]: the first factory preset of every mood, rendered to OGG for listening
@@ -47,9 +65,19 @@ int runToolExtras (const juce::String& cmd, int argc, char** argv)
     }
     if (cmd == "factory")
     {
-        // InfinitumTool factory <out.infinitumbank> [perSubMood]
+        // InfinitumTool factory <out.infinitumbank> [perSubMood] [totalTarget]: perSub each, +3 for Neo-Noir/Derelict, topped up evenly to the target
         const juce::File out = juce::File::getCurrentWorkingDirectory().getChildFile (argc > 2 ? argv[2] : "resources/factory.infinitumbank");
-        const int perSub = argc > 3 ? juce::String (argv[3]).getIntValue() : 5;
+        const int perSub = argc > 3 ? juce::String (argv[3]).getIntValue() : 6;
+        const int target = argc > 4 ? juce::String (argv[4]).getIntValue() : 256;
+        std::set<juce::String> bonus;   // sub-moods that get one more preset to reach the target (spread across moods)
+        {
+            int base = 0, maxSubs = 0;
+            for (auto& m : gx::categories()) { base += perSub * gx::subcategories (m).size(); maxSubs = juce::jmax (maxSubs, gx::subcategories (m).size()); }
+            base += 6;
+            for (int si = 0, extra = target - base; si < maxSubs && extra > 0; ++si)
+                for (int mi = 0; mi < gx::categories().size() && extra > 0; ++mi)
+                    if (si < gx::subcategories (gx::categories()[mi]).size()) { bonus.insert (gx::subcategories (gx::categories()[mi])[si]); --extra; }
+        }
         juce::Array<juce::var> bank;
         juce::StringArray names;
         int total = 0, dups = 0;
@@ -61,7 +89,7 @@ int runToolExtras (const juce::String& cmd, int argc, char** argv)
             {
                 std::vector<gx::Preset> accepted;
                 const auto subName = gx::subcategories (mood)[si];
-                const int want = perSub + (subName == "Neo-Noir" || subName == "Derelict" ? 3 : 0);
+                const int want = perSub + (subName == "Neo-Noir" || subName == "Derelict" ? 3 : 0) + (bonus.count (subName) ? 1 : 0);
                 for (int guard = 0; (int) accepted.size() < want && guard < want * 8; ++guard)
                 {
                     gx::GenRequest r;
@@ -75,7 +103,7 @@ int runToolExtras (const juce::String& cmd, int argc, char** argv)
                     r.space = 0.4f + 0.5f * rng.uni();
                     r.mystery = rng.uni() < 0.7f ? 0.1f + 0.3f * rng.uni() : 0.5f + 0.4f * rng.uni();
                     gx::Validation v;
-                    auto p = gx::Generator::generate (r, nullptr, &v);
+                    auto p = gx::Generator::generate (r, nullptr, &v, 10, 2);
                     if (! v.ok) continue;
                     bool dup = false;
                     for (auto& a : accepted) dup |= a.similarity (p) > 0.93f;
@@ -225,7 +253,7 @@ int runToolExtras (const juce::String& cmd, int argc, char** argv)
             ge->showPage (pg);
             if (pg == 0)
             {
-                const char* sceneNames[] { "landscape-valley", "landscape-starfield", "landscape-nebula", "landscape-neon", "landscape-ocean", "landscape-aurora" };
+                const char* sceneNames[] { "landscape-valley", "landscape-starfield", "landscape-underwater", "landscape-neon", "landscape-ocean", "landscape-aurora" };
                 for (int sc = gx::numScenes; --sc >= 0;)
                 {
                     p.setParamPlain (gx::P::scene, (float) sc);

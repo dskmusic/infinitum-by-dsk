@@ -43,10 +43,13 @@ public:
     gx::PresetMeta currentMeta;               // metadata of the loaded preset
     std::atomic<int> presetGeneration { 0 };  // bumped whenever a full state/preset is applied (UI polls)
     gx::GenHistory genHistory { 200 };         // generator history: current session only (UI thread)
+    std::array<juce::var, 8> memories;         // quick memory slots (preset vars), saved with the project (UI thread)
 
     // Internal Play/Stop (runtime only, never saved: a project must not start playing on load).
     // The DAW transport also starts the engine; either one is enough.
     void setPlaying (bool b) { playRequested.store (b); }
+    // A whole new sound is about to be applied: the audio dips (60 ms), switches, and comes back (200 ms) - no clicks.
+    void beginPresetSwitch() { switchRequested.store (true); }
     bool isPlayingInternal() const { return playRequested.load(); }
     bool isHostPlaying() const { return hostPlaying.load(); }
 
@@ -67,7 +70,9 @@ private:
     std::vector<std::atomic<float>*> raw;
     std::vector<juce::RangedAudioParameter*> paramPtrs;
     std::vector<float> snapshot;
-    std::atomic<bool> playRequested { false }, hostPlaying { false };
+    std::atomic<bool> playRequested { false }, hostPlaying { false }, switchRequested { false };
+    enum class Duck { None, Out, In } duck = Duck::None;
+    float duckGain = 1.0f, lastPeak = 0.0f;
     juce::AbstractFifo scopeFifo { 32768 };
     std::vector<float> scopeBuf = std::vector<float> (32768, 0.0f);
 

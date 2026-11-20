@@ -57,6 +57,7 @@ private:
     std::unique_ptr<gx::ui::GeneratorPage> generator;
     std::unique_ptr<gx::ui::PresetsPage> presets;
     std::unique_ptr<gx::ui::ExportPage> exportPage;
+    std::unique_ptr<gx::ui::HelpPage> helpPage;
     std::unique_ptr<gx::ui::SettingsPage> settingsPage;
     std::unique_ptr<gx::ui::AboutOverlay> about;
     std::unique_ptr<gx::ui::FullscreenView> fullscreenView;

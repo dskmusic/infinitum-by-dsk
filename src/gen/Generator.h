@@ -18,6 +18,7 @@ struct Validation
 {
     bool ok = false;
     float rmsDb = -100, peakDb = -100, dc = 0;
+    float movement = 0, width = 0, score = 0;   // interest metrics (best-of-N)
     juce::String reason;
 };
 
@@ -26,7 +27,8 @@ class Generator
 {
 public:
     // Generates a validated preset; retries with new sub-seeds until it passes (max 'maxAttempts').
-    static Preset generate (const GenRequest& req, int* attempts = nullptr, Validation* result = nullptr, int maxAttempts = 10);
+    // v2: collects up to 'pickBest' valid candidates and keeps the most interesting one (movement, width, layers)
+    static Preset generate (const GenRequest& req, int* attempts = nullptr, Validation* result = nullptr, int maxAttempts = 10, int pickBest = 3);
     static Preset candidate (const GenRequest& req, uint32_t seed); // one unvalidated candidate
     // Renders the preset, checks it and sets Master for the mood's target loudness.
     static Validation validate (Preset& p, bool fixLevel = true);

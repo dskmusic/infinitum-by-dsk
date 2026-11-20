@@ -36,13 +36,14 @@ Arch baseArch (const juce::String& mood)
     a.layer[lyShimmer] = { { { 0.35f, 0.60f }, { 0.40f, 0.85f }, { 0.35f, 0.70f }, { 0.20f, 0.60f } } };
     a.layer[lyWind]    = { { { 0.15f, 0.40f }, { 0.20f, 0.60f }, { 0.30f, 0.70f }, { 0.30f, 0.70f } } };
     a.layer[lyBells]   = { { { 0.20f, 0.45f }, { 0.30f, 0.70f }, { 0.30f, 0.70f }, { 0.15f, 0.45f } } };
+    a.layer[lyBass]    = { { { 0.25f, 0.45f }, { 0.45f, 0.85f }, { 0.20f, 0.45f }, { 0.05f, 0.35f } } };
     if (mood == "Cinematic")
     {
         a.scales = { Minor, Dorian, Lydian, HarmMinor, Minor, Major };
         a.harmony = { 0.45f, 0.9f }; a.chordRate = { 0.3f, 0.7f }; a.evolution = { 0.4f, 0.75f };
         a.density = { 0.5f, 0.8f }; a.light = { 0.3f, 0.65f }; a.space = { 0.7f, 0.95f }; a.octave = { 1.0f, 2.4f };
         a.layer[lyPad][0] = { 0.6f, 0.8f };
-        a.scenes = { scValley, scNebula, scValley };
+        a.scenes = { scValley, scUnderwater, scValley };
     }
     else if (mood == "Meditation")
     {
@@ -60,7 +61,7 @@ Arch baseArch (const juce::String& mood)
         a.harmony = { 0.15f, 0.6f }; a.light = { 0.0f, 0.3f }; a.octave = { 1.0f, 1.6f }; a.warmth = { 0.3f, 0.6f };
         a.layer[lyPad][2] = { 0.15f, 0.4f }; a.layer[lyDrone][2] = { 0.15f, 0.45f };
         a.layer[lyWind] = { { { 0.25f, 0.5f }, { 0.3f, 0.7f }, { 0.1f, 0.4f }, { 0.4f, 0.8f } } };
-        a.scenes = { scNebula, scValley, scNeon };
+        a.scenes = { scUnderwater, scValley, scNeon };
         a.noises = { ntBrown, ntPink }; a.noiseChance = 0.4f;
     }
     else if (mood == "Sci-Fi")
@@ -69,7 +70,7 @@ Arch baseArch (const juce::String& mood)
         a.harmony = { 0.4f, 0.9f }; a.evolution = { 0.55f, 0.9f }; a.density = { 0.5f, 0.85f };
         a.layer[lyDrone][3] = { 0.6f, 0.95f }; a.layer[lyTexture] = { { { 0.45f, 0.7f }, { 0.5f, 0.9f }, { 0.55f, 0.95f }, { 0.1f, 0.6f } } };
         a.layer[lyShimmer][3] = { 0.5f, 1.0f };
-        a.scenes = { scStarfield, scNebula, scNeon };
+        a.scenes = { scStarfield, scUnderwater, scNeon };
     }
     else if (mood == "Ethereal") // angelic, weightless: vowel-like drones, high shimmer, bright, slow
     {
@@ -79,7 +80,7 @@ Arch baseArch (const juce::String& mood)
         a.layer[lyShimmer] = { { { 0.55f, 0.75f }, { 0.75f, 1.0f }, { 0.55f, 0.85f }, { 0.3f, 0.8f } } };
         a.layer[lyBells] = { { { 0.2f, 0.35f }, { 0.4f, 0.75f }, { 0.55f, 0.85f }, { 0.2f, 0.45f } } };
         a.layer[lyWind][0] = { 0.05f, 0.2f };
-        a.scenes = { scAurora, scNebula, scValley }; a.noiseChance = 0.1f;
+        a.scenes = { scAurora, scUnderwater, scValley }; a.noiseChance = 0.1f;
     }
     else if (mood == "Oceanic") // the sea: slow swells, deep pads, waves of filtered noise
     {
@@ -99,11 +100,47 @@ Arch baseArch (const juce::String& mood)
         a.layer[lyBells] = { { { 0.25f, 0.4f }, { 0.4f, 0.75f }, { 0.25f, 0.5f }, { 0.25f, 0.5f } } };
         a.scenes = { scValley, scOcean }; a.noises = { ntVinyl }; a.noiseChance = 0.85f; a.noiseLevel = { 0.25f, 0.45f };
     }
+    else if (mood == "Epic") // trailer-size: low brass-like pads, big bass, wide space, bold chords
+    {
+        a.scales = { Minor, Dorian, HarmMinor, Phrygian }; a.harmony = { 0.4f, 0.75f }; a.chordRate = { 0.35f, 0.7f }; a.evolution = { 0.45f, 0.75f };
+        a.density = { 0.6f, 0.9f }; a.light = { 0.25f, 0.55f }; a.space = { 0.8f, 1.0f }; a.octave = { 1.0f, 1.8f }; a.warmth = { 0.3f, 0.55f };
+        a.layer[lyPad] = { { { 0.7f, 0.9f }, { 0.9f, 1.0f }, { 0.35f, 0.65f }, { 0.6f, 0.9f } } };
+        a.layer[lyBass] = { { { 0.5f, 0.7f }, { 0.85f, 1.0f }, { 0.3f, 0.55f }, { 0.3f, 0.6f } } };
+        a.layer[lyShimmer][0] = { 0.4f, 0.6f };
+        a.scenes = { scValley, scAurora, scStarfield };
+    }
+    else if (mood == "Forest") // green, organic, warm: soft pads, birds of bells, wind in the leaves
+    {
+        a.scales = { MajPent, Major, Dorian, Mixolydian }; a.harmony = { 0.3f, 0.65f }; a.chordRate = { 0.15f, 0.45f }; a.evolution = { 0.25f, 0.5f };
+        a.light = { 0.45f, 0.75f }; a.space = { 0.55f, 0.8f }; a.warmth = { 0.2f, 0.45f };
+        a.layer[lyBells] = { { { 0.25f, 0.4f }, { 0.5f, 0.85f }, { 0.25f, 0.55f }, { 0.35f, 0.65f } } };
+        a.layer[lyWind] = { { { 0.25f, 0.45f }, { 0.55f, 0.9f }, { 0.4f, 0.7f }, { 0.25f, 0.55f } } };
+        a.layer[lyTexture] = { { { 0.3f, 0.5f }, { 0.4f, 0.75f }, { 0.4f, 0.7f }, { 0.2f, 0.5f } } };
+        a.scenes = { scValley }; a.noises = { ntPink, ntBrown }; a.noiseChance = 0.3f;
+    }
+    else if (mood == "Desert") // heat haze and dry wind: Phrygian / Hijaz-like colours, drones, sparse bells
+    {
+        a.scales = { Phrygian, HarmMinor, Hirajoshi, MinPent }; a.harmony = { 0.1f, 0.45f }; a.chordRate = { 0.05f, 0.35f }; a.evolution = { 0.3f, 0.55f };
+        a.light = { 0.55f, 0.85f }; a.space = { 0.6f, 0.85f }; a.warmth = { 0.35f, 0.6f }; a.octave = { 1.0f, 2.0f };
+        a.layer[lyDrone] = { { { 0.65f, 0.85f }, { 0.95f, 1.0f }, { 0.45f, 0.75f }, { 0.35f, 0.65f } } };
+        a.layer[lyWind] = { { { 0.35f, 0.55f }, { 0.7f, 1.0f }, { 0.5f, 0.85f }, { 0.55f, 0.85f } } };
+        a.layer[lyBells] = { { { 0.2f, 0.35f }, { 0.3f, 0.6f }, { 0.55f, 0.85f }, { 0.15f, 0.4f } } };
+        a.scenes = { scValley, scStarfield }; a.noises = { ntBrown }; a.noiseChance = 0.3f;
+    }
+    else if (mood == "Sleep") // as gentle as it gets: low, dark, slow, long fades, soft noise beds
+    {
+        a.scales = { MajPent, Suspended, Major }; a.harmony = { 0.0f, 0.3f }; a.chordRate = { 0.0f, 0.12f }; a.evolution = { 0.05f, 0.25f };
+        a.density = { 0.2f, 0.4f }; a.light = { 0.1f, 0.35f }; a.space = { 0.7f, 0.9f }; a.octave = { 1.0f, 2.0f }; a.warmth = { 0.2f, 0.4f };
+        a.layer[lyBells] = { { { 0.08f, 0.2f }, { 0.2f, 0.45f }, { 0.1f, 0.35f }, { 0.03f, 0.15f } } };
+        a.layer[lyShimmer][0] = { 0.2f, 0.4f };
+        a.layer[lyBass][0] = { 0.15f, 0.3f };
+        a.scenes = { scAurora, scOcean, scValley }; a.noises = { ntPink, ntBrown, ntOcean }; a.noiseChance = 0.75f; a.noiseLevel = { 0.2f, 0.4f };
+    }
     else // Ambient
     {
         a.scales = { Major, Lydian, MajPent, Suspended, Mixolydian, Dorian };
         a.light = { 0.45f, 0.8f };
-        a.scenes = { scValley, scNebula, scStarfield };
+        a.scenes = { scValley, scUnderwater, scStarfield };
         a.noises = { ntPink, ntOcean }; a.noiseChance = 0.3f;
     }
     return a;
@@ -125,8 +162,20 @@ void applySub (Arch& a, const juce::String& sub)
     else if (sub == "Night") { a.scales = { Minor, Dorian, MinPent }; a.light = { 0.15f, 0.35f }; }
     else if (sub == "Deep Space") { a.light = { 0.05f, 0.35f }; a.space = { 0.85f, 1.0f }; a.octave = { 1.0f, 1.8f }; }
     else if (sub == "Machine") { a.layer[lyTexture][3] = { 0.0f, 0.3f }; a.layer[lyTexture][1] = { 0.7f, 1.0f }; a.layer[lyWind][1] = { 0.0f, 0.25f }; }
+    else if (sub == "Trailer") { a.chordRate = { 0.5f, 0.75f }; a.layer[lyBass][0] = { 0.6f, 0.75f }; }
+    else if (sub == "Heroes") { a.scales = { Dorian, Lydian, Major }; a.light = { 0.5f, 0.7f }; }
+    else if (sub == "Battlefield") { a.scales = { Phrygian, HarmMinor }; a.light = { 0.1f, 0.3f }; a.layer[lyWind][1] = { 0.5f, 0.85f }; }
+    else if (sub == "Ancient Woods") { a.light = { 0.3f, 0.5f }; a.octave = { 1.0f, 1.6f }; }
+    else if (sub == "Morning Dew") { a.light = { 0.65f, 0.85f }; a.layer[lyBells][3] = { 0.45f, 0.7f }; }
+    else if (sub == "Fireflies") { a.light = { 0.15f, 0.35f }; a.layer[lyBells][1] = { 0.6f, 0.95f }; }
+    else if (sub == "Dunes") { a.evolution = { 0.15f, 0.35f }; }
+    else if (sub == "Mirage") { a.layer[lyShimmer] = { { { 0.45f, 0.65f }, { 0.7f, 1.0f }, { 0.5f, 0.8f }, { 0.4f, 0.8f } } }; }
+    else if (sub == "Caravan") { a.chordRate = { 0.2f, 0.45f }; a.layer[lyBass][1] = { 0.7f, 1.0f }; }
+    else if (sub == "Deep Sleep") { a.light = { 0.0f, 0.2f }; a.evolution = { 0.02f, 0.15f }; }
+    else if (sub == "Lullaby") { a.scales = { MajPent, Major }; a.layer[lyBells][0] = { 0.2f, 0.3f }; a.layer[lyBells][1] = { 0.4f, 0.7f }; }
+    else if (sub == "Night Rain") { a.noises = { ntPink }; a.noiseChance = 1.0f; a.noiseLevel = { 0.3f, 0.45f }; }
     else if (sub == "Angelic") { a.layer[lyDrone][2] = { 0.6f, 0.85f }; a.layer[lyShimmer][3] = { 0.0f, 0.3f }; }
-    else if (sub == "Celestial") { a.scenes = { scNebula, scAurora }; a.layer[lyBells][1] = { 0.6f, 0.9f }; a.layer[lyShimmer][3] = { 0.6f, 1.0f }; }
+    else if (sub == "Celestial") { a.scenes = { scStarfield, scAurora }; a.layer[lyBells][1] = { 0.6f, 0.9f }; a.layer[lyShimmer][3] = { 0.6f, 1.0f }; }
     else if (sub == "Dreamland") { a.evolution = { 0.45f, 0.7f }; a.layer[lyTexture][1] = { 0.6f, 0.95f }; }
     else if (sub == "Shoreline") { a.light = { 0.55f, 0.85f }; a.layer[lyBells][1] = { 0.3f, 0.6f }; }
     else if (sub == "Deep Blue") { a.light = { 0.1f, 0.35f }; a.octave = { 1.0f, 1.2f }; a.noiseLevel = { 0.2f, 0.35f }; }
@@ -159,7 +208,7 @@ void applySub (Arch& a, const juce::String& sub)
         a.layer[lyShimmer] = { { { 0.2f, 0.4f }, { 0.3f, 0.6f }, { 0.1f, 0.35f }, { 0.7f, 1.0f } } };
         a.layer[lyWind] = { { { 0.35f, 0.55f }, { 0.7f, 1.0f }, { 0.08f, 0.32f }, { 0.5f, 0.8f } } };
         a.layer[lyBells] = { { { 0.15f, 0.3f }, { 0.3f, 0.6f }, { 0.8f, 1.0f }, { 0.08f, 0.28f } } };
-        a.scenes = { scStarfield, scNebula }; a.fixedFocus = true;
+        a.scenes = { scStarfield }; a.fixedFocus = true;
     }
     else if (sub == "Alien") { a.scales = { WholeTone, Hirajoshi }; a.layer[lyDrone][3] = { 0.8f, 1.0f }; }
 }
@@ -196,6 +245,8 @@ float Generator::targetRmsDb (const juce::String& mood)
     if (mood == "Dark") return -21.0f;
     if (mood == "Oceanic" || mood == "Ethereal") return -21.5f;
     if (mood == "Nostalgia") return -20.0f;
+    if (mood == "Epic") return -18.5f;
+    if (mood == "Sleep") return -25.0f;
     return -21.0f;
 }
 
@@ -242,13 +293,13 @@ Preset Generator::candidate (const GenRequest& req, uint32_t seed)
     // variety with coherence: one featured layer leads, one or two step back (unless the sub-mood fixes the balance)
     if (! a.fixedFocus)
     {
-        const int featured = 1 + (int) (r.next() % 5);
+        const int featured = 1 + (int) (r.next() % 6);
         b.set (P::layer (featured, P::lLevel), p.get (P::layer (featured, P::lLevel)) + 0.15f);
         b.set (P::layer (featured, P::lPresence), p.get (P::layer (featured, P::lPresence)) + 0.25f);
         const int quiet = (int) (r.next() % 3);
         for (int k = 0; k < quiet; ++k)
         {
-            const int l = 1 + (int) (r.next() % 5);
+            const int l = 1 + (int) (r.next() % 6);
             if (l != featured) b.set (P::layer (l, P::lPresence), p.get (P::layer (l, P::lPresence)) - 0.3f);
         }
     }
@@ -272,8 +323,9 @@ Preset Generator::candidate (const GenRequest& req, uint32_t seed)
     b.set (P::lowCut, mood == "Dark" ? 22.0f : 28.0f + r.uni() * 20.0f);
     // brighter landscapes keep more top end; dark ones roll it off (coherent with Light)
     b.set (P::highCut, 6000.0f + 14000.0f * juce::jlimit (0.0f, 1.0f, p.get (P::light) * 0.8f + r.uni() * 0.3f));
-    b.set (P::fadeIn, mood == "Meditation" ? 8.0f : 3.0f + r.uni() * 4.0f);
-    b.set (P::fadeOut, mood == "Meditation" ? 5.0f : 2.0f + r.uni() * 2.0f);
+    b.set (P::fadeIn, mood == "Meditation" || mood == "Sleep" ? 8.0f : 3.0f + r.uni() * 4.0f);
+    b.set (P::fadeOut, mood == "Meditation" || mood == "Sleep" ? 5.0f : 2.0f + r.uni() * 2.0f);
+    b.set (P::sleepMode, mood == "Sleep" ? 1.0f : 0.0f);
 
     if (req.base != nullptr && ! req.locks.empty()) applyLocks (p, *req.base, req.locks);
 
@@ -310,6 +362,28 @@ Validation Generator::validate (Preset& p, bool fixLevel)
         }
     }
     const float rms = (float) std::sqrt (sq / (2.0 * n));
+    {   // movement: spread of the 0.5 s loudness (dB); width: side / mid energy
+        std::vector<float> win;
+        const int w = (int) (0.5 * sr);
+        double mid = 0, side = 0;
+        for (int st = 0; st + w <= n; st += w)
+        {
+            double e = 0;
+            for (int i = 0; i < w; ++i)
+            {
+                const float l = b.getSample (0, s0 + st + i), r = b.getSample (1, s0 + st + i);
+                e += 0.5 * (l * l + r * r);
+                mid += 0.25 * (l + r) * (l + r); side += 0.25 * (l - r) * (l - r);
+            }
+            win.push_back (10.0f * std::log10 ((float) (e / w) + 1.0e-12f));
+        }
+        float mean = 0, var = 0;
+        for (float x : win) mean += x;
+        mean /= (float) juce::jmax ((size_t) 1, win.size());
+        for (float x : win) var += (x - mean) * (x - mean);
+        v.movement = std::sqrt (var / (float) juce::jmax ((size_t) 1, win.size()));
+        v.width = (float) std::sqrt (side / (mid + 1.0e-12));
+    }
     v.rmsDb = 20.0f * std::log10 (juce::jmax (1.0e-9f, rms));
     v.peakDb = 20.0f * std::log10 (juce::jmax (1.0e-9f, peak));
     v.dc = (float) std::abs (sum / (2.0 * n));
@@ -329,18 +403,26 @@ Validation Generator::validate (Preset& p, bool fixLevel)
     return v;
 }
 
-Preset Generator::generate (const GenRequest& req, int* attempts, Validation* result, int maxAttempts)
+Preset Generator::generate (const GenRequest& req, int* attempts, Validation* result, int maxAttempts, int pickBest)
 {
-    Preset best;
-    Validation bv;
-    for (int k = 0; k < maxAttempts; ++k)
+    Preset best, first;
+    Validation bv, fv;
+    int found = 0;
+    for (int k = 0; k < maxAttempts && found < pickBest; ++k)
     {
         auto p = candidate (req, req.seed + (uint32_t) k * 7919u);
         auto v = validate (p);
         if (attempts) *attempts = k + 1;
-        if (v.ok) { if (result) *result = v; return p; }
-        if (k == 0) { best = p; bv = v; }
+        if (k == 0) { first = p; fv = v; }
+        if (! v.ok) continue;
+        int layers = 0;
+        for (int l = 0; l < kNumLayers; ++l) layers += p.get (P::layer (l, P::lOn)) > 0.5f;
+        // interesting = it moves (but not too much), it is wide, and several layers take part
+        v.score = juce::jmin (v.movement, 6.0f) - juce::jmax (0.0f, v.movement - 9.0f) + 4.0f * juce::jmin (v.width, 0.8f) + 0.3f * (float) layers;
+        if (found == 0 || v.score > bv.score) { best = p; bv = v; }
+        ++found;
     }
+    if (found == 0) { if (result) *result = fv; return first; }
     if (result) *result = bv;
     return best;
 }
@@ -454,6 +536,14 @@ juce::String Generator::makeName (const juce::String& mood, Rng& rng, const juce
                        { "Shore", "Tides", "Reef", "Harbour", "Lagoon", "Currents", "Waves", "Swell", "Undertow", "Bay", "Horizon", "Driftwood", "Lighthouse", "Kelp Forest", "Seafloor", "Tidepool", "Mariner", "Sirens", "Estuary", "Atlantic" } } },
         { "Nostalgia", { { "Faded", "Golden", "Sunday", "Polaroid", "Dusty", "Warm", "Old", "Summer", "Velvet", "Childhood", "Lost", "Sepia", "Hazy", "Sweet", "Late", "Analog", "Rewound", "Grandma's", "Sleepy", "Autumn" },
                          { "Memories", "Tapes", "Afternoon", "Letters", "Cassette", "Photographs", "Radio", "Bedroom", "Porch", "Vinyl", "Holidays", "Seaside", "Daydream", "Lullaby", "Postcards", "Home Movies", "Attic", "Sunset", "Records", "Window" } } },
+        { "Epic", { { "Rising", "Fallen", "Iron", "Last", "Burning", "Eternal", "Titanic", "Crimson", "Golden", "Final", "Thundering", "Endless", "Sacred", "Mighty", "Shattered", "Glorious", "Silent", "Valiant", "Ancient", "Storm" },
+                    { "Legion", "Kingdom", "Crusade", "Throne", "Siege", "Empire", "Oath", "Ascent", "Uprising", "Vanguard", "Armada", "Colossus", "Odyssey", "Reckoning", "Dynasty", "Monolith", "Requiem", "Citadel", "Exodus", "Horizon" } } },
+        { "Forest", { { "Ancient", "Mossy", "Green", "Whispering", "Hidden", "Morning", "Sunlit", "Deep", "Wild", "Silver", "Old", "Quiet", "Dewy", "Emerald", "Misty", "Gentle", "Elder", "Fern", "Amber", "Twilight" },
+                      { "Grove", "Canopy", "Woods", "Glade", "Clearing", "Roots", "Thicket", "Brook", "Hollow", "Pines", "Meadow", "Willows", "Fireflies", "Leaves", "Moss", "Cedars", "Trail", "Spring", "Birches", "Ferns" } } },
+        { "Desert", { { "Burning", "Golden", "Endless", "Silent", "Shifting", "Scorched", "Sandy", "Ancient", "Hidden", "Crimson", "Distant", "Dry", "Wandering", "Sun-Baked", "Lonely", "Amber", "Copper", "Hollow", "Bronze", "Veiled" },
+                      { "Dunes", "Mirage", "Oasis", "Caravan", "Sands", "Canyon", "Mesa", "Nomads", "Sirocco", "Ruins", "Bazaar", "Sun Temple", "Wells", "Horizon", "Salt Flats", "Kasbah", "Sphinx", "Crossing", "Winds", "Silk Road" } } },
+        { "Sleep", { { "Soft", "Sleepy", "Gentle", "Velvet", "Quiet", "Drowsy", "Dreamy", "Warm", "Hushed", "Slow", "Silken", "Calm", "Starry", "Cozy", "Feather", "Distant", "Tender", "Moonlit", "Sweet", "Still" },
+                     { "Lullaby", "Pillow", "Blanket", "Dreams", "Night", "Slumber", "Cradle", "Moon", "Hush", "Stars", "Rest", "Nest", "Clouds", "Breathing", "Midnight", "Haven", "Nightlight", "Sleep", "Drift", "Embrace" } } },
         { "Sci-Fi", { { "Orbital", "Quantum", "Stellar", "Ionic", "Derelict", "Alien", "Neural", "Silent", "Cryo", "Hyper", "Distant", "Signal", "Plasma", "Binary", "Cosmic", "Synthetic", "Polar", "Lunar", "Void", "Magnetic" },
                       { "Station", "Nebula", "Drift", "Colony", "Array", "Beacon", "Outpost", "Transmission", "Reactor", "Expanse", "Corridor", "Probe", "Singularity", "Hive", "Orbit", "Relay", "Horizon", "Archive", "Vessel", "Pulsar" } } },
     };

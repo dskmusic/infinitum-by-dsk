@@ -5,8 +5,8 @@
 // Single source of truth for every parameter. IDs are FROZEN once released (sessions/presets depend on them).
 namespace gx
 {
-constexpr int kNumLayers = 6;
-enum Layer { lyDrone, lyPad, lyTexture, lyShimmer, lyWind, lyBells };
+constexpr int kNumLayers = 7;
+enum Layer { lyDrone, lyPad, lyTexture, lyShimmer, lyWind, lyBells, lyBass };
 
 namespace P
 {
@@ -16,7 +16,7 @@ namespace P
         evolution, density, light, space, freeze,
         tuning, midiMode, fadeIn, fadeOut, timer,
         width, warmth, lowCut, highCut, revDamp, dlyTime, dlyFb, dlyTone, dlyMix,
-        scene, noiseType, noiseLevel, noiseTone,
+        scene, noiseType, noiseLevel, noiseTone, syncChords, chordBars, sleepMode,
         numGlobal
     };
     enum LayerField : int { lOn, lLevel, lPresence, lTone, lChar, numLayerFields };
@@ -28,7 +28,7 @@ namespace P
 
 enum ParamKind { pkFloat, pkInt, pkBool, pkChoice };
 enum MidiMode { mmOff, mmKey, mmPlay, mmKeyPlay };
-enum Scene { scValley, scStarfield, scNebula, scNeon, scOcean, scAurora, numScenes };
+enum Scene { scValley, scStarfield, scUnderwater, scNeon, scOcean, scAurora, numScenes };
 enum NoiseType { ntOff, ntPink, ntBrown, ntWhite, ntOcean, ntVinyl };
 
 struct ParamDef

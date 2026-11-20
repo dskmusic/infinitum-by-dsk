@@ -19,7 +19,7 @@ static Range skewed (float lo, float hi, float centre) { Range r (lo, hi); r.set
 
 const juce::StringArray& layerIds()
 {
-    static const juce::StringArray n { "drone", "pad", "texture", "shimmer", "wind", "bells" };
+    static const juce::StringArray n { "drone", "pad", "texture", "shimmer", "wind", "bells", "bass" };
     return n;
 }
 juce::String layerName (int l)
@@ -32,6 +32,7 @@ juce::String layerName (int l)
         case lyShimmer: return "SHIMMER";
         case lyWind: return L ("VIENTO", "WIND");
         case lyBells: return L ("CAMPANAS", "BELLS");
+        case lyBass: return L ("BAJO", "BASS");
         default: return {};
     }
 }
@@ -41,7 +42,7 @@ juce::String sceneName (int s)
     {
         case scValley: return L ("Valle", "Valley");
         case scStarfield: return L ("Campo estelar", "Starfield");
-        case scNebula: return L ("Nebulosa", "Nebula");
+        case scUnderwater: return L ("Bajo el agua", "Underwater");
         case scNeon: return L ("Neón", "Neon Rain");
         case scOcean: return L ("Océano", "Ocean");
         case scAurora: return L ("Aurora", "Aurora");
@@ -111,6 +112,9 @@ std::vector<ParamDef> build()
     b.add (harmony, "harmony", "Harmony", lin (0, 1), 0.5f);
     b.add (chordRate, "chord_rate", "Chord Motion", lin (0, 1), 0.4f);
     b.addChoice (tuning, "tuning", "Tuning", { "440 Hz", "432 Hz" }, 0);
+    b.addBool (syncChords, "sync_chords", "Sync Chords to Tempo", false);
+    b.addChoice (chordBars, "chord_bars", "Chord Length", { "1 bar", "2 bars", "4 bars", "8 bars", "16 bars" }, 2);
+    b.addBool (sleepMode, "sleep_mode", "Sleep Mode", false);
     b.addChoice (midiMode, "midi_mode", "MIDI Mode", { "Off", "Set Key", "Play Notes", "Key + Play" }, 3);
     b.add (fadeIn, "fade_in", "Fade In", skewed (0.1f, 30, 4), 4, "s");
     b.add (fadeOut, "fade_out", "Fade Out", skewed (0.1f, 60, 4), 3, "s");
@@ -135,7 +139,7 @@ std::vector<ParamDef> build()
     b.add (noiseLevel, "noise_level", "Noise Level", lin (0, 1), 0.3f);
     b.add (noiseTone, "noise_tone", "Noise Tone", lin (0, 1), 0.5f);
     b.group = "global";
-    b.addChoice (scene, "scene", "Scene", { "Valley", "Starfield", "Nebula", "Neon Rain", "Ocean", "Aurora" }, 0);
+    b.addChoice (scene, "scene", "Scene", { "Valley", "Starfield", "Underwater", "Neon Rain", "Ocean", "Aurora" }, 0);
 
     //                      level presence tone  char
     const float defs[kNumLayers][4] { { 0.70f, 1.00f, 0.50f, 0.40f },   // drone
@@ -143,8 +147,9 @@ std::vector<ParamDef> build()
                                       { 0.50f, 0.55f, 0.50f, 0.50f },   // texture
                                       { 0.45f, 0.60f, 0.50f, 0.40f },   // shimmer
                                       { 0.30f, 0.40f, 0.50f, 0.50f },   // wind
-                                      { 0.35f, 0.50f, 0.50f, 0.35f } }; // bells
-    const char* names[kNumLayers] { "Drone", "Pad", "Texture", "Shimmer", "Wind", "Bells" };
+                                      { 0.35f, 0.50f, 0.50f, 0.35f },   // bells
+                                      { 0.45f, 0.70f, 0.40f, 0.30f } }; // bass
+    const char* names[kNumLayers] { "Drone", "Pad", "Texture", "Shimmer", "Wind", "Bells", "Bass" };
     for (int l = 0; l < kNumLayers; ++l)
     {
         const juce::String id = layerIds()[l], nm = names[l];

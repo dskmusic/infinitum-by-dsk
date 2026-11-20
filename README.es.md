@@ -11,25 +11,30 @@ mientras la armonía, la luz y el espacio evolucionan despacio durante minutos u
 
 ## Funciones
 
-- **Motor de paisaje vivo:** seis capas que tocan solas (Drone, Pad, Textura, Shimmer, Viento, Campanas). Cada una tiene Nivel,
+- **Motor de paisaje vivo:** siete capas que tocan solas: Drone, Pad, Textura, Shimmer, Viento, Campanas y Bajo. Cada una tiene Nivel,
   Presencia (cuánto tiempo está presente), Tono y Carácter; una modulación lenta que nunca se repite decide cuándo aparece.
-- **Drone con Spectral Mutation:** armónicos que mutan y derivan como genes.
-- **Textura granular y Shimmer en primer plano:** una nube de granos afinada a octavas y quintas, y una reverb con
-  realimentación transpuesta (octava u octava + quinta).
-- **Armonía en movimiento:** 12 escalas, cualquier tonalidad, de quintas abiertas a acordes de 7ª y 9ª, con cambios de acorde
-  automáticos y conducción de voces.
-- **Cuatro macros grandes:** Evolución, Densidad, Luz (de noche a mediodía) y Espacio (de una sala a una catedral infinita), y **Congelar**.
-- **Botón Play / Stop** que además sigue el transporte de tu DAW. La evolución sale de una **semilla** y de la posición en la línea
-  de tiempo: lo que exportas del DAW suena igual que lo que oíste, y la misma semilla siempre da el mismo viaje.
-- **Exportación de audio largo:** de 1 minuto a 3 horas en **WAV, FLAC u OGG**, con fundido final (YouTube, meditación, estudio).
-- **Temporizador de sesión** con fundidos de entrada y salida, y afinación a **432 Hz**.
-- **Generador por estados de ánimo:** 8 estados: Cine, Ambient, Meditación, Oscuro, Sci-Fi, Etéreo, Océano y Nostalgia (de tres a cinco variantes cada uno). Cada resultado se
-  renderiza, se comprueba y se nivela antes de que lo oigas. Mutar, mezclar e historial de la sesión.
-- **136 presets de fábrica** (incluidas noches de ciudad futurista bajo la lluvia y naves abandonadas), navegador con etiquetas, favoritos y valoraciones, comparación A/B, deshacer/rehacer, MIDI learn.
-- **MIDI:** cambia la tonalidad desde tu teclado, toca notas encima, o ambas.
-- **Seis paisajes animados** (Valle, Campo estelar, Nebulosa, Neón, Océano, Aurora) que reaccionan a cada capa, con **pantalla completa** y atajos de teclado.
-- **Generador de ruido** (rosa, marrón, blanco, olas de océano, crepitar de vinilo), pad **analógico** de los 80 con chorus de ensemble, y campanas que tocan pequeñas frases melódicas.
-- Escalable del 50 al 200 %, interfaz en **inglés y español** (automática o manual).
+- **Sonido rico:** drone Spectral Mutation, pad analógico PWM + sierra con chorus de ensemble y apertura del filtro de los 80, nubes
+  granulares afinadas a octavas y quintas, shimmer, bajo que sigue el acorde, frases de campanas y una nueva reverb tipo hall con pre-delay.
+- **Armonía en movimiento:** 12 escalas, cualquier tonalidad, de quintas abiertas a acordes de 7ª y 9ª, cambios de acorde automáticos
+  o **sincronizados al tempo de tu DAW** (cada 1-16 compases).
+- **Cuatro macros grandes:** Evolución, Densidad, Luz (de noche a mediodía) y Espacio (de una sala a una catedral infinita), y **Congelar** sin chasquidos.
+- **Play / Stop** que también sigue a tu DAW. La evolución sale de una **semilla** y de la posición en la línea de tiempo: lo que exportas
+  suena igual que lo que oíste, y la misma semilla siempre da el mismo viaje.
+- **Seis paisajes animados** que reaccionan a cada capa: Valle, Campo estelar, Bajo el agua, Neón, Océano y Aurora, con **pantalla completa**,
+  atajos de teclado y **modo relax** sin textos.
+- **12 estados de ánimo, 256 presets de fábrica:** Cine, Ambient, Meditación, Oscuro, Sci-Fi, Etéreo, Océano, Nostalgia, Épico, Bosque,
+  Desierto y Dormir. El generador prueba varios candidatos, los comprueba y se queda con el más vivo.
+- **Exportación de audio largo:** de 1 minuto a 3 horas en WAV, FLAC u OGG. **Vídeo del paisaje:** un MP4 con el paisaje animado y su sonido,
+  listo para YouTube (usa ffmpeg, gratuito; Infinitum lo encuentra o te ayuda a instalarlo).
+- **Modo Dormir** y temporizador, afinación a **432 Hz**, **generador de ruido** (rosa, marrón, blanco, olas, vinilo).
+- **8 memorias rápidas** con fundido de 2 segundos, navegador de presets con etiquetas y favoritos, A/B, deshacer/rehacer, MIDI learn,
+  y cambios de preset sin chasquidos.
+- Ventana escalable y maximizable, interfaz en **inglés y español** (automática o manual) con una página de **Ayuda** clara y amena.
+
+| | |
+|---|---|
+| ![Neón](docs/screenshots/landscape-neon.png) | ![Bajo el agua](docs/screenshots/landscape-underwater.png) |
+| ![Océano](docs/screenshots/landscape-ocean.png) | ![Aurora](docs/screenshots/landscape-aurora.png) |
 
 ## Descarga
 

@@ -48,7 +48,7 @@ void Logo::paint (juce::Graphics& g)
     drawMark (g, r.removeFromLeft (r.getHeight() * 1.6f).reduced (4, 10), glow, phase);
     r.removeFromLeft (8);
     juce::GlyphArrangement ga;
-    ga.addLineOfText (techFont (25.0f), "INFINITUM", r.getX(), r.getCentreY() + 9.0f);
+    ga.addLineOfText (techFont (21.0f), "INFINITUM", r.getX(), r.getCentreY() + 8.0f);
     juce::Path text;
     ga.createPath (text);
     const auto tb = text.getBounds();
@@ -123,11 +123,12 @@ Header::Header (Context& c, std::function<void (int)> onTab) : ctx (c), play (c.
 {
     addAndMakeVisible (logo);
     addAndMakeVisible (play);
-    const juce::String names[] { L ("PAISAJE", "LANDSCAPE"), L ("SONIDO", "SOUND"), L ("GENERADOR", "GENERATOR"), "PRESETS", L ("EXPORTAR", "EXPORT"), L ("AJUSTES", "SETTINGS") };
-    for (int i = 0; i < 6; ++i)
+    const juce::String names[] { L ("PAISAJE", "LANDSCAPE"), L ("SONIDO", "SOUND"), L ("GENERADOR", "GENERATOR"), "PRESETS", L ("EXPORTAR", "EXPORT"), L ("AJUSTES", "SETTINGS"), L ("AYUDA", "HELP") };
+    for (int i = 0; i < 7; ++i)
     {
         auto* b = tabs.add (new juce::TextButton (names[i]));
         b->setClickingTogglesState (false);
+        b->getProperties().set ("small", true);
         b->onClick = [this, i] { setTab (i); if (tabCb) tabCb (i); };
         addAndMakeVisible (b);
     }
@@ -180,10 +181,10 @@ void Header::resized()
 {
     auto r = getLocalBounds().reduced (10, 6);
     r.removeFromBottom (2);
-    logo.setBounds (r.removeFromLeft (245));
+    logo.setBounds (r.removeFromLeft (232));
     play.setBounds (r.removeFromLeft (56).withSizeKeepingCentre (56, 56));
     r.removeFromLeft (8);
-    auto tabArea = r.removeFromLeft (540);
+    auto tabArea = r.removeFromLeft (590);
     const int tw = tabArea.getWidth() / tabs.size();
     for (auto* t : tabs) t->setBounds (tabArea.removeFromLeft (tw).reduced (2, 8));
     r.removeFromLeft (8);
@@ -275,11 +276,96 @@ ExportPage::ExportPage (Context& c) : Page (c)
     };
     status = L ("Renderiza el sonido actual (con su semilla) a un archivo largo: ideal para vídeos, meditación o estudio.",
                 "Renders the current sound (with its seed) to a long file: ideal for videos, meditation or study.");
+
+    // ---- video
+    const int vmins[] { 1, 3, 5, 10, 15, 30, 60 };
+    for (int m : vmins) vDuration.addItem (juce::String (m) + " min", m);
+    vDuration.setSelectedId (3, juce::dontSendNotification);
+    vRes.addItem ("1920 x 1080 (Full HD)", 1080);
+    vRes.addItem ("1280 x 720 (HD)", 720);
+    vRes.setSelectedId (1080, juce::dontSendNotification);
+    for (auto* comp : std::initializer_list<juce::Component*> { &vDuration, &vRes, &exportVideo, &cancelVideo, &ffmpegInstall, &ffmpegChoose })
+        addAndMakeVisible (comp);
+    cancelVideo.setEnabled (false);
+    exportVideo.onClick = [this] { startVideo(); };
+    cancelVideo.onClick = [this] { video.cancel(); };
+    ffmpegInstall.onClick = [this] { installFfmpeg(); };
+    ffmpegChoose.onClick = [this]
+    {
+        chooser = std::make_unique<juce::FileChooser> (L ("Elegir ffmpeg", "Choose ffmpeg"), juce::File(), "*");
+        chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles, [this] (const juce::FileChooser& fc)
+        {
+            if (fc.getResult().existsAsFile()) { ctx.settings.file().setValue ("ffmpeg", fc.getResult().getFullPathName()); ctx.settings.file().saveIfNeeded(); }
+            updateFfmpegStatus();
+        });
+    };
+    updateFfmpegStatus();
+}
+
+void ExportPage::updateFfmpegStatus()
+{
+    ffmpeg = findFfmpeg (ctx.settings);
+    ffmpegInstall.setVisible (! ffmpeg.existsAsFile());
+    videoStatus = ffmpeg.existsAsFile() ? L ("ffmpeg encontrado: ", "ffmpeg found: ") + ffmpeg.getFullPathName()
+                                        : L ("Falta ffmpeg (gratuito) para exportar vídeo. Pulsa «Instalar ffmpeg» o «Elegir ffmpeg…».",
+                                             "ffmpeg (free) is needed to export video. Press \"Install ffmpeg\" or \"Choose ffmpeg...\".");
+    repaint();
+}
+
+void ExportPage::installFfmpeg()
+{
+    const auto cmd = ffmpegInstallCommand();
+    if (cmd.isEmpty() || installer != nullptr)
+    {
+        juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::InfoIcon, "ffmpeg", ffmpegInstructions());
+        return;
+    }
+    installer = std::make_unique<juce::ChildProcess>();
+    if (! installer->start (cmd))
+    {
+        installer.reset();
+        juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::InfoIcon, "ffmpeg", ffmpegInstructions());
+        return;
+    }
+    videoStatus = L ("Instalando ffmpeg… (puede tardar un par de minutos)", "Installing ffmpeg… (this can take a couple of minutes)");
+    ffmpegInstall.setEnabled (false);
+    startTimerHz (10);
+    repaint();
+}
+
+void ExportPage::startVideo()
+{
+    if (video.running() || busy.load()) return;
+    updateFfmpegStatus();
+    if (! ffmpeg.existsAsFile()) { juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::InfoIcon, "ffmpeg", ffmpegInstructions()); return; }
+    const auto name = ctx.proc.currentMeta.name.isNotEmpty() ? ctx.proc.currentMeta.name : juce::String ("Infinitum");
+    const auto def = juce::File::getSpecialLocation (juce::File::userMoviesDirectory)
+                         .getChildFile (juce::File::createLegalFileName (name + " - " + juce::String (vDuration.getSelectedId()) + " min.mp4"));
+    chooser = std::make_unique<juce::FileChooser> (L ("Guardar vídeo", "Save video"), def, "*.mp4");
+    chooser->launchAsync (juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::warnAboutOverwriting, [this] (const juce::FileChooser& fc)
+    {
+        auto f = fc.getResult();
+        if (f == juce::File()) return;
+        videoTarget = f.withFileExtension (".mp4");
+        const int hgt = vRes.getSelectedId();
+        juce::String err;
+        if (! video.start (Preset::capture (ctx.proc), videoTarget, vDuration.getSelectedId() * 60.0, hgt == 720 ? 1280 : 1920, hgt, ffmpeg, err))
+        {
+            juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::InfoIcon, "ffmpeg", ffmpegInstructions());
+            return;
+        }
+        videoStart = juce::Time::getMillisecondCounterHiRes() * 0.001;
+        exportVideo.setEnabled (false);
+        cancelVideo.setEnabled (true);
+        startTimerHz (30);
+    });
 }
 
 ExportPage::~ExportPage()
 {
     cancelFlag = true;
+    video.cancel();
+    while (video.running()) video.step (50.0);
     if (worker.joinable()) worker.join();
 }
 
@@ -315,9 +401,38 @@ void ExportPage::start()
 
 void ExportPage::timerCallback()
 {
+    if (installer != nullptr && ! installer->isRunning())
+    {
+        installer.reset();
+        ffmpegInstall.setEnabled (true);
+        updateFfmpegStatus();
+        if (! ffmpeg.existsAsFile()) juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::InfoIcon, "ffmpeg", ffmpegInstructions());
+        else if (ctx.toast) ctx.toast (L ("ffmpeg instalado: ya puedes exportar vídeo", "ffmpeg installed: you can export video now"));
+    }
+    if (video.running())
+    {
+        const bool more = video.step (24.0); // keep the UI responsive: ~24 ms of frames per tick
+        const double el = juce::Time::getMillisecondCounterHiRes() * 0.001 - videoStart;
+        const float p = video.progress();
+        if (more)
+        {
+            videoStatus = p <= 0.0f ? L ("Preparando el sonido… ", "Rendering the soundtrack… ") + juce::String ((int) (video.audioProgress.load() * 100)) + " %"
+                                    : L ("Renderizando vídeo… ", "Rendering video… ") + juce::String ((int) (p * 100)) + " %"
+                                      + (p > 0.02f ? L ("  ·  quedan ", "  ·  ") + juce::String ((int) (el / p * (1.0 - p)) / 60) + ":" + juce::String ((int) (el / p * (1.0 - p)) % 60).paddedLeft ('0', 2) + L ("", " left") : juce::String());
+        }
+        else
+        {
+            exportVideo.setEnabled (true);
+            cancelVideo.setEnabled (false);
+            if (video.result.isEmpty()) { videoStatus = L ("Listo: ", "Done: ") + videoTarget.getFullPathName(); videoTarget.revealToUser(); }
+            else videoStatus = video.result == "cancelled" ? L ("Vídeo cancelado.", "Video cancelled.") : L ("Error: ", "Error: ") + video.result;
+        }
+        repaint();
+    }
+    if (! busy.load() && ! video.running() && installer == nullptr) { stopTimer(); return; }
     if (done.load())
     {
-        stopTimer();
+        if (! video.running() && installer == nullptr) stopTimer();
         if (worker.joinable()) worker.join();
         busy = false;
         exportAudio.setEnabled (true);
@@ -330,7 +445,7 @@ void ExportPage::timerCallback()
         }
         else status = result == "cancelled" ? L ("Exportación cancelada.", "Export cancelled.") : L ("Error: ", "Error: ") + result;
     }
-    else
+    else if (busy.load())
     {
         const double el = juce::Time::getMillisecondCounterHiRes() * 0.001 - startedAt;
         const float p = progress.load();
@@ -344,59 +459,75 @@ void ExportPage::timerCallback()
 void ExportPage::paint (juce::Graphics& g)
 {
     auto r = getLocalBounds().reduced (12);
-    auto top = r.removeFromTop (300).toFloat();
-    drawPanel (g, top);
-    auto in = top.reduced (24, 18);
-    g.setColour (col::text);
-    g.setFont (techFont (17.0f));
-    g.drawText (L ("EXPORTAR AUDIO LARGO", "LONG AUDIO EXPORT"), in.removeFromTop (26), juce::Justification::centredLeft);
-    g.setColour (col::textDim);
-    g.setFont (font (12.5f));
-    g.drawText (L ("YouTube, meditación, estudio, cine: hasta 3 horas sin repetirse, con fundido final.", "YouTube, meditation, study, film: up to 3 hours that never repeat, with a final fade-out."),
-                in.removeFromTop (20), juce::Justification::centredLeft);
-    in.removeFromTop (14);
-    g.setFont (font (12.0f, true));
-    g.setColour (col::text);
-    auto row = in.removeFromTop (20);
-    for (auto* label : { "DURACIÓN|DURATION", "FORMATO|FORMAT", "FRECUENCIA|SAMPLE RATE" })
+    auto panel = [&] (int hgt, const juce::String& title, const juce::String& sub)
     {
-        const juce::String s = juce::String::fromUTF8 (label);
-        g.drawText (L (s.upToFirstOccurrenceOf ("|", false, false).toRawUTF8(), s.fromFirstOccurrenceOf ("|", false, false).toRawUTF8()), row.removeFromLeft (200), juce::Justification::centredLeft);
-    }
-    // progress bar
-    auto bar = getLocalBounds().reduced (12).removeFromTop (300).reduced (24, 18).withTrimmedTop (170).removeFromTop (14).toFloat();
-    g.setColour (col::bgDeep);
-    g.fillRoundedRectangle (bar, 4);
-    if (busy.load() || progress.load() > 0)
+        auto p = r.removeFromTop (hgt).toFloat();
+        r.removeFromTop (10);
+        drawPanel (g, p);
+        auto in = p.reduced (24, 14);
+        g.setColour (col::text);
+        g.setFont (techFont (16.0f));
+        g.drawText (title, in.removeFromTop (24), juce::Justification::centredLeft);
+        g.setColour (col::textDim);
+        g.setFont (font (12.5f));
+        g.drawText (sub, in.removeFromTop (18), juce::Justification::centredLeft);
+        return in;
+    };
+    auto labels = [&] (juce::Rectangle<float> in, std::initializer_list<juce::String> l)
     {
-        g.setGradientFill (juce::ColourGradient (col::accent, bar.getX(), 0, col::accent2, bar.getRight(), 0, false));
-        g.fillRoundedRectangle (bar.withWidth (bar.getWidth() * progress.load()), 4);
-    }
-    g.setColour (col::text);
-    g.setFont (font (12.5f));
-    g.drawFittedText (status, bar.translated (0, 22).withHeight (40).toNearestInt(), juce::Justification::topLeft, 2);
-
-    auto low = r.withTrimmedTop (12).removeFromTop (120).toFloat();
-    drawPanel (g, low);
-    g.setColour (col::text);
-    g.setFont (techFont (15.0f));
-    g.drawText (L ("PRESETS (.INFINITUM)", "PRESETS (.INFINITUM)"), low.reduced (24, 14).removeFromTop (22), juce::Justification::centredLeft);
+        g.setFont (font (11.5f, true));
+        g.setColour (col::text);
+        auto row = in.withTrimmedTop (8).removeFromTop (16);
+        for (auto& s2 : l) g.drawText (s2, row.removeFromLeft (200), juce::Justification::centredLeft);
+    };
+    auto bar = [&] (juce::Rectangle<float> rb, float p, const juce::String& text)
+    {
+        g.setColour (col::bgDeep);
+        g.fillRoundedRectangle (rb, 4);
+        if (p > 0) { g.setGradientFill (juce::ColourGradient (col::accent, rb.getX(), 0, col::accent2, rb.getRight(), 0, false)); g.fillRoundedRectangle (rb.withWidth (rb.getWidth() * p), 4); }
+        g.setColour (col::text);
+        g.setFont (font (12.0f));
+        g.drawFittedText (text, rb.translated (0, 18).withHeight (32).toNearestInt(), juce::Justification::topLeft, 2);
+    };
+    auto a = panel (205, L ("EXPORTAR AUDIO LARGO", "LONG AUDIO EXPORT"),
+                    L ("YouTube, meditación, estudio, cine: hasta 3 horas sin repetirse, con fundido final.", "YouTube, meditation, study, film: up to 3 hours that never repeat, with a final fade-out."));
+    labels (a, { L ("DURACIÓN", "DURATION"), L ("FORMATO", "FORMAT"), L ("FRECUENCIA", "SAMPLE RATE") });
+    bar (a.withTrimmedTop (104).removeFromTop (12), progress.load(), status);
+    auto v = panel (215, L ("VÍDEO DEL PAISAJE (MP4)", "LANDSCAPE VIDEO (MP4)"),
+                    L ("El paisaje animado con su sonido, listo para YouTube: sin grabar la pantalla.", "The animated landscape with its sound, ready for YouTube: no screen recording needed."));
+    labels (v, { L ("DURACIÓN", "DURATION"), L ("RESOLUCIÓN", "RESOLUTION") });
+    bar (v.withTrimmedTop (104).removeFromTop (12), video.progress(), videoStatus);
+    panel (110, L ("PRESETS (.INFINITUM)", "PRESETS (.INFINITUM)"), {});
 }
 
 void ExportPage::resized()
 {
-    auto in = getLocalBounds().reduced (12).removeFromTop (300).reduced (24, 18);
-    in.removeFromTop (26 + 20 + 14 + 20);
-    auto row = in.removeFromTop (30);
+    auto r = getLocalBounds().reduced (12);
+    auto in = r.removeFromTop (205).reduced (24, 14);
+    r.removeFromTop (10);
+    in.removeFromTop (24 + 18 + 26);
+    auto row = in.removeFromTop (28);
     duration.setBounds (row.removeFromLeft (200).withTrimmedRight (20));
     format.setBounds (row.removeFromLeft (200).withTrimmedRight (20));
     rate.setBounds (row.removeFromLeft (200).withTrimmedRight (20));
-    in.removeFromTop (12);
-    auto btns = in.removeFromTop (34);
-    exportAudio.setBounds (btns.removeFromLeft (220).reduced (0, 0));
-    btns.removeFromLeft (10);
-    cancel.setBounds (btns.removeFromLeft (120));
-    auto low = getLocalBounds().reduced (12).withTrimmedTop (312).removeFromTop (120).reduced (24, 14).withTrimmedTop (34);
+    row.removeFromLeft (10);
+    exportAudio.setBounds (row.removeFromLeft (200));
+    row.removeFromLeft (10);
+    cancel.setBounds (row.removeFromLeft (110));
+    auto vin = r.removeFromTop (215).reduced (24, 14);
+    r.removeFromTop (10);
+    vin.removeFromTop (24 + 18 + 26);
+    auto vrow = vin.removeFromTop (28);
+    vDuration.setBounds (vrow.removeFromLeft (200).withTrimmedRight (20));
+    vRes.setBounds (vrow.removeFromLeft (200).withTrimmedRight (20));
+    vrow.removeFromLeft (210);
+    exportVideo.setBounds (vrow.removeFromLeft (200));
+    vrow.removeFromLeft (10);
+    cancelVideo.setBounds (vrow.removeFromLeft (110));
+    ffmpegChoose.setBounds (vrow.removeFromRight (150));
+    vrow.removeFromRight (8);
+    ffmpegInstall.setBounds (vrow.removeFromRight (140));
+    auto low = r.removeFromTop (110).reduced (24, 14).withTrimmedTop (34);
     exportPreset.setBounds (low.removeFromLeft (240).removeFromTop (32));
     low.removeFromLeft (10);
     importPreset.setBounds (low.removeFromLeft (220).removeFromTop (32));
