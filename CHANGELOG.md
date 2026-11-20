@@ -3,6 +3,11 @@
 ## [Unreleased]
 
 ### Added
+- Realism pass on every landscape: bloom, cinematic camera, weather that changes with Evolution, day / night with Light.
+- Valley: golden hour, ridged mountains with snow and alpenglow, cloud shadows, forests, meadow, stream, birds, lens flare.
+- Starfield: atmospheric limb, ring divisions and shadows, lightning and polar aurora, two moons, meteors, diffraction spikes.
+- Ocean: waves rushing up the shore, wet sand, light path, cliff with spray, gulls, a whale, sea mist.
+- Underwater: manta ray and sea turtle, bubbles, corals and anemones. Aurora: light on the snow, chimney smoke.
 - Melody layer (8th layer, off in older presets): composed 8-bar themes with motif, answer and cadence, music box / celesta / flute tones.
 - Two melodic moods, Fairytale and Film Score (36 new presets, 292 in total); generator grid stays even (7 x 2).
 - GPU shader landscapes (toggle in Settings), FPS counter, landscape picture button, natural Neon rain, translucent jellyfish.
