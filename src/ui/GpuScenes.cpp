@@ -448,10 +448,21 @@ vec3 scene (vec2 uv)
         col = vec3 (0.01, 0.012, 0.02) + ga * 0.45 + b.rgb * 0.15 + glowC * 0.08;
     }
     // rain
-    vec2 rp = vec2 (p.x * 90.0 + uv.y * 14.0, uv.y * 2.5 + uTime * 5.5);
-    vec2 rid = floor (rp), rf = fract (rp);
-    float drop = step (0.9, hash12 (rid)) * smoothstep (0.08, 0.0, abs (rf.x - 0.5)) * smoothstep (0.0, 0.7, rf.y) * smoothstep (1.0, 0.8, rf.y);
-    col += vec3 (0.6, 0.72, 1.0) * drop * (0.18 + 0.2 * uPres[4]);
+    for (int l = 0; l < 3; l++)   // far (fine, slow) to near (thicker, fast); every column has its own speed and phase
+    {
+        float fl = float (l);
+        float cols = 150.0 - 40.0 * fl;
+        float cx = p.x * cols + uv.y * (5.0 + 3.0 * fl);              // slight slant
+        float cid = floor (cx), fx = fract (cx);
+        float h1 = hash12 (vec2 (cid, 3.0 + fl)), h2 = hash12 (vec2 (cid, 7.0 + fl));
+        float rate = (0.9 + 0.8 * h1) * (0.8 + 0.45 * fl);           // screen heights per second
+        float tt = uv.y * (2.0 + h2) + uTime * rate * (2.0 + h2) + h2 * 17.0;
+        float did = floor (tt), fy = fract (tt);
+        float len = 0.16 + 0.12 * fl;
+        float exists = step (0.62 - 0.08 * uPres[4], hash12 (vec2 (cid + 0.37, did + fl * 31.0)));
+        float streak = exists * smoothstep (0.09 + 0.05 * fl, 0.0, abs (fx - 0.5)) * step (fy, len) * (1.0 - fy / len);
+        col += vec3 (0.6, 0.72, 1.0) * streak * (0.1 + 0.07 * fl) * (0.7 + 0.6 * uPres[4]);
+    }
     // low fog (Wind)
     col = mix (col, glowC * 0.55, uPres[4] * 0.35 * smoothstep (0.35, 0.0, uv.y) * fbm3 (vec2 (p.x * 2.0 - uMus * 0.02, uv.y * 4.0)));
     return col;

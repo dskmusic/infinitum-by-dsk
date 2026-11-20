@@ -93,7 +93,8 @@ public:
     SceneUniforms uniforms() const;
     void tick (const Frame&) override;
     void paint (juce::Graphics&) override;
-    void resized() override { cacheKey = {}; }
+    void resized() override;
+    void takeScreenshot();
     bool showOverlay = true;                 // chord / key / clock texts
     bool fullBleed = false;                  // no rounded corners (full screen, video)
     std::function<void()> onClick;
@@ -140,6 +141,9 @@ private:
     std::atomic<int> framesDrawn { 0 };
     double fpsT0 = 0; float fps = 0;
     void paintFps (juce::Graphics&, juce::Rectangle<float>);
+    std::unique_ptr<juce::Button> shotButton;
+    juce::String shotMsg; double shotMsgAt = -100;
+    juce::File lastShot;
     juce::SpinLock ulock;
     SceneUniforms uni;
     juce::Image external;

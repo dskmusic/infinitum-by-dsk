@@ -1,4 +1,5 @@
 #include "Visuals.h"
+#include "Pages.h"
 
 namespace gx::ui
 {
@@ -105,6 +106,30 @@ void softBlob (juce::Graphics& g, float x, float y, float rx, float ry, juce::Co
 Landscape::Landscape()
 {
     setInterceptsMouseClicks (true, true);   // children: the scene buttons
+    // small camera button (bottom-left): saves the landscape as a clean, branded picture
+    struct ShotButton : juce::Button
+    {
+        ShotButton() : juce::Button ("shot") { setMouseCursor (juce::MouseCursor::PointingHandCursor); setTooltip (L ("Guardar una captura del paisaje", "Save a picture of the landscape")); }
+        void paintButton (juce::Graphics& g, bool over, bool down) override
+        {
+            auto r = getLocalBounds().toFloat().reduced (1.0f);
+            g.setColour (juce::Colours::white.withAlpha (over ? 0.14f : 0.07f));
+            g.fillRoundedRectangle (r, 5.0f);
+            g.setColour (juce::Colours::white.withAlpha (over ? 0.35f : 0.18f));
+            g.drawRoundedRectangle (r, 5.0f, 1.0f);
+            const auto c = over ? col::accent : juce::Colours::white.withAlpha (0.7f);
+            auto body = r.reduced (r.getWidth() * 0.22f, r.getHeight() * 0.27f).translated (0, 1.0f + (down ? 0.5f : 0.0f));
+            juce::Path p;
+            p.addRoundedRectangle (body, 2.0f);
+            g.setColour (c);
+            g.strokePath (p, juce::PathStrokeType (1.2f));
+            g.drawLine (body.getX() + body.getWidth() * 0.3f, body.getY() - 1.6f, body.getX() + body.getWidth() * 0.55f, body.getY() - 1.6f, 1.2f);
+            g.drawEllipse (juce::Rectangle<float> (body.getHeight() * 0.62f, body.getHeight() * 0.62f).withCentre (body.getCentre()), 1.2f);
+        }
+    };
+    shotButton = std::make_unique<ShotButton>();
+    shotButton->onClick = [this] { takeScreenshot(); };
+    addChildComponent (*shotButton);
     for (size_t i = 0; i < stars.size(); ++i)
     {
         stars[i] = { rng.nextFloat(), rng.nextFloat() };
@@ -349,10 +374,95 @@ void Landscape::paint (juce::Graphics& g)
     paintFps (g, b);
 }
 
+void Landscape::resized()
+{
+    cacheKey = {};
+}
+
+void Landscape::takeScreenshot()
+{
+    const float k = 2.0f;   // twice the on-screen size
+    const int W = juce::roundToInt ((float) getWidth() * k), H = juce::roundToInt ((float) getHeight() * k);
+    if (W < 10 || H < 10) return;
+    juce::Image bg;
+    if (glOk.load())
+    {
+        bg = OffscreenGpu::get().render (uniforms(), W, H);
+        if (! bg.isValid()) { shotMsg = L ("No se pudo hacer la captura", "The picture could not be taken"); shotMsgAt = juce::Time::getMillisecondCounterHiRes() * 0.001; return; }
+    }
+    // the bare landscape: no texts, no buttons, square corners
+    const bool ov = showOverlay, fb = fullBleed;
+    const auto oldExt = external;
+    showOverlay = false; fullBleed = true;
+    if (bg.isValid()) external = bg;
+    std::vector<juce::Component*> hidden;
+    for (auto* c : getChildren()) if (c->isVisible()) { c->setVisible (false); hidden.push_back (c); }
+    juce::Image img = createComponentSnapshot (getLocalBounds(), true, k).convertedToFormat (juce::Image::RGB);
+    for (auto* c : hidden) c->setVisible (true);
+    showOverlay = ov; fullBleed = fb; external = oldExt;
+
+    {   // branding: logo + name top-right (as in the header), credit at the foot
+        juce::Graphics g (img);
+        const float s = (float) W / 1280.0f;
+        juce::GlyphArrangement ga;
+        ga.addLineOfText (techFont (21.0f * s), "INFINITUM", 0, 0);
+        juce::Path text;
+        ga.createPath (text);
+        auto tb = text.getBounds();
+        g.setFont (font (12.0f * s, true));
+        const float byW = juce::GlyphArrangement::getStringWidth (g.getCurrentFont(), "by DSK");
+        const float margin = 22.0f * s, markW = 30.0f * s * 1.6f;
+        const float textX = (float) W - margin - byW - 7.0f * s - tb.getWidth();
+        const float baseY = margin + 22.0f * s;
+        text.applyTransform (juce::AffineTransform::translation (textX - tb.getX(), baseY));
+        tb = text.getBounds();
+        Logo::drawMark (g, juce::Rectangle<float> (tb.getX() - 8.0f * s - markW, tb.getCentreY() - 15.0f * s, markW, 30.0f * s).reduced (4.0f * s, 5.0f * s), 0.6f, 0.2f);
+        g.setColour (juce::Colours::black.withAlpha (0.35f));
+        g.fillPath (text, juce::AffineTransform::translation (0, 1.5f * s));
+        g.setColour (col::accent.withAlpha (0.3f));
+        g.strokePath (text, juce::PathStrokeType (3.0f * s));
+        juce::ColourGradient grad (juce::Colours::white, tb.getX(), tb.getY(), col::accent, tb.getRight(), tb.getBottom(), false);
+        g.setGradientFill (grad);
+        g.fillPath (text);
+        g.setColour (juce::Colours::white.withAlpha (0.7f));
+        g.drawText ("by DSK", juce::Rectangle<float> (tb.getRight() + 7.0f * s, tb.getBottom() - 14.0f * s, byW + 4.0f, 16.0f * s), juce::Justification::bottomLeft);
+        // credit
+        g.setFont (techFont (10.5f * s));
+        const juce::String credit = "Infinitum by DSK  -  www.dskmusic.com/infinitum";
+        auto foot = juce::Rectangle<float> (0, (float) H - 34.0f * s, (float) W, 20.0f * s);
+        g.setColour (juce::Colours::black.withAlpha (0.4f));
+        g.drawText (credit, foot.translated (0, 1.2f * s), juce::Justification::centred);
+        g.setColour (juce::Colours::white.withAlpha (0.75f));
+        g.drawText (credit, foot, juce::Justification::centred);
+    }
+    auto dir = juce::File::getSpecialLocation (juce::File::userPicturesDirectory).getChildFile ("Infinitum");
+    dir.createDirectory();
+    auto file = dir.getNonexistentChildFile ("Infinitum " + juce::Time::getCurrentTime().formatted ("%Y-%m-%d %H-%M-%S"), ".png");
+    bool ok = false;
+    if (auto out = file.createOutputStream()) { juce::PNGImageFormat png; ok = png.writeImageToStream (img, *out); }
+    shotMsg = ok ? L ("Captura guardada en Imágenes\\Infinitum", "Picture saved to Pictures\\Infinitum") : L ("No se pudo guardar la captura", "The picture could not be saved");
+    shotMsgAt = juce::Time::getMillisecondCounterHiRes() * 0.001;
+    lastShot = ok ? file : juce::File();
+    repaint();
+}
+
 void Landscape::paintFps (juce::Graphics& g, juce::Rectangle<float> b)
 {
+    if (shotButton != nullptr)   // placed here, not in resized(): full screen / page mode can change without a resize
+    {
+        shotButton->setBounds (12, getHeight() - (fullBleed ? 34 : 58), 26, 20);
+        shotButton->setVisible (showOverlay && ! external.isValid());
+    }
+    const double age = juce::Time::getMillisecondCounterHiRes() * 0.001 - shotMsgAt;
+    if (age < 3.0 && ! external.isValid())
+    {
+        g.setColour (juce::Colours::white.withAlpha (0.85f * (float) juce::jmin (1.0, (3.0 - age) * 2.0)));
+        g.setFont (font (11.5f, true));
+        g.drawText (shotMsg, juce::Rectangle<float> (b.getX() + 44.0f, b.getBottom() - (fullBleed ? 34.0f : 58.0f), 400.0f, 20.0f), juce::Justification::centredLeft);
+        return;
+    }
     if (! showFps() || external.isValid()) return;   // never in exported videos or screenshots
-    const auto r = juce::Rectangle<float> (b.getX() + 14.0f, b.getBottom() - (fullBleed ? 26.0f : 50.0f), 70.0f, 16.0f);
+    const auto r = juce::Rectangle<float> (b.getX() + 44.0f, b.getBottom() - (fullBleed ? 32.0f : 56.0f), 80.0f, 16.0f);
     g.setColour (juce::Colours::white.withAlpha (0.45f));
     g.setFont (juce::FontOptions (11.0f));
     g.drawText (juce::String (juce::roundToInt (fps)) + " FPS" + (glOk.load() ? " GPU" : ""), r, juce::Justification::centredLeft);

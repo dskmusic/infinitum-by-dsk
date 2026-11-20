@@ -141,6 +141,8 @@ void InfinitumEditor::resized()
     auto r = root.getLocalBounds();
     header->setBounds (r.removeFromTop (64));
     keyboard.setBounds (r.removeFromBottom (52).reduced (4, 2));
+    keyboard.setScrollButtonsVisible (false);
+    keyboard.setKeyWidth ((float) keyboard.getWidth() / 75.0f);   // all 75 white keys (MIDI 0-127) always fill the width
     for (auto* pg : pages) pg->setBounds (r);
     about->setBounds (root.getLocalBounds());
     toastLabel.setBounds (root.getLocalBounds().withSizeKeepingCentre (560, 34).withY (root.getHeight() - 110));

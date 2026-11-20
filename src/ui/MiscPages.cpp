@@ -321,14 +321,14 @@ void ExportPage::installFfmpeg()
     const auto cmd = ffmpegInstallCommand();
     if (cmd.isEmpty() || installer != nullptr)
     {
-        juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::InfoIcon, "ffmpeg", ffmpegInstructions());
+        showFfmpegHelp();
         return;
     }
     installer = std::make_unique<juce::ChildProcess>();
     if (! installer->start (cmd))
     {
         installer.reset();
-        juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::InfoIcon, "ffmpeg", ffmpegInstructions());
+        showFfmpegHelp();
         return;
     }
     videoStatus = L ("Instalando ffmpeg… (puede tardar un par de minutos)", "Installing ffmpeg… (this can take a couple of minutes)");
@@ -341,7 +341,7 @@ void ExportPage::startVideo()
 {
     if (video.running() || busy.load()) return;
     updateFfmpegStatus();
-    if (! ffmpeg.existsAsFile()) { juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::InfoIcon, "ffmpeg", ffmpegInstructions()); return; }
+    if (! ffmpeg.existsAsFile()) { showFfmpegHelp(); return; }
     const auto name = ctx.proc.currentMeta.name.isNotEmpty() ? ctx.proc.currentMeta.name : juce::String ("Infinitum");
     const auto def = juce::File::getSpecialLocation (juce::File::userMoviesDirectory)
                          .getChildFile (juce::File::createLegalFileName (name + " - " + juce::String (vDuration.getSelectedId()) + " min.mp4"));
@@ -366,7 +366,7 @@ void ExportPage::startVideo()
         if (vScene.getSelectedId() >= 2) pr.params[(size_t) P::scene] = (float) (vScene.getSelectedId() - 2);
         if (! video.start (pr, videoTarget, vDuration.getSelectedId() * 60.0, hgt == 720 ? 1280 : 1920, hgt, ffmpeg, err, ctx.settings.gpu()))
         {
-            juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::InfoIcon, "ffmpeg", ffmpegInstructions());
+            showFfmpegHelp();
             return;
         }
         videoStart = juce::Time::getMillisecondCounterHiRes() * 0.001;
@@ -421,7 +421,7 @@ void ExportPage::timerCallback()
         installer.reset();
         ffmpegInstall.setEnabled (true);
         updateFfmpegStatus();
-        if (! ffmpeg.existsAsFile()) juce::AlertWindow::showMessageBoxAsync (juce::MessageBoxIconType::InfoIcon, "ffmpeg", ffmpegInstructions());
+        if (! ffmpeg.existsAsFile()) showFfmpegHelp();
         else if (ctx.toast) ctx.toast (L ("ffmpeg instalado: ya puedes exportar vídeo", "ffmpeg installed: you can export video now"));
     }
     if (video.running())

@@ -8,6 +8,7 @@ namespace gx::ui
 juce::File findFfmpeg (Settings& settings);
 juce::String ffmpegInstallCommand();          // empty if no package manager is available
 juce::String ffmpegInstructions();            // localized, human-readable
+void showFfmpegHelp();                        // the same, with one click-to-copy button per system
 
 // Renders the landscape of a preset to an MP4 (H.264 + AAC) by piping raw frames straight into ffmpeg.
 // Runs on the message thread in small slices (call step() from a timer). The audio is rendered first.

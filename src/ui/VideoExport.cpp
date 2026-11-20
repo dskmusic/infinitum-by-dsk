@@ -75,6 +75,56 @@ juce::String ffmpegInstructions()
               "You can also download it from https://ffmpeg.org/download.html and pick the executable with \"Choose ffmpeg...\".");
 }
 
+void showFfmpegHelp()
+{
+    struct Commands : juce::Component
+    {
+        juce::OwnedArray<juce::TextButton> buttons;
+        juce::Label status;
+        Commands()
+        {
+            const juce::String sys[] { "Windows", "macOS (Homebrew)", "Linux" };
+            const juce::String cmd[] { "winget install Gyan.FFmpeg", "brew install ffmpeg", "sudo apt install ffmpeg" };
+            for (int i = 0; i < 3; ++i)
+            {
+                auto* b = buttons.add (new juce::TextButton (sys[i] + ":   " + cmd[i]));
+                b->setTooltip (L ("Clic para copiar el comando", "Click to copy the command"));
+                const auto c = cmd[i];
+                b->onClick = [this, c]
+                {
+                    juce::SystemClipboard::copyTextToClipboard (c);
+                    status.setText (L ("Copiado al portapapeles: ", "Copied to the clipboard: ") + c, juce::dontSendNotification);
+                };
+                addAndMakeVisible (b);
+            }
+            status.setJustificationType (juce::Justification::centred);
+            status.setColour (juce::Label::textColourId, col::accent);
+            addAndMakeVisible (status);
+            setSize (440, 3 * 36 + 26);
+        }
+        void resized() override
+        {
+            auto r = getLocalBounds();
+            for (auto* b : buttons) b->setBounds (r.removeFromTop (36).reduced (0, 4));
+            status.setBounds (r);
+        }
+    };
+    struct Help : juce::AlertWindow
+    {
+        Commands commands;
+        Help() : juce::AlertWindow ("ffmpeg", L ("Para exportar vídeo, Infinitum usa ffmpeg (gratuito). Abre una terminal y escribe el comando de tu sistema (clic en él para copiarlo):",
+                                                 "To export video, Infinitum uses ffmpeg (free). Open a terminal and type the command for your system (click it to copy it):"),
+                                     juce::MessageBoxIconType::InfoIcon)
+        {
+            addCustomComponent (&commands);
+            addTextBlock (L ("También puedes descargarlo de https://ffmpeg.org/download.html y elegir el ejecutable con el botón «Elegir ffmpeg…».",
+                             "You can also download it from https://ffmpeg.org/download.html and pick the executable with \"Choose ffmpeg...\"."));
+            addButton ("OK", 1, juce::KeyPress (juce::KeyPress::returnKey));
+        }
+    };
+    (new Help())->enterModalState (true, nullptr, true);
+}
+
 // ---------------------------------------------------------------- pipe (no console window)
 bool VideoExporter::Pipe::open (const juce::StringArray& args)
 {
