@@ -19,7 +19,7 @@ static Range skewed (float lo, float hi, float centre) { Range r (lo, hi); r.set
 
 const juce::StringArray& layerIds()
 {
-    static const juce::StringArray n { "drone", "pad", "texture", "shimmer", "wind", "bells", "bass" };
+    static const juce::StringArray n { "drone", "pad", "texture", "shimmer", "wind", "bells", "bass", "melody" };
     return n;
 }
 juce::String layerName (int l)
@@ -33,6 +33,7 @@ juce::String layerName (int l)
         case lyWind: return L ("VIENTO", "WIND");
         case lyBells: return L ("CAMPANAS", "BELLS");
         case lyBass: return L ("BAJO", "BASS");
+        case lyMelody: return L ("MELODÍA", "MELODY");
         default: return {};
     }
 }
@@ -148,13 +149,14 @@ std::vector<ParamDef> build()
                                       { 0.45f, 0.60f, 0.50f, 0.40f },   // shimmer
                                       { 0.30f, 0.40f, 0.50f, 0.50f },   // wind
                                       { 0.35f, 0.50f, 0.50f, 0.35f },   // bells
-                                      { 0.45f, 0.70f, 0.40f, 0.30f } }; // bass
-    const char* names[kNumLayers] { "Drone", "Pad", "Texture", "Shimmer", "Wind", "Bells", "Bass" };
+                                      { 0.45f, 0.70f, 0.40f, 0.30f },   // bass
+                                      { 0.60f, 0.80f, 0.70f, 0.50f } }; // melody (off by default: older presets keep their sound)
+    const char* names[kNumLayers] { "Drone", "Pad", "Texture", "Shimmer", "Wind", "Bells", "Bass", "Melody" };
     for (int l = 0; l < kNumLayers; ++l)
     {
         const juce::String id = layerIds()[l], nm = names[l];
         b.group = id;
-        b.addBool (layer (l, lOn), id + "_on", nm + " On", true);
+        b.addBool (layer (l, lOn), id + "_on", nm + " On", l != lyMelody);
         b.add (layer (l, lLevel), id + "_level", nm + " Level", lin (0, 1), defs[l][0]);
         b.add (layer (l, lPresence), id + "_presence", nm + " Presence", lin (0, 1), defs[l][1]);
         b.add (layer (l, lTone), id + "_tone", nm + " Tone", lin (0, 1), defs[l][2]);

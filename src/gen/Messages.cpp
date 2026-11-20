@@ -46,6 +46,10 @@ const std::map<juce::String, std::pair<List, List>> byMood {
                   { "Raising dunes…", "Heating the horizon…", "Drawing a mirage…", "Guiding the caravan…", "Listening to the dry wind…", "Looking for the oasis…" } } },
     { "Sleep", { { "Bajando las luces…", "Mullendo la almohada…", "Respirando más despacio…", "Arropando cada nota…", "Apagando el ruido del día…", "Preparando dulces sueños…" },
                  { "Dimming the lights…", "Fluffing the pillow…", "Breathing more slowly…", "Tucking in every note…", "Switching off the noise of the day…", "Preparing sweet dreams…" } } },
+    { "Fairytale", { { "Abriendo el libro de cuentos…", "Dando cuerda a la caja de música…", "Despertando a las hadas…", "Encendiendo las linternas del castillo…", "Escribiendo la melodía…", "Había una vez…" },
+                     { "Opening the storybook…", "Winding up the music box…", "Waking the fairies…", "Lighting the castle lanterns…", "Writing the tune…", "Once upon a time…" } } },
+    { "Film Score", { { "Componiendo el tema principal…", "Afinando la orquesta…", "Escribiendo la partitura…", "Buscando la escena…", "Dando forma a la melodía…", "Preparando los créditos…" },
+                      { "Composing the main theme…", "Tuning the orchestra…", "Writing the score…", "Finding the scene…", "Shaping the melody…", "Rolling the credits…" } } },
     { "Sci-Fi", { { "Estableciendo órbita…", "Recibiendo una señal lejana…", "Calibrando el reactor…", "Despresurizando la estación…", "Traduciendo un idioma alienígena…", "Saltando al hiperespacio…" },
                   { "Establishing orbit…", "Receiving a distant signal…", "Calibrating the reactor…", "Depressurising the station…", "Translating an alien language…", "Jumping to hyperspace…" } } },
 };
@@ -62,6 +66,8 @@ const std::map<juce::String, std::pair<List, List>> finals {
     { "Forest", { { "El bosque te espera.", "Listo: respira hondo." }, { "The forest is waiting.", "Done: breathe in deep." } } },
     { "Desert", { { "El desierto está listo.", "Listo: sigue la caravana." }, { "The desert is ready.", "Done: follow the caravan." } } },
     { "Sleep", { { "Listo. Que descanses.", "Buenas noches." }, { "Done. Rest well.", "Good night." } } },
+    { "Fairytale", { { "Y vivieron felices…", "El cuento está listo." }, { "And they lived happily…", "The story is ready." } } },
+    { "Film Score", { { "Tema listo: luces, cámara…", "La banda sonora está lista." }, { "Theme ready: lights, camera…", "The score is ready." } } },
     { "Sci-Fi", { { "Transmisión establecida.", "Listo para el despegue." }, { "Transmission established.", "Ready for lift-off." } } },
 };
 } // namespace

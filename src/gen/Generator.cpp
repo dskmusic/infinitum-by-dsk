@@ -20,6 +20,7 @@ struct Arch
     std::vector<int> noises { ntPink, ntBrown };      // noise colours that fit
     std::vector<int> scenes { scValley };             // landscapes that fit (first = most typical)
     bool fixedFocus = false;                          // sub-mood already decides the layer balance
+    bool melody = false;                              // composed melody layer (melodic moods only)
     // per layer: level, presence, tone, character
     std::array<std::array<Range2, 4>, kNumLayers> layer {};
 };
@@ -136,6 +137,33 @@ Arch baseArch (const juce::String& mood)
         a.layer[lyBass][0] = { 0.15f, 0.3f };
         a.scenes = { scAurora, scOcean, scValley }; a.noises = { ntPink, ntBrown, ntOcean }; a.noiseChance = 0.75f; a.noiseLevel = { 0.2f, 0.4f };
     }
+    else if (mood == "Fairytale") // storybook magic: celesta / music-box tunes over warm, moving chords
+    {
+        a.melody = true;
+        a.scales = { Major, Lydian, MajPent, Major }; a.harmony = { 0.4f, 0.75f }; a.chordRate = { 0.62f, 0.85f }; a.evolution = { 0.25f, 0.45f };
+        a.density = { 0.35f, 0.55f }; a.light = { 0.55f, 0.85f }; a.space = { 0.6f, 0.85f }; a.octave = { 2.0f, 2.6f }; a.warmth = { 0.15f, 0.35f };
+        a.layer[lyMelody] = { { { 0.62f, 0.78f }, { 0.75f, 1.0f }, { 0.62f, 0.95f }, { 0.25f, 0.6f } } };
+        a.layer[lyPad] = { { { 0.5f, 0.68f }, { 0.85f, 1.0f }, { 0.35f, 0.6f }, { 0.25f, 0.5f } } };
+        a.layer[lyDrone][0] = { 0.35f, 0.5f };
+        a.layer[lyBells] = { { { 0.08f, 0.2f }, { 0.2f, 0.45f }, { 0.4f, 0.7f }, { 0.03f, 0.15f } } };
+        a.layer[lyTexture][0] = { 0.15f, 0.3f }; a.layer[lyWind][0] = { 0.0f, 0.12f };
+        a.layer[lyShimmer] = { { { 0.3f, 0.5f }, { 0.5f, 0.85f }, { 0.4f, 0.7f }, { 0.1f, 0.4f } } };
+        a.scenes = { scAurora, scValley, scUnderwater }; a.noiseChance = 0.0f; a.fixedFocus = true;
+        a.dly = { 0.2f, 0.4f }; a.dlyFb = { 0.3f, 0.5f };
+    }
+    else if (mood == "Film Score") // an orchestral-feeling theme: lyrical lead, lush chords, a bass line underneath
+    {
+        a.melody = true;
+        a.scales = { Minor, Major, Dorian, HarmMinor, Lydian }; a.harmony = { 0.5f, 0.85f }; a.chordRate = { 0.6f, 0.82f }; a.evolution = { 0.3f, 0.5f };
+        a.density = { 0.45f, 0.65f }; a.light = { 0.35f, 0.7f }; a.space = { 0.7f, 0.95f }; a.octave = { 1.6f, 2.2f }; a.warmth = { 0.25f, 0.45f };
+        a.layer[lyMelody] = { { { 0.62f, 0.78f }, { 0.75f, 1.0f }, { 0.1f, 0.45f }, { 0.15f, 0.5f } } };
+        a.layer[lyPad] = { { { 0.62f, 0.8f }, { 0.9f, 1.0f }, { 0.3f, 0.55f }, { 0.4f, 0.7f } } };
+        a.layer[lyBass] = { { { 0.4f, 0.55f }, { 0.8f, 1.0f }, { 0.25f, 0.45f }, { 0.05f, 0.25f } } };
+        a.layer[lyBells] = { { { 0.05f, 0.15f }, { 0.15f, 0.35f }, { 0.3f, 0.6f }, { 0.03f, 0.12f } } };
+        a.layer[lyTexture][0] = { 0.15f, 0.3f }; a.layer[lyWind][0] = { 0.0f, 0.15f };
+        a.layer[lyShimmer] = { { { 0.3f, 0.5f }, { 0.5f, 0.85f }, { 0.35f, 0.6f }, { 0.1f, 0.4f } } };
+        a.scenes = { scValley, scStarfield, scOcean }; a.noiseChance = 0.0f; a.fixedFocus = true;
+    }
     else // Ambient
     {
         a.scales = { Major, Lydian, MajPent, Suspended, Mixolydian, Dorian };
@@ -210,6 +238,12 @@ void applySub (Arch& a, const juce::String& sub)
         a.layer[lyBells] = { { { 0.15f, 0.3f }, { 0.3f, 0.6f }, { 0.8f, 1.0f }, { 0.08f, 0.28f } } };
         a.scenes = { scStarfield }; a.fixedFocus = true;
     }
+    else if (sub == "Music Box") { a.layer[lyMelody][2] = { 0.82f, 1.0f }; a.layer[lyMelody][3] = { 0.35f, 0.65f }; a.light = { 0.6f, 0.85f }; }
+    else if (sub == "Enchanted") { a.scales = { Lydian, Major }; a.layer[lyMelody][2] = { 0.55f, 0.75f }; a.layer[lyShimmer][1] = { 0.75f, 1.0f }; a.scenes = { scAurora, scUnderwater }; }
+    else if (sub == "Once Upon") { a.scales = { Major, MajPent }; a.layer[lyMelody][3] = { 0.1f, 0.35f }; a.layer[lyMelody][2] = { 0.65f, 0.9f }; a.light = { 0.45f, 0.7f }; a.scenes = { scValley }; }
+    else if (sub == "Main Theme") { a.scales = { Major, Lydian, Dorian }; a.layer[lyMelody][2] = { 0.25f, 0.45f }; a.light = { 0.5f, 0.75f }; }
+    else if (sub == "Heartfelt") { a.scales = { Minor, Major, Dorian }; a.layer[lyMelody][3] = { 0.05f, 0.3f }; a.layer[lyMelody][2] = { 0.05f, 0.3f }; a.evolution = { 0.2f, 0.4f }; }
+    else if (sub == "Adventure") { a.scales = { Dorian, Mixolydian, Major }; a.layer[lyMelody][3] = { 0.5f, 0.75f }; a.layer[lyBass][0] = { 0.5f, 0.65f }; a.scenes = { scValley, scStarfield, scOcean }; }
     else if (sub == "Alien") { a.scales = { WholeTone, Hirajoshi }; a.layer[lyDrone][3] = { 0.8f, 1.0f }; }
 }
 
@@ -247,6 +281,8 @@ float Generator::targetRmsDb (const juce::String& mood)
     if (mood == "Nostalgia") return -20.0f;
     if (mood == "Epic") return -18.5f;
     if (mood == "Sleep") return -25.0f;
+    if (mood == "Fairytale") return -20.0f;
+    if (mood == "Film Score") return -19.5f;
     return -21.0f;
 }
 
@@ -290,6 +326,7 @@ Preset Generator::candidate (const GenRequest& req, uint32_t seed)
         b.set (P::layer (l, P::lTone), b.rr (a.layer[(size_t) l][2]));
         b.set (P::layer (l, P::lChar), b.rr (a.layer[(size_t) l][3]) + (l == lyDrone ? req.mystery * 0.25f : 0.0f));
     }
+    if (! a.melody) b.set (P::layer (lyMelody, P::lOn), 0);   // the melody belongs to the melodic moods only
     // variety with coherence: one featured layer leads, one or two step back (unless the sub-mood fixes the balance)
     if (! a.fixedFocus)
     {
@@ -514,6 +551,7 @@ juce::StringArray Generator::deriveTags (const Preset& p)
     if (lay (lyPad, P::lChar) > 0.7f && amount (lyPad) > 0.4f) t.add ("Analog");
     if (p.meta.subcategory == "Neo-Noir") t.add ("Noir");
     if (p.meta.subcategory == "Derelict") t.add ("Haunted");
+    if (lay (lyMelody, P::lOn) > 0.5f) t.add ("Melodic");
     t.removeDuplicates (false);
     return t;
 }
@@ -552,6 +590,10 @@ juce::String Generator::makeName (const juce::String& mood, Rng& rng, const juce
                       { "Dunes", "Mirage", "Oasis", "Caravan", "Sands", "Canyon", "Mesa", "Nomads", "Sirocco", "Ruins", "Bazaar", "Sun Temple", "Wells", "Horizon", "Salt Flats", "Kasbah", "Sphinx", "Crossing", "Winds", "Silk Road" } } },
         { "Sleep", { { "Soft", "Sleepy", "Gentle", "Velvet", "Quiet", "Drowsy", "Dreamy", "Warm", "Hushed", "Slow", "Silken", "Calm", "Starry", "Cozy", "Feather", "Distant", "Tender", "Moonlit", "Sweet", "Still" },
                      { "Lullaby", "Pillow", "Blanket", "Dreams", "Night", "Slumber", "Cradle", "Moon", "Hush", "Stars", "Rest", "Nest", "Clouds", "Breathing", "Midnight", "Haven", "Nightlight", "Sleep", "Drift", "Embrace" } } },
+        { "Fairytale", { { "Enchanted", "Little", "Silver", "Sleeping", "Golden", "Moonlit", "Secret", "Wishing", "Magic", "Snowy", "Starlit", "Velvet", "Glass", "Hidden", "Faraway", "Dancing", "Painted", "Tiny", "Crystal", "Midnight" },
+                         { "Music Box", "Castle", "Garden", "Lantern", "Princess", "Forest", "Carousel", "Kingdom", "Wishes", "Storybook", "Tower", "Fairies", "Snowglobe", "Unicorn", "Clockwork", "Meadow", "Dragonfly", "Ballroom", "Tales", "Moon" } } },
+        { "Film Score", { { "Main", "Final", "Endless", "Brave", "Distant", "Last", "Rising", "Silent", "Golden", "Northern", "Lost", "Eternal", "Gentle", "Hopeful", "Faithful", "Wandering", "Bright", "Quiet", "Open", "Home" },
+                          { "Theme", "Journey", "Horizon", "Promise", "Letters", "Farewell", "Voyage", "Homecoming", "Skies", "Overture", "Reunion", "Legend", "Shores", "Memories", "Frontier", "Prelude", "Embrace", "Ballad", "Waltz", "Finale" } } },
         { "Sci-Fi", { { "Orbital", "Quantum", "Stellar", "Ionic", "Derelict", "Alien", "Neural", "Silent", "Cryo", "Hyper", "Distant", "Signal", "Plasma", "Binary", "Cosmic", "Synthetic", "Polar", "Lunar", "Void", "Magnetic" },
                       { "Station", "Nebula", "Drift", "Colony", "Array", "Beacon", "Outpost", "Transmission", "Reactor", "Expanse", "Corridor", "Probe", "Singularity", "Hive", "Orbit", "Relay", "Horizon", "Archive", "Vessel", "Pulsar" } } },
     };

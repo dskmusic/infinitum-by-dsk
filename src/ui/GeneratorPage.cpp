@@ -561,7 +561,7 @@ void GeneratorPage::paint (juce::Graphics& g)
     g.setFont (font (12.0f, true));
     auto l = left.reduced (12, 8);
     g.drawText (L ("ESTADO DE ÁNIMO", "MOOD"), l.removeFromTop (16), juce::Justification::centredLeft);
-    l.removeFromTop (6 * 32 + 8);
+    l.removeFromTop ((catButtons.size() + 1) / 2 * 32 + 8);
     g.drawText (L ("CARÁCTER", "CHARACTER"), l.removeFromTop (16), juce::Justification::centredLeft);
     auto sl = l.removeFromTop (230);
     g.setFont (font (10.5f, true));
@@ -580,7 +580,7 @@ void GeneratorPage::resized()
     auto r = getLocalBounds().reduced (8);
     auto left = r.removeFromLeft (290).reduced (12, 8);
     left.removeFromTop (20);
-    auto cats = left.removeFromTop (6 * 32);
+    auto cats = left.removeFromTop ((catButtons.size() + 1) / 2 * 32);
     for (int i = 0; i < catButtons.size(); ++i)
         catButtons[i]->setBounds (juce::Rectangle<int> (cats.getX() + (i % 2) * cats.getWidth() / 2, cats.getY() + (i / 2) * 32, cats.getWidth() / 2, 32).reduced (2));
     {

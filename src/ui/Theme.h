@@ -31,8 +31,8 @@ namespace col
     const juce::Colour phosphor  { 0xff8ff5dd };
     const juce::Colour grid      { 0xff141a33 };
     // one colour per layer (landscape, layer strips)
-    const juce::Colour layer[7] { juce::Colour (0xff6f8cff), juce::Colour (0xffa68cff), juce::Colour (0xffffcf6e),
-                                  juce::Colour (0xff4fe3c1), juce::Colour (0xff9fb7c9), juce::Colour (0xffffe9a8), juce::Colour (0xffff8a6b) };
+    const juce::Colour layer[8] { juce::Colour (0xff6f8cff), juce::Colour (0xffa68cff), juce::Colour (0xffffcf6e),
+                                  juce::Colour (0xff4fe3c1), juce::Colour (0xff9fb7c9), juce::Colour (0xffffe9a8), juce::Colour (0xffff8a6b), juce::Colour (0xffff9fd6) };
 }
 
 juce::Font font (float size, bool bold = false);

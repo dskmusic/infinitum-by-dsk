@@ -93,6 +93,8 @@ int runToolExtras (const juce::String& cmd, int argc, char** argv)
         const juce::File out = juce::File::getCurrentWorkingDirectory().getChildFile (argc > 2 ? argv[2] : "resources/factory.infinitumbank");
         const int perSub = argc > 3 ? juce::String (argv[3]).getIntValue() : 6;
         const int target = argc > 4 ? juce::String (argv[4]).getIntValue() : 256;
+        juce::StringArray only;   // optional 5th argument: comma-separated moods (e.g. new moods appended to an existing bank)
+        if (argc > 5) only.addTokens (argv[5], ",", "");
         std::set<juce::String> bonus;   // sub-moods that get one more preset to reach the target (spread across moods)
         {
             int base = 0, maxSubs = 0;
@@ -108,6 +110,7 @@ int runToolExtras (const juce::String& cmd, int argc, char** argv)
         for (int mi = 0; mi < gx::categories().size(); ++mi)
         {
             const auto mood = gx::categories()[mi];
+            if (! only.isEmpty() && ! only.contains (mood)) continue;
             int count = 0;
             for (int si = 0; si < gx::subcategories (mood).size(); ++si)
             {

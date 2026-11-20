@@ -57,6 +57,15 @@ struct Bell
     float ph = 0, mph = 0, inc = 0, minc = 0, idx = 0, idxCoef = 0, amp = 0, ampCoef = 0, panL = 1, panR = 1;
 };
 
+// melody voice: FM, from a breathy flute-like tone (Tone low, legato) to celesta / music box (Tone high, plucked)
+struct MelVoice
+{
+    bool on = false, gate = false, pluck = false;
+    float ph = 0, mph = 0, inc = 0, minc = 0, idx = 0, idxCoef = 1, env = 0, peak = 0, decay = 1, att = 0.01f, rel = 0.999f;
+    float vib = 0, vibInc = 0, vibDepth = 0, age = 0, panL = 1, panR = 1;
+    int64_t offTick = 0;
+};
+
 class Engine
 {
 public:
@@ -163,6 +172,13 @@ private:
     Biquad shmHp[2];
     double swellT = 100.0;               // seconds since the last chord change (pad filter bloom)
 
+    // melody: composed phrases (motif, answer, return, cadence) on an eighth-note grid
+    std::array<MelVoice, 8> mel {};
+    int64_t melSlot = -1;
+    int melDeg = 4;
+    double melBeats = 0;
+    void melodyTick();
+    void playMelody (int note, float vel, float durSec);
     // bells
     std::array<Bell, kBellVoices> bells {};
     Rng bellRng { 7 };

@@ -15,8 +15,8 @@ void main() { gl_Position = vec4 (position, 0.0, 1.0); }
 const char* prelude = R"GLSL(
 uniform vec2 uRes;
 uniform float uTime, uMus, uEvoT, uLight, uEvo, uDensity, uSpace, uEnergy, uRun, uFrozen, uSeed, uFade;
-uniform float uPres[7];
-uniform float uGlow[7];
+uniform float uPres[8];
+uniform float uGlow[8];
 // layers: 0 drone 1 pad 2 texture 3 shimmer 4 wind 5 bells 6 bass
 vec2 S;
 float hash12 (vec2 p) { vec3 p3 = fract (vec3 (p.xyx) * 0.1031); p3 += dot (p3, p3.yzx + 33.33); return fract ((p3.x + p3.y) * p3.z); }

@@ -3,6 +3,9 @@
 ## [Unreleased]
 
 ### Added
+- Melody layer (8th layer, off in older presets): composed 8-bar themes with motif, answer and cadence, music box / celesta / flute tones.
+- Two melodic moods, Fairytale and Film Score (36 new presets, 292 in total); generator grid stays even (7 x 2).
+- GPU shader landscapes (toggle in Settings), FPS counter, landscape picture button, natural Neon rain, translucent jellyfish.
 - Functional chord progressions (Markov chains for major and minor modes, phrases returning home) and true voice-leading in the pad.
 - Quick memories: press and hold to clear. Video export without console windows, about 4x faster.
 - Bass layer (follows the chord root), PWM pad with ensemble chorus, hall reverb with pre-delay, glue compressor, melodic bell phrases.

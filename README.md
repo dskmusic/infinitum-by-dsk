@@ -22,8 +22,9 @@ their own, while harmony, light and space evolve slowly for minutes and hours wi
   and the same seed always gives the same journey.
 - **Six animated landscapes** that react to every layer: Valley, Starfield, Underwater, Neon, Ocean and Aurora - with
   **full-screen mode**, keyboard shortcuts and a text-free **relax mode**.
-- **12 moods, 256 factory presets:** Cinematic, Ambient, Meditation, Dark, Sci-Fi, Ethereal, Oceanic, Nostalgia, Epic, Forest,
-  Desert and Sleep. The generator renders several candidates, checks them and keeps the most alive one.
+- **14 moods, 292 factory presets:** Cinematic, Ambient, Meditation, Dark, Sci-Fi, Ethereal, Oceanic, Nostalgia, Epic, Forest,
+  Desert, Sleep and the melodic **Fairytale** and **Film Score**, with a composed **Melody** layer (music box, celesta or soft
+  flute themes that repeat, answer and resolve over the chords). The generator renders several candidates, checks them and keeps the most alive one.
 - **Long audio export:** 1 minute to 3 hours in WAV, FLAC or OGG. **Landscape video export:** an MP4 with the animated landscape and
   its sound, ready for YouTube (uses the free ffmpeg; Infinitum finds it or helps you install it).
 - **Sleep mode** and session timer, **432 Hz** tuning, **noise generator** (pink, brown, white, ocean waves, vinyl).

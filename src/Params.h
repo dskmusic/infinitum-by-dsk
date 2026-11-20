@@ -5,8 +5,8 @@
 // Single source of truth for every parameter. IDs are FROZEN once released (sessions/presets depend on them).
 namespace gx
 {
-constexpr int kNumLayers = 7;
-enum Layer { lyDrone, lyPad, lyTexture, lyShimmer, lyWind, lyBells, lyBass };
+constexpr int kNumLayers = 8;
+enum Layer { lyDrone, lyPad, lyTexture, lyShimmer, lyWind, lyBells, lyBass, lyMelody };   // new layers go at the end (IDs frozen)
 
 namespace P
 {

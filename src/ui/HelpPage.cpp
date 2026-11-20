@@ -9,9 +9,9 @@ struct Item { const char* esTitle; const char* enTitle; const char* es; const ch
 const Item items[] {
     { "Bienvenido a Infinitum", "Welcome to Infinitum",
       "Infinitum es un paisaje sonoro que nunca se repite. No hace falta tocar nada: pulsa Play, cierra los ojos y deja que evolucione solo. "
-      "Siete capas (drone, pad, textura, shimmer, viento, campanas y bajo) entran y salen por su cuenta mientras la armonía, la luz y el espacio cambian despacio.",
+      "Ocho capas (drone, pad, textura, shimmer, viento, campanas, bajo y melodía) entran y salen por su cuenta mientras la armonía, la luz y el espacio cambian despacio.",
       "Infinitum is a landscape of sound that never repeats. You don't need to play anything: press Play, close your eyes and let it evolve. "
-      "Seven layers (drone, pad, texture, shimmer, wind, bells and bass) come and go on their own while harmony, light and space slowly change." },
+      "Eight layers (drone, pad, texture, shimmer, wind, bells, bass and melody) come and go on their own while harmony, light and space slowly change." },
     { "1. Empieza en 10 segundos", "1. Start in 10 seconds",
       "Pulsa el gran botón Play (o la barra espaciadora en la versión Standalone). En tu DAW basta con darle a Play: Infinitum le sigue. "
       "Elige un preset en PRESETS o pulsa GENERAR en el Generador para crear uno nuevo según tu estado de ánimo.",

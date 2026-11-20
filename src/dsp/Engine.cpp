@@ -152,6 +152,8 @@ void Engine::reset (uint32_t s)
     for (auto& q : bellQueue) q.tick = -1;
     ctrlTick = 0;
     swellT = 100.0;
+    for (auto& v : mel) v = MelVoice();
+    melSlot = -1; melDeg = 4; melBeats = 0;
     // bells
     for (auto& b : bells) b = Bell();
     bellRng = Rng (seed * 17u + 7u);
@@ -388,6 +390,107 @@ void Engine::triggerBell (int64_t slot)
     }
 }
 
+// The melody is composed, not random: 8-bar periods (A A' B cadence / A A' C final cadence) on an eighth-note
+// grid. A keeps its rhythm and contour for 4 periods (a recognisable theme) and is re-harmonised by the chords:
+// strong-beat and long notes land on chord tones, the final note goes home. Presence = how many periods play,
+// Character = tempo and how busy the rhythm is. Every choice is a (seed, position) hash: deterministic.
+void Engine::melodyTick()
+{
+    double beats;
+    double bpm = 60.0 + 36.0 * lp (lyMelody, P::lChar);
+    if (pv (P::syncChords) > 0.5f && hostHasPpq)
+    {
+        bpm = hostBpm;
+        beats = hostPpq + (double) blockPos / sr * hostBpm / 60.0;
+        if (bpm > 110.0) { bpm *= 0.5; beats *= 0.5; }   // half time: stays lyrical at dance tempos
+    }
+    else beats = melBeats;
+    const int64_t e = (int64_t) std::floor (beats * 2.0 + 1.0e-6);
+    if (e == melSlot) return;
+    const bool fresh = melSlot < 0;
+    melSlot = e;
+    if (fresh || ! running || lp (lyMelody, P::lOn) < 0.5f || e < 0) return;
+    const float ch = lp (lyMelody, P::lChar);
+    const int periodLen = ch < 0.45f ? 10 : 8;          // calmer melodies breathe two bars between periods
+    const int64_t bar = e / 8, period = bar / periodLen;
+    const int pos = (int) (e % 8), bi = (int) (bar % periodLen);
+    if (bi >= 8) return;
+    if (period > 0 && hashUni (seed ^ 0x3E10u, (uint32_t) period) > 0.2f + 0.8f * lp (lyMelody, P::lPresence)) return;
+    const uint32_t theme = (uint32_t) (period / 4), var = (uint32_t) (period % 4);
+    const int key = bi == 4 ? 0 : bi == 5 ? 1 : bi;   // bars 4-5 bring back the motif of bars 0-1
+    static const int pats[9][5] { { 2, 2, 2, 2, 0 }, { 4, 2, 2, 0, 0 }, { 3, 1, 4, 0, 0 }, { 2, 2, 4, 0, 0 }, { 1, 1, 2, 4, 0 },
+                                  { 6, 2, 0, 0, 0 }, { 2, 1, 1, 4, 0 }, { 4, 4, 0, 0, 0 }, { 8, 0, 0, 0, 0 } };
+    static const int slow[5] { 7, 5, 1, 3, 8 }, busy[6] { 0, 4, 6, 2, 3, 1 };
+    const uint32_t hk = theme * 64u + (uint32_t) key + (key >= 2 ? var * 8u : 0u);   // A fixed per theme, B / C vary
+    int pat;
+    if (bi == 3) pat = hashUni (seed ^ 0x51u, hk) < 0.5f ? 7 : 5;                    // half cadence
+    else if (bi == 7) pat = hashUni (seed ^ 0x52u, hk) < 0.5f ? 3 : 7;               // ends on a long note
+    else pat = hashUni (seed ^ 0x53u, hk) < 0.15f + 0.7f * ch ? busy[(int) (hashUni (seed ^ 0x54u, hk) * 5.999f)]
+                                                              : slow[(int) (hashUni (seed ^ 0x55u, hk) * 4.999f)];
+    int t = 0, idx = -1, dur = 0;
+    for (int k = 0; k < 5 && pats[pat][k] > 0; ++k)
+    {
+        if (t == pos) { idx = k; dur = pats[pat][k]; break; }
+        t += pats[pat][k];
+    }
+    if (idx < 0) return;
+    const auto& s = scaleSteps ((int) pv (P::scale));
+    const int m = (int) s.size();
+    const int cd = juce::jmax (0, curDegree);
+    static const int steps[8] { -2, -1, -1, 1, 1, 2, 0, -1 };
+    int deg = melDeg + steps[(int) (hashUni (seed ^ 0x56u, hk * 8u + (uint32_t) idx) * 7.999f)];
+    auto nearest = [&] (int target, bool rootOnly)
+    {
+        int best = target, bd = 1000;
+        const int nTones = rootOnly ? 1 : (pv (P::harmony) > 0.45f ? 4 : 3);
+        for (int o = -3; o <= 3; ++o)
+            for (int k = 0; k < nTones; ++k)
+            {
+                const int c = (rootOnly ? 0 : cd + 2 * k) + o * m;
+                if (std::abs (c - target) < bd) { bd = std::abs (c - target); best = c; }
+            }
+        return best;
+    };
+    const bool last = t + dur == 8;
+    if (bi == 7 && last)
+    {
+        const int r = ((0 - cd) % m + m) % m;                 // is the tonic in this chord?
+        deg = nearest (deg, r == 0 || r == 2 || r == 4 ? true : false);
+        if (! (r == 0 || r == 2 || r == 4)) deg = nearest (deg, false);
+    }
+    else if (idx == 0 || dur >= 4) deg = nearest (deg, false);
+    while (deg > m + 5) deg -= m;
+    while (deg < 0) deg += m;
+    melDeg = deg;
+    const int base = 60 + rootPc - (rootPc >= 7 ? 12 : 0) + (lp (lyMelody, P::lTone) > 0.6f ? 12 : 0);
+    const float vel = (idx == 0 ? 1.0f : 0.8f) * (bi == 2 || bi == 6 ? 1.06f : 1.0f) * (0.92f + 0.08f * hashUni (seed ^ 0x57u, (uint32_t) e));
+    playMelody (base + degreeSemis (s, deg), vel, (float) (dur * 30.0 / bpm) * 0.93f);
+}
+
+void Engine::playMelody (int note, float vel, float durSec)
+{
+    const float tone = lp (lyMelody, P::lTone);
+    MelVoice* v = nullptr;
+    for (auto& x : mel) if (! x.on) { v = &x; break; }
+    if (v == nullptr) { v = &mel[0]; for (auto& x : mel) if (x.env < v->env) v = &x; }   // steal the quietest: env and phase continue (no click)
+    if (! v->on) { v->ph = v->mph = 0; v->env = 0; }
+    const float f = noteToHz ((float) note, a4);
+    const bool pluck = tone >= 0.5f;
+    v->on = v->gate = true;
+    v->pluck = pluck;
+    v->inc = f / (float) sr;
+    v->minc = f * (pluck ? (tone > 0.8f ? 4.0f : 3.0f) : 1.0f) / (float) sr;
+    v->idx = pluck ? 1.0f + 2.2f * (tone - 0.5f) : 0.2f + 0.8f * tone;
+    v->idxCoef = pluck ? coefFor (0.3f, sr) : 1.0f;
+    v->peak = (pluck ? 0.19f : 0.15f) * vel;
+    v->att = 1.0f - coefFor (pluck ? 0.002f : 0.03f + 0.06f * (0.5f - tone), sr);
+    v->decay = pluck ? coefFor (0.9f + 1.4f * (1.0f - tone), sr) : coefFor (8.0f, sr);
+    v->rel = coefFor (pluck ? 0.45f : 0.16f, sr);
+    v->vib = 0; v->vibInc = 5.1f / (float) sr; v->vibDepth = pluck ? 0.0f : 0.0045f; v->age = 0;
+    v->offTick = ctrlTick + (int64_t) (durSec * (float) sr / kCtrl);
+    panGains ((float) ((note % 12) - 6) / 6.0f * 0.25f, v->panL, v->panR);
+}
+
 void Engine::playBell (int note, float vel, float pan)
 {
     const float tone = toneEff[lyBells];
@@ -481,12 +584,13 @@ void Engine::control()
         sleepGain = 1.0f - smoothstep (0.55f, 1.0f, k);
     }
     const float evoRate = 0.15f * std::pow (30.0f, effEvo);
-    if (running && ! frozen) { musT += dt; evoT += dt * evoRate; }
+    if (running && ! frozen) { musT += dt; evoT += dt * evoRate; melBeats += dt * (60.0 + 36.0 * lp (lyMelody, P::lChar)) / 60.0; }
     // Freeze is smoothed (~0.4 s): feedback and reverb times glide instead of jumping (no click)
     freezeAmt += ((frozen ? 1.0f : 0.0f) - freezeAmt) * (1.0f - coefFor (0.4f, sr / kCtrl));
     const float fz = freezeAmt;
     if (running) sessionT += dt;
     ++ctrlTick;
+    for (auto& v : mel) if (v.gate && v.offTick <= ctrlTick) v.gate = false;
     for (auto& q : bellQueue)
         if (q.tick >= 0 && q.tick <= ctrlTick) { if (running) playBell (q.note, q.vel, q.pan); q.tick = -1; }
     a4 = (int) pv (P::tuning) == 1 ? 432.0f : 440.0f;
@@ -512,7 +616,7 @@ void Engine::control()
         onS[(size_t) l] += ((lp (l, P::lOn) > 0.5f ? 1.0f : 0.0f) - onS[(size_t) l]) * 0.08f; // ~15 ms ramp when a layer is switched
         const float on = onS[(size_t) l];
         const float lvl = lp (l, P::lLevel);
-        const float target = on * lvl * lvl * presence[(size_t) l] * (l == lyDrone ? droneBreath : 1.0f);
+        const float target = on * lvl * lvl * (l == lyMelody ? 1.0f : presence[(size_t) l]) * (l == lyDrone ? droneBreath : 1.0f);
         gainInc[(size_t) l] = (target - gainNow[(size_t) l]) / (float) kCtrl;
         toneEff[(size_t) l] = juce::jlimit (0.0f, 1.0f, lp (l, P::lTone) + (evoNoise (l * 4 + 1, evoT) - 0.5f) * 0.5f * evoDepth
                                                         + (effLight - 0.5f) * 0.3f);
@@ -639,6 +743,7 @@ void Engine::control()
             if (! fresh && running && lp (lyBells, P::lOn) > 0.5f && hashUni (seed ^ 0xB0B0u, (uint32_t) slot) < prob) triggerBell (slot);
         }
     }
+    melodyTick();
     // ---- master section (cached coefficient updates)
     {
         const float lc = pv (P::lowCut), hc = pv (P::highCut), tilt = std::round ((effLight - 0.5f) * 8.0f * 20.0f) / 20.0f;
@@ -863,6 +968,28 @@ void Engine::renderChunk (float* L, float* R, int n)
             bl *= g; br *= g;
         }
 
+        // ---- melody
+        float ml = 0, mr = 0;
+        for (auto& v : mel)
+        {
+            if (! v.on) continue;
+            if (v.gate) { v.env += v.att * (v.peak - v.env); v.peak *= v.decay; }
+            else v.env *= v.rel;
+            v.vib += v.vibInc; if (v.vib >= 1.0f) v.vib -= 1.0f;
+            const float fm = 1.0f + v.vibDepth * juce::jmin (1.0f, v.age * 2.5e-5f) * fastSin (v.vib);   // vibrato grows in
+            v.age += 1.0f;
+            v.mph += v.minc * fm; if (v.mph >= 1.0f) v.mph -= 1.0f;
+            v.ph += v.inc * fm; if (v.ph >= 1.0f) v.ph -= 1.0f;
+            const float y = fastSin (v.ph + v.idx * 0.159f * fastSin (v.mph)) * v.env;
+            v.idx *= v.idxCoef;
+            ml += y * v.panL; mr += y * v.panR;
+            if (! v.gate && v.env < 1.0e-5f) v.on = false;
+        }
+        {
+            const float g = juce::jmax (gainNow[lyMelody], 0.0f);
+            ml *= g; mr *= g;
+        }
+
         // ---- shimmer: pitch-shifted feedback reverb fed by the tonal layers
         float sl = 0, sr2 = 0;
         {
@@ -886,16 +1013,16 @@ void Engine::renderChunk (float* L, float* R, int n)
         energyAcc[lyDrone] += dl * dl + dr * dr; energyAcc[lyPad] += padL * padL + padR * padR;
         energyAcc[lyTexture] += tl * tl + tr * tr; energyAcc[lyShimmer] += sl * sl + sr2 * sr2;
         energyAcc[lyWind] += wl * wl + wr * wr + rl * rl + rr * rr; energyAcc[lyBells] += bl * bl + br * br;
-        energyAcc[lyBass] += 2.0f * bsl * bsl;
+        energyAcc[lyBass] += 2.0f * bsl * bsl; energyAcc[lyMelody] += ml * ml + mr * mr;
 
         // ---- mix: layers (faded by the transport) + MIDI voices
-        float xl = (dl + padL + tl + wl + bl + rl + bsl) * rg + sl + midiL;
-        float xr = (dr + padR + tr + wr + br + rr + bsl) * rg + sr2 + midiR;
+        float xl = (dl + padL + tl + wl + bl + rl + bsl + ml) * rg + sl + midiL;
+        float xr = (dr + padR + tr + wr + br + rr + bsl + mr) * rg + sr2 + midiR;
 
         // ---- delay (bells + texture send), cross feedback
         {
             const float mix = dlyMixS.step (pv (P::dlyMix));
-            const float inL = (bl + tl * 0.4f) * rg * mix, inR = (br + tr * 0.4f) * rg * mix;
+            const float inL = (bl + tl * 0.4f + ml * 0.6f) * rg * mix, inR = (br + tr * 0.4f + mr * 0.6f) * rg * mix;
             dlyNow += 0.00005f * (dlySamples - dlyNow);   // delay time glides (no clicks when it changes)
             const float yl = dly[0].read (dlyNow), yr = dly[1].read (dlyNow * 1.333f);
             dlyLp[0] += dlyToneC * (yl - dlyLp[0]);

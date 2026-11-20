@@ -6,7 +6,7 @@ namespace gx
 {
 const juce::StringArray& categories()
 {
-    static const juce::StringArray c { "Cinematic", "Ambient", "Meditation", "Dark", "Sci-Fi", "Ethereal", "Oceanic", "Nostalgia", "Epic", "Forest", "Desert", "Sleep" };
+    static const juce::StringArray c { "Cinematic", "Ambient", "Meditation", "Dark", "Sci-Fi", "Ethereal", "Oceanic", "Nostalgia", "Epic", "Forest", "Desert", "Sleep", "Fairytale", "Film Score" };
     return c;
 }
 const juce::StringArray& subcategories (const juce::String& cat)
@@ -24,6 +24,8 @@ const juce::StringArray& subcategories (const juce::String& cat)
         { "Forest", { "Ancient Woods", "Morning Dew", "Fireflies" } },
         { "Desert", { "Dunes", "Mirage", "Caravan" } },
         { "Sleep", { "Deep Sleep", "Lullaby", "Night Rain" } },
+        { "Fairytale", { "Music Box", "Enchanted", "Once Upon" } },
+        { "Film Score", { "Main Theme", "Heartfelt", "Adventure" } },
     };
     static const juce::StringArray none;
     auto it = m.find (cat);
@@ -38,6 +40,8 @@ juce::String categoryLabel (const juce::String& c)
     if (c == "Oceanic") return L ("Océano", "Oceanic");
     if (c == "Epic") return L ("Épico", "Epic");
     if (c == "Forest") return L ("Bosque", "Forest");
+    if (c == "Fairytale") return L ("Cuento", "Fairytale");
+    if (c == "Film Score") return L ("Banda sonora", "Film Score");
     if (c == "Desert") return L ("Desierto", "Desert");
     if (c == "Sleep") return L ("Dormir", "Sleep");
     return c;

@@ -1230,7 +1230,7 @@ void Landscape::paintOverlay (juce::Graphics& g, juce::Rectangle<float> b)
         g.drawText (L ("▶  PULSA PLAY", "▶  PRESS PLAY"), b, juce::Justification::centred);
     }
     auto leg = b.reduced (16, 12).removeFromBottom (16);
-    const float lw = juce::jmin (76.0f, leg.getWidth() / kNumLayers);
+    const float lw = juce::jmin (66.0f, leg.getWidth() / kNumLayers);
     for (int l = 0; l < kNumLayers; ++l)
     {
         auto cell = leg.removeFromLeft (lw).reduced (3, 0);

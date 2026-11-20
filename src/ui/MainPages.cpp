@@ -253,22 +253,24 @@ void LandscapePage::resized()
 SoundPage::Strip::Strip (Context& c, int l) : Box (c, layerName (l), layerIds()[l]), layer (l)
 {
     accent = col::layer[l];
-    const juce::String tone[] { L ("BRILLO", "BRIGHT"), L ("FILTRO", "FILTER"), L ("TONO", "PITCH"), L ("BRILLO", "BRIGHT"), L ("COLOR", "COLOUR"), L ("CRISTAL", "GLASS"), L ("FILTRO", "FILTER") };
-    const juce::String chr[] { L ("MUTACIÓN", "MUTATION"), L ("ANALÓGICO", "ANALOG"), L ("GRANO", "GRAIN"), L ("QUINTA", "FIFTH"), L ("RÁFAGAS", "GUSTS"), L ("DENSIDAD", "DENSITY"), L ("GRIT", "GRIT") };
+    const juce::String tone[] { L ("BRILLO", "BRIGHT"), L ("FILTRO", "FILTER"), L ("TONO", "PITCH"), L ("BRILLO", "BRIGHT"), L ("COLOR", "COLOUR"), L ("CRISTAL", "GLASS"), L ("FILTRO", "FILTER"), L ("TIMBRE", "TIMBRE") };
+    const juce::String chr[] { L ("MUTACIÓN", "MUTATION"), L ("ANALÓGICO", "ANALOG"), L ("GRANO", "GRAIN"), L ("QUINTA", "FIFTH"), L ("RÁFAGAS", "GUSTS"), L ("DENSIDAD", "DENSITY"), L ("GRIT", "GRIT"), L ("RITMO", "RHYTHM") };
     const juce::String toneTip[] { L ("Brillo del espectro en mutación", "Brightness of the mutating spectrum"),
                                    L ("Apertura del filtro del pad", "Pad filter opening"),
                                    L ("Grave: granos a la octava; agudo: quintas y octavas arriba", "Low: octave grains; high: fifths and octaves above"),
                                    L ("Brillo de la cola de shimmer", "Brightness of the shimmer tail"),
                                    L ("Altura del viento: de un rumor grave a un silbido", "Wind pitch: from a low rumble to a whistle"),
                                    L ("De campanas suaves a cristal brillante (índice FM)", "From soft bells to bright glass (FM index)"),
-                                   L ("Apertura del filtro del bajo", "Bass filter opening") };
+                                   L ("Apertura del filtro del bajo", "Bass filter opening"),
+                                   L ("De flauta suave y ligada (bajo) a celesta y caja de música (alto)", "From a soft legato flute (low) to celesta and music box (high)") };
     const juce::String chrTip[] { L ("Velocidad y caos con que mutan los armónicos", "Speed and chaos of the harmonic mutation"),
                                   L ("Carácter analógico de los 80: desafinación, vibrato lento y apertura del filtro en cada acorde", "80s analog character: detune, slow vibrato and a filter bloom on every chord"),
                                   L ("Granos pequeños y densos o grandes y lentos", "Small dense grains or big slow ones"),
                                   L ("Mezcla del shimmer de octava con octava + quinta", "Blend of octave shimmer with octave + fifth"),
                                   L ("Intensidad de las ráfagas y resonancia", "Gust intensity and resonance"),
                                   L ("Cuántas campanas caen", "How many bells fall"),
-                                  L ("Saturación y mordida del bajo", "Bass saturation and bite") };
+                                  L ("Saturación y mordida del bajo", "Bass saturation and bite"),
+                                  L ("Tempo y movimiento: melodías lentas y largas o más vivas", "Tempo and motion: slow, long melodies or livelier ones") };
     auto& on = add<ParamToggle> (c, P::layer (l, P::lOn), L ("ACTIVA", "ON"));
     auto& lvl = add<ParamKnob> (c, P::layer (l, P::lLevel), L ("NIVEL", "LEVEL"));
     auto& pres = add<ParamKnob> (c, P::layer (l, P::lPresence), L ("PRESENCIA", "PRESENCE"),

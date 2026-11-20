@@ -22,8 +22,9 @@ mientras la armonía, la luz y el espacio evolucionan despacio durante minutos u
   suena igual que lo que oíste, y la misma semilla siempre da el mismo viaje.
 - **Seis paisajes animados** que reaccionan a cada capa: Valle, Campo estelar, Bajo el agua, Neón, Océano y Aurora, con **pantalla completa**,
   atajos de teclado y **modo relax** sin textos.
-- **12 estados de ánimo, 256 presets de fábrica:** Cine, Ambient, Meditación, Oscuro, Sci-Fi, Etéreo, Océano, Nostalgia, Épico, Bosque,
-  Desierto y Dormir. El generador prueba varios candidatos, los comprueba y se queda con el más vivo.
+- **14 estados de ánimo, 292 presets de fábrica:** Cine, Ambient, Meditación, Oscuro, Sci-Fi, Etéreo, Océano, Nostalgia, Épico, Bosque,
+  Desierto, Dormir y los melódicos **Cuento** y **Banda sonora**, con una capa de **Melodía** compuesta (temas de caja de música, celesta
+  o flauta suave que se repiten, se responden y resuelven sobre los acordes). El generador prueba varios candidatos, los comprueba y se queda con el más vivo.
 - **Exportación de audio largo:** de 1 minuto a 3 horas en WAV, FLAC u OGG. **Vídeo del paisaje:** un MP4 con el paisaje animado y su sonido,
   listo para YouTube (usa ffmpeg, gratuito; Infinitum lo encuentra o te ayuda a instalarlo).
 - **Modo Dormir** y temporizador, afinación a **432 Hz**, **generador de ruido** (rosa, marrón, blanco, olas, vinilo).
