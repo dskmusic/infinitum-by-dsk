@@ -76,6 +76,11 @@ if(MSVC)
 endif()
 
 target_sources(Infinitum PRIVATE src/PluginEntry.cpp)
+# Windows: the generated .rc embeds icon.ico, but Ninja does not track it -> rebuild the resources when the icon changes
+if(WIN32)
+    set_source_files_properties("${CMAKE_CURRENT_BINARY_DIR}/Infinitum_artefacts/JuceLibraryCode/Infinitum_resources.rc"
+        PROPERTIES OBJECT_DEPENDS "${CMAKE_CURRENT_BINARY_DIR}/Infinitum_artefacts/JuceLibraryCode/icon.ico")
+endif()
 target_link_libraries(Infinitum PRIVATE InfinitumShared)
 
 # ---- Tool: unit tests, offline render, preset validation, factory bank, SFZ, screenshots ----

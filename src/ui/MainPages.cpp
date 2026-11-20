@@ -37,6 +37,7 @@ LandscapePage::LandscapePage (Context& c)
         addAndMakeVisible (b);
     }
     fullscreen.setButtonText (L ("Pantalla completa", "Full screen"));
+    for (auto* b : sceneButtons) b->getProperties().set ("small", true);
     fullscreen.setTooltip (L ("Paisaje a pantalla completa (Esc para salir, H para ver los atajos)", "Full-screen landscape (Esc to exit, H for shortcuts)"));
     fullscreen.onClick = [this] { if (onFullscreen) onFullscreen(); };
     addAndMakeVisible (fullscreen);
@@ -143,12 +144,12 @@ void LandscapePage::paint (juce::Graphics& g)
 void LandscapePage::resized()
 {
     auto r = getLocalBounds().reduced (8);
-    landscape.setBounds (r.removeFromTop (410));
+    landscape.setBounds (r.removeFromTop (r.getHeight() - 258)); // the landscape takes all the extra height
     {
         auto bar = landscape.getBounds().reduced (14, 10).removeFromBottom (22);
-        fullscreen.setBounds (bar.removeFromRight (130));
+        fullscreen.setBounds (bar.removeFromRight (124));
         bar.removeFromRight (8);
-        for (int s = sceneButtons.size(); --s >= 0;) sceneButtons[s]->setBounds (bar.removeFromRight (s == scNeon ? 108 : 98).reduced (2, 0));
+        for (int s = sceneButtons.size(); --s >= 0;) sceneButtons[s]->setBounds (bar.removeFromRight (s == scStarfield ? 104 : 84).reduced (2, 0));
         for (auto* b : sceneButtons) b->toFront (false);
         fullscreen.toFront (false);
     }
@@ -222,7 +223,7 @@ void SoundPage::Strip::paint (juce::Graphics& g)
     g.fillRoundedRectangle (m.withWidth (m.getWidth() * juce::jmin (1.0f, energy)).withTrimmedTop (m.getHeight() * 0.6f), 2);
 }
 
-SoundPage::SoundPage (Context& c) : Page (c), fx (c, L ("Mezcla y efectos", "Mix & effects"), "fx"), space (c, L ("Clima y fundidos", "Weather & fades"), "global")
+SoundPage::SoundPage (Context& c) : Page (c), fx (c, L ("Mezcla y efectos", "Mix & effects"), "fx"), noise (c, L ("Ruido", "Noise"), "fx"), fades (c, L ("Fundidos", "Fades"), "global")
 {
     for (int l = 0; l < kNumLayers; ++l) addAndMakeVisible (strips.add (new Strip (c, l)));
     const std::pair<int, juce::String> fxk[] { { P::warmth, L ("CALIDEZ", "WARMTH") }, { P::width, L ("ANCHURA", "WIDTH") }, { P::lowCut, L ("CORTE GRAVE", "LOW CUT") },
@@ -232,14 +233,24 @@ SoundPage::SoundPage (Context& c) : Page (c), fx (c, L ("Mezcla y efectos", "Mix
     for (auto& [id, name] : fxk) ks.push_back (&fx.add<ParamKnob> (c, id, name));
     fx.layout = [ks] (juce::Rectangle<int> r) { rowKnobs (ks, r, 110); };
     addAndMakeVisible (fx);
+    // noise generator: type selector + level + tone
+    noise.accent = col::layer[lyWind];
+    auto& nType = noise.add<ParamCombo> (c, P::noiseType);
+    nType.setTooltip (L ("Ruido de fondo: rosa, marrón, blanco, olas de océano o crepitar de vinilo", "Background noise: pink, brown, white, ocean waves or vinyl crackle"));
+    auto& nLvl = noise.add<ParamKnob> (c, P::noiseLevel, L ("NIVEL", "LEVEL"));
+    auto& nTone = noise.add<ParamKnob> (c, P::noiseTone, L ("TONO", "TONE"), L ("Más oscuro o más brillante", "Darker or brighter"));
+    noise.layout = [&nType, &nLvl, &nTone] (juce::Rectangle<int> r)
+    {
+        nType.setBounds (r.removeFromTop (24).reduced (4, 0));
+        r.removeFromTop (6);
+        rowKnobs ({ &nLvl, &nTone }, r, 100);
+    };
+    addAndMakeVisible (noise);
     std::vector<juce::Component*> ts;
-    ts.push_back (&space.add<ParamKnob> (c, P::rain, L ("LLUVIA", "RAIN"), L ("Lluvia: gotas y siseo (también se ve en el paisaje Lluvia de neón)", "Rain: drops and hiss (also shown in the Neon Rain landscape)")));
-    ts.push_back (&space.add<ParamKnob> (c, P::fadeIn, L ("FUNDIDO ENTRADA", "FADE IN"), L ("Tiempo de entrada al pulsar Play", "Fade-in time when pressing Play")));
-    ts.push_back (&space.add<ParamKnob> (c, P::fadeOut, L ("FUNDIDO SALIDA", "FADE OUT"), L ("Tiempo de salida al pulsar Stop o al acabar el temporizador", "Fade-out time on Stop or when the timer ends")));
-    space.layout = [ts] (juce::Rectangle<int> r) { rowKnobs (ts, r, 110); };
-    addAndMakeVisible (space);
-    addAndMakeVisible (spectrum);
-    addAndMakeVisible (vu);
+    ts.push_back (&fades.add<ParamKnob> (c, P::fadeIn, L ("ENTRADA", "FADE IN"), L ("Fundido de entrada al pulsar Play", "Fade-in time when pressing Play")));
+    ts.push_back (&fades.add<ParamKnob> (c, P::fadeOut, L ("SALIDA", "FADE OUT"), L ("Fundido al pulsar Stop o al acabar el temporizador", "Fade-out time on Stop or when the timer ends")));
+    fades.layout = [ts] (juce::Rectangle<int> r) { rowKnobs (ts, r, 100); };
+    addAndMakeVisible (fades);
 }
 
 void SoundPage::tick (const Frame& f)
@@ -257,15 +268,13 @@ void SoundPage::paint (juce::Graphics& g) { g.fillAll (col::bg); }
 void SoundPage::resized()
 {
     auto r = getLocalBounds().reduced (8);
-    auto top = r.removeFromTop (440);
+    auto top = r.removeFromTop (r.getHeight() - 228);
     const int w = top.getWidth() / kNumLayers;
     for (auto* s : strips) s->setBounds (top.removeFromLeft (w).reduced (3, 0));
     r.removeFromTop (8);
-    auto vis = r.removeFromRight (270);
-    vu.setBounds (vis.removeFromRight (40).reduced (2, 0));
-    spectrum.setBounds (vis.reduced (2, 0));
+    fades.setBounds (r.removeFromRight (200));
     r.removeFromRight (8);
-    space.setBounds (r.removeFromRight (260));
+    noise.setBounds (r.removeFromRight (230));
     r.removeFromRight (8);
     fx.setBounds (r);
 }
@@ -307,7 +316,7 @@ bool FullscreenView::keyPressed (const juce::KeyPress& k)
     if (c == juce::KeyPress::rightKey) { nudge (P::light, 0.05f, L ("LUZ", "LIGHT")); return true; }
     if (c == juce::KeyPress::upKey) { nudge (P::evolution, 0.05f, L ("EVOLUCIÓN", "EVOLUTION")); return true; }
     if (c == juce::KeyPress::downKey) { nudge (P::evolution, -0.05f, L ("EVOLUCIÓN", "EVOLUTION")); return true; }
-    if (ch >= '1' && ch <= '4') { ctx.proc.setParamPlain (P::scene, (float) (ch - '1')); say (sceneName ((int) (ch - '1'))); return true; }
+    if (ch >= '1' && ch <= '6') { ctx.proc.setParamPlain (P::scene, (float) (ch - '1')); say (sceneName ((int) (ch - '1'))); return true; }
     switch (ch)
     {
         case 'F':
@@ -322,7 +331,13 @@ bool FullscreenView::keyPressed (const juce::KeyPress& k)
         case 'Z': nudge (P::density, -0.05f, L ("DENSIDAD", "DENSITY")); return true;
         case 'S': nudge (P::space, 0.05f, L ("ESPACIO", "SPACE")); return true;
         case 'X': nudge (P::space, -0.05f, L ("ESPACIO", "SPACE")); return true;
-        case 'R': nudge (P::rain, ctx.proc.getParam (P::rain) > 0.05f ? -1.0f : 0.6f, L ("LLUVIA", "RAIN")); return true;
+        case 'R':
+        {
+            const int nt = ((int) ctx.proc.getParam (P::noiseType) + 1) % 6;
+            ctx.proc.setParamPlain (P::noiseType, (float) nt);
+            say (L ("RUIDO: ", "NOISE: ") + paramDefs()[(size_t) P::noiseType].choices[nt].toUpperCase());
+            return true;
+        }
         case 'H': helpPinned = ! helpPinned; helpUntil = helpPinned ? 1.0e9 : 0.0; return true;
         default: return false;
     }
@@ -349,9 +364,9 @@ void FullscreenView::paintOverChildren (juce::Graphics& g)
     g.setFont (font (13.0f));
     g.setColour (juce::Colours::white.withAlpha (0.9f * a));
     const juce::String lines[] { L ("Espacio: Play / Stop", "Space: Play / Stop"), L ("Esc: salir", "Esc: exit"), L ("F: congelar", "F: freeze"),
-                                 L ("1 2 3 4: paisaje", "1 2 3 4: landscape"), L ("N: nueva semilla", "N: new seed"), L ("Izquierda / derecha: luz", "Left / right: light"),
+                                 L ("1 a 6: paisaje", "1 to 6: landscape"), L ("N: nueva semilla", "N: new seed"), L ("Izquierda / derecha: luz", "Left / right: light"),
                                  L ("Arriba / abajo: evolución", "Up / down: evolution"), L ("A / Z: densidad", "A / Z: density"), L ("S / X: espacio", "S / X: space"),
-                                 L ("R: lluvia sí / no", "R: rain on / off"), L ("H: mostrar / ocultar ayuda", "H: show / hide help") };
+                                 L ("R: tipo de ruido", "R: noise type"), L ("H: mostrar / ocultar ayuda", "H: show / hide help") };
     for (auto& l : lines) g.drawText (l, in.removeFromTop (20), juce::Justification::centredLeft);
 }
 }

@@ -10,6 +10,6 @@
 - MIDI: set the key, play notes on top, or both.
 - Long audio export (1 min to 3 h) to WAV, FLAC or OGG, streamed to disk.
 - Mood generator (Cinematic, Ambient, Meditation, Dark, Sci-Fi) with validation and level matching; mutate, blend, history.
-- 91 factory presets (new Cinematic sub-moods: Neo-Noir, Derelict); bilingual UI (automatic or manual language).
-- Four landscapes (Valley, Starfield, Nebula, Neon Rain) with seed-dependent scenery, full-screen mode with keyboard shortcuts.
-- Rain; analog pad character (vibrato drift, filter bloom on chord changes).
+- 136 factory presets in 8 moods (incl. Ethereal, Oceanic, Nostalgia; Cinematic Neo-Noir and Derelict); bilingual UI (automatic or manual language).
+- Six landscapes (Valley, Starfield, Nebula, Neon Rain, Ocean, Aurora) with seed-dependent scenery, full-screen mode with keyboard shortcuts; maximisable Standalone with adaptive layout.
+- Noise generator (pink, brown, white, ocean, vinyl); analog pad character with ensemble chorus; melodic bell phrases; click-free Freeze; quicker Stop.

@@ -582,7 +582,7 @@ void GeneratorPage::resized()
     left.removeFromTop (20);
     auto cats = left.removeFromTop (6 * 30);
     for (int i = 0; i < catButtons.size(); ++i)
-        catButtons[i]->setBounds (juce::Rectangle<int> (cats.getX(), cats.getY() + i * 36, cats.getWidth(), 36).reduced (2));
+        catButtons[i]->setBounds (juce::Rectangle<int> (cats.getX() + (i % 2) * cats.getWidth() / 2, cats.getY() + (i / 2) * 44, cats.getWidth() / 2, 44).reduced (2));
     {
         auto title = left.removeFromTop (8 + 18).withTrimmedTop (4);   // same row as the CHARACTER label
         resetChar.setBounds (title.removeFromRight (78).withSizeKeepingCentre (78, 20));

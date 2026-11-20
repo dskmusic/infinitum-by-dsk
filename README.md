@@ -22,18 +22,19 @@ their own, while harmony, light and space evolve slowly for minutes and hours wi
   so a DAW bounce sounds exactly like playback, and the same seed always gives the same journey.
 - **Long audio export:** render 1 minute to 3 hours to **WAV, FLAC or OGG** with a final fade-out (YouTube, meditation, study).
 - **Session timer** with fade-in and fade-out, **432 Hz** tuning option.
-- **Mood generator:** Cinematic, Ambient, Meditation, Dark and Sci-Fi (three to five sub-moods each), with every result rendered,
+- **Mood generator:** 8 moods - Cinematic, Ambient, Meditation, Dark, Sci-Fi, Ethereal, Oceanic and Nostalgia (three to five sub-moods each), with every result rendered,
   checked and level-matched before you hear it. Mutate, blend and session history.
-- **91 factory presets** (including rain-soaked neo-noir city nights and derelict spaceships), preset browser with tags, favourites and ratings, A/B compare, undo/redo, MIDI learn.
+- **136 factory presets** (including rain-soaked neo-noir city nights and derelict spaceships), preset browser with tags, favourites and ratings, A/B compare, undo/redo, MIDI learn.
 - **MIDI:** set the key from your keyboard, play notes on top, or both.
-- **Four animated landscapes** (Valley, Starfield, Nebula, Neon Rain) that react to every layer, with a **full-screen mode** and keyboard shortcuts.
-- **Rain** (drops and hiss) and an **analog** 80s pad character with slow vibrato and a filter bloom on every chord.
+- **Six animated landscapes** (Valley, Starfield, Nebula, Neon Rain, Ocean, Aurora) that react to every layer, with a **full-screen mode** and keyboard shortcuts.
+- **Noise generator** (pink, brown, white, ocean waves, vinyl crackle), an **analog** 80s pad with ensemble chorus, and bells that play short melodic phrases.
 - Resizable 50–200 %, **English / Español** interface (automatic or manual).
 
 | | |
 |---|---|
 | ![Neon Rain](docs/screenshots/landscape-neon.png) | ![Starfield](docs/screenshots/landscape-starfield.png) |
 | ![Nebula](docs/screenshots/landscape-nebula.png) | ![Valley](docs/screenshots/landscape-valley.png) |
+| ![Ocean](docs/screenshots/landscape-ocean.png) | ![Aurora](docs/screenshots/landscape-aurora.png) |
 | ![Sound](docs/screenshots/sound.png) | ![Generator](docs/screenshots/generator.png) |
 | ![Presets](docs/screenshots/presets.png) | ![Export](docs/screenshots/export.png) |
 

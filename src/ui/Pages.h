@@ -134,9 +134,7 @@ private:
         float presence = 0, energy = 0;
     };
     juce::OwnedArray<Strip> strips;
-    Box fx, space;
-    Spectrum spectrum;
-    VuMeter vu;
+    Box fx, noise, fades;
 };
 
 class PresetsPage : public Page, private juce::ListBoxModel, private juce::TextEditor::Listener

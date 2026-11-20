@@ -52,6 +52,8 @@ InfinitumEditor::InfinitumEditor (InfinitumProcessor& p)
     constrainer.setSizeLimits (kDesignW / 2, kDesignH / 2, kDesignW * 2, kDesignH * 2);
     setConstrainer (&constrainer);
     setResizable (true, true);
+    if (p.wrapperType == juce::AudioProcessor::wrapperType_Standalone)
+        constrainer.setFixedAspectRatio (0.0); // the Standalone window can take any shape (and be maximised)
     const float s = juce::jlimit (0.5f, 2.0f, settings.scale());
     setSize ((int) (kDesignW * s), (int) (kDesignH * s));
     header->setPresetName (proc.currentMeta.name);
@@ -123,15 +125,24 @@ void InfinitumEditor::paint (juce::Graphics& g) { g.fillAll (gx::ui::col::bg); }
 
 void InfinitumEditor::resized()
 {
-    const float s = (float) getWidth() / (float) kDesignW;
-    root.setBounds (0, 0, kDesignW, kDesignH);
+    // scale to fit; any extra width/height (maximised Standalone, other screen ratios) goes to the pages, which stretch
+    const float s = juce::jmin ((float) getWidth() / (float) kDesignW, (float) getHeight() / (float) kDesignH);
+    root.setBounds (0, 0, juce::jmax (kDesignW, (int) std::floor ((float) getWidth() / s)), juce::jmax (kDesignH, (int) std::floor ((float) getHeight() / s)));
     root.setTransform (juce::AffineTransform::scale (s));
     auto r = root.getLocalBounds();
     header->setBounds (r.removeFromTop (64));
     keyboard.setBounds (r.removeFromBottom (52).reduced (4, 2));
     for (auto* pg : pages) pg->setBounds (r);
     about->setBounds (root.getLocalBounds());
-    toastLabel.setBounds (root.getLocalBounds().withSizeKeepingCentre (560, 34).withY (kDesignH - 110));
+    toastLabel.setBounds (root.getLocalBounds().withSizeKeepingCentre (560, 34).withY (root.getHeight() - 110));
+}
+
+// Standalone: JUCE's window only shows minimise + close; add the maximise button.
+void InfinitumEditor::parentHierarchyChanged()
+{
+    if (processor.wrapperType == juce::AudioProcessor::wrapperType_Standalone)
+        if (auto* w = findParentComponentOfClass<juce::DocumentWindow>())
+            w->setTitleBarButtonsRequired (juce::DocumentWindow::allButtons, false);
 }
 
 void InfinitumEditor::setUiScale (float s)

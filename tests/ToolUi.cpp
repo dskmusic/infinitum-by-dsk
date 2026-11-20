@@ -225,15 +225,13 @@ int runToolExtras (const juce::String& cmd, int argc, char** argv)
             ge->showPage (pg);
             if (pg == 0)
             {
-                const char* sceneNames[] { "landscape-valley", "landscape-starfield", "landscape-nebula", "landscape-neon" };
+                const char* sceneNames[] { "landscape-valley", "landscape-starfield", "landscape-nebula", "landscape-neon", "landscape-ocean", "landscape-aurora" };
                 for (int sc = gx::numScenes; --sc >= 0;)
                 {
                     p.setParamPlain (gx::P::scene, (float) sc);
-                    if (sc == gx::scNeon) p.setParamPlain (gx::P::rain, 0.6f);
                     pump (60);
                     shot (sceneNames[sc]);
                 }
-                p.setParamPlain (gx::P::rain, 0.0f);
             }
             pump (pg == 0 ? 60 : 40);
             if (pg == 2)

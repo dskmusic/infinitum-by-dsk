@@ -32,6 +32,12 @@ const std::map<juce::String, std::pair<List, List>> byMood {
                       { "Breathing in… breathing out…", "Lighting an imaginary candle…", "Slowing the heartbeat…", "Tuning to 432 Hz if needed…", "Letting go of what doesn't sound…", "Coming back to the present…" } } },
     { "Dark", { { "Apagando la última luz…", "Bajando a la cripta…", "Despertando algo antiguo…", "Llenando el pozo de niebla…", "Escuchando pasos en la oscuridad…", "Sellando el ritual…" },
                 { "Switching off the last light…", "Going down into the crypt…", "Waking something ancient…", "Filling the well with fog…", "Hearing footsteps in the dark…", "Sealing the ritual…" } } },
+    { "Ethereal", { { "Afinando un coro de luz…", "Abriendo las nubes…", "Dejando que el sonido flote…", "Encendiendo un halo…", "Subiendo hacia la luz…", "Puliendo cada armónico de cristal…" },
+                    { "Tuning a choir of light…", "Parting the clouds…", "Letting the sound float…", "Lighting a halo…", "Rising towards the light…", "Polishing every crystal harmonic…" } } },
+    { "Oceanic", { { "Midiendo la marea…", "Contando olas…", "Bajando al fondo del mar…", "Encendiendo el faro…", "Dejando que la espuma respire…", "Siguiendo las corrientes…" },
+                   { "Measuring the tide…", "Counting waves…", "Diving to the seafloor…", "Lighting the lighthouse…", "Letting the foam breathe…", "Following the currents…" } } },
+    { "Nostalgia", { { "Rebobinando una cinta vieja…", "Quitando el polvo al vinilo…", "Buscando una foto de verano…", "Calentando la radio del salón…", "Recordando una tarde dorada…", "Desafinando la cinta con cariño…" },
+                     { "Rewinding an old tape…", "Dusting off the vinyl…", "Looking for a summer photo…", "Warming up the living-room radio…", "Remembering a golden afternoon…", "Wobbling the tape lovingly…" } } },
     { "Sci-Fi", { { "Estableciendo órbita…", "Recibiendo una señal lejana…", "Calibrando el reactor…", "Despresurizando la estación…", "Traduciendo un idioma alienígena…", "Saltando al hiperespacio…" },
                   { "Establishing orbit…", "Receiving a distant signal…", "Calibrating the reactor…", "Depressurising the station…", "Translating an alien language…", "Jumping to hyperspace…" } } },
 };
@@ -41,6 +47,9 @@ const std::map<juce::String, std::pair<List, List>> finals {
     { "Ambient", { { "Tu paisaje está listo: déjalo correr.", "Listo. Nunca sonará igual dos veces." }, { "Your landscape is ready: let it flow.", "Done. It will never sound the same twice." } } },
     { "Meditation", { { "Listo. Respira y escucha.", "Tu espacio de calma está listo." }, { "Ready. Breathe and listen.", "Your calm space is ready." } } },
     { "Dark", { { "La oscuridad está lista.", "Listo. No mires atrás." }, { "The darkness is ready.", "Done. Don't look back." } } },
+    { "Ethereal", { { "Listo. Deja que te eleve.", "La luz está lista." }, { "Ready. Let it lift you.", "The light is ready." } } },
+    { "Oceanic", { { "El mar está listo. Escucha.", "Listo: marea alta." }, { "The sea is ready. Listen.", "Done: high tide." } } },
+    { "Nostalgia", { { "Listo. Pulsa Play y recuerda.", "Tu cinta está lista." }, { "Done. Press Play and remember.", "Your tape is ready." } } },
     { "Sci-Fi", { { "Transmisión establecida.", "Listo para el despegue." }, { "Transmission established.", "Ready for lift-off." } } },
 };
 } // namespace

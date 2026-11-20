@@ -42,7 +42,9 @@ juce::String sceneName (int s)
         case scValley: return L ("Valle", "Valley");
         case scStarfield: return L ("Campo estelar", "Starfield");
         case scNebula: return L ("Nebulosa", "Nebula");
-        case scNeon: return L ("Lluvia de neón", "Neon Rain");
+        case scNeon: return L ("Neón", "Neon Rain");
+        case scOcean: return L ("Océano", "Ocean");
+        case scAurora: return L ("Aurora", "Aurora");
         default: return {};
     }
 }
@@ -111,7 +113,7 @@ std::vector<ParamDef> build()
     b.addChoice (tuning, "tuning", "Tuning", { "440 Hz", "432 Hz" }, 0);
     b.addChoice (midiMode, "midi_mode", "MIDI Mode", { "Off", "Set Key", "Play Notes", "Key + Play" }, 3);
     b.add (fadeIn, "fade_in", "Fade In", skewed (0.1f, 30, 4), 4, "s");
-    b.add (fadeOut, "fade_out", "Fade Out", skewed (0.1f, 60, 8), 8, "s");
+    b.add (fadeOut, "fade_out", "Fade Out", skewed (0.1f, 60, 4), 3, "s");
     b.addInt (timer, "timer", "Session Timer", 0, 180, 0, "min");
     b.group = "macro";
     b.add (evolution, "evolution", "Evolution", lin (0, 1), 0.5f);
@@ -129,9 +131,11 @@ std::vector<ParamDef> build()
     b.add (dlyFb, "dly_fb", "Delay Feedback", lin (0, 0.95f), 0.45f);
     b.add (dlyTone, "dly_tone", "Delay Tone", lin (0, 1), 0.5f);
     b.add (dlyMix, "dly_mix", "Delay Send", lin (0, 1), 0.3f);
-    b.add (rain, "rain", "Rain", lin (0, 1), 0.0f);
+    b.addChoice (noiseType, "noise_type", "Noise Type", { "Off", "Pink", "Brown", "White", "Ocean", "Vinyl" }, 0);
+    b.add (noiseLevel, "noise_level", "Noise Level", lin (0, 1), 0.3f);
+    b.add (noiseTone, "noise_tone", "Noise Tone", lin (0, 1), 0.5f);
     b.group = "global";
-    b.addChoice (scene, "scene", "Scene", { "Valley", "Starfield", "Nebula", "Neon Rain" }, 0);
+    b.addChoice (scene, "scene", "Scene", { "Valley", "Starfield", "Nebula", "Neon Rain", "Ocean", "Aurora" }, 0);
 
     //                      level presence tone  char
     const float defs[kNumLayers][4] { { 0.70f, 1.00f, 0.50f, 0.40f },   // drone

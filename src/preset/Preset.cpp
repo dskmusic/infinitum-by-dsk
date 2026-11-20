@@ -6,7 +6,7 @@ namespace gx
 {
 const juce::StringArray& categories()
 {
-    static const juce::StringArray c { "Cinematic", "Ambient", "Meditation", "Dark", "Sci-Fi" };
+    static const juce::StringArray c { "Cinematic", "Ambient", "Meditation", "Dark", "Sci-Fi", "Ethereal", "Oceanic", "Nostalgia" };
     return c;
 }
 const juce::StringArray& subcategories (const juce::String& cat)
@@ -17,6 +17,9 @@ const juce::StringArray& subcategories (const juce::String& cat)
         { "Meditation", { "Calm", "Breath", "Healing" } },
         { "Dark", { "Abyss", "Ritual", "Night" } },
         { "Sci-Fi", { "Deep Space", "Machine", "Alien" } },
+        { "Ethereal", { "Angelic", "Celestial", "Dreamland" } },
+        { "Oceanic", { "Shoreline", "Deep Blue", "Tidal" } },
+        { "Nostalgia", { "Lo-Fi Memory", "Tape Dream", "Golden Hour" } },
     };
     static const juce::StringArray none;
     auto it = m.find (cat);
@@ -27,13 +30,15 @@ juce::String categoryLabel (const juce::String& c)
     if (c == "Cinematic") return L ("Cine", "Cinematic");
     if (c == "Meditation") return L ("Meditación", "Meditation");
     if (c == "Dark") return L ("Oscuro", "Dark");
+    if (c == "Ethereal") return L ("Etéreo", "Ethereal");
+    if (c == "Oceanic") return L ("Océano", "Oceanic");
     return c;
 }
 const juce::StringArray& characterTags()
 {
     static const juce::StringArray t { "Dark", "Bright", "Warm", "Cold", "Evolving", "Static", "Airy", "Shimmering", "Granular",
                                        "Windy", "Sparkling", "Deep", "Calm", "Tense", "Wide", "Lush", "Frozen", "432 Hz",
-                                       "Rain", "Analog", "Noir", "Haunted" };
+                                       "Analog", "Noir", "Haunted", "Ocean", "Vinyl", "Choir", "Nostalgic" };
     return t;
 }
 

@@ -388,14 +388,14 @@ int runVideo (int argc, char** argv)
     d.wait (1.0);
 
     // ---- scenes
-    d.caption ("Four living landscapes", "Valley · Starfield · Nebula · Neon Rain", "Cuatro paisajes vivos", "Valle · Campo estelar · Nebulosa · Lluvia de neón");
+    d.caption ("Six living landscapes", "Valley · Starfield · Nebula · Neon Rain · Ocean · Aurora", "Seis paisajes vivos", "Valle · Campo estelar · Nebulosa · Neón · Océano · Aurora");
     d.load ("Deep Space");
     d.click (d.button ("Starfield"), 2.6);
     d.load ("Alien");
     d.click (d.button ("Nebula"), 2.6);
 
     // ---- neo-noir
-    d.caption ("Rain-soaked neon nights", "Analog 80s pads, glassy bells, real rain", "Noches de neón bajo la lluvia", "pads analógicos de los 80, campanas de cristal y lluvia de verdad");
+    d.caption ("Rain-soaked neon nights", "Analog 80s pads, glassy bells, endless city rain", "Noches de neón bajo la lluvia", "pads analógicos de los 80, campanas de cristal y lluvia sin fin");
     d.load ("Neo-Noir", 1);
     d.click (d.button ("Neon Rain"), 6.5);
 
@@ -414,7 +414,7 @@ int runVideo (int argc, char** argv)
     d.click (d.button ("SOUND"), 4.2);
 
     // ---- generator
-    d.caption ("Mood generator", "Cinematic · Ambient · Meditation · Dark · Sci-Fi", "Generador por estados de ánimo", "Cine · Ambient · Meditación · Oscuro · Sci-Fi");
+    d.caption ("Mood generator", "8 moods: Cinematic, Ambient, Meditation, Dark, Sci-Fi, Ethereal, Oceanic, Nostalgia", "Generador por estados de ánimo", "8 estados: Cine, Ambient, Meditación, Oscuro, Sci-Fi, Etéreo, Océano, Nostalgia");
     d.click (d.button ("GENERATOR"), 0.4);
     d.click (d.button ("Meditation", &d.ed->generatorPage()), 0.3);
     d.generate();
@@ -424,9 +424,9 @@ int runVideo (int argc, char** argv)
     d.wait (3.0);
 
     // ---- presets
-    d.caption ("91 factory presets", "Tags, favourites, ratings, instant search", "91 presets de fábrica", "etiquetas, favoritos, valoraciones y búsqueda instantánea");
+    d.caption ("136 factory presets", "Tags, favourites, ratings, instant search", "136 presets de fábrica", "etiquetas, favoritos, valoraciones y búsqueda instantánea");
     d.click (d.button ("PRESETS"), 0.4);
-    d.type (d.find<juce::TextEditor> (d.ed.get()), "rain");
+    d.type (d.find<juce::TextEditor> (d.ed.get()), "ocean");
     d.selectRow (d.find<juce::ListBox> (d.ed.get(), [] (juce::ListBox* l) { return l->getName() == "presets"; }), 1);
     d.wait (3.0);
 

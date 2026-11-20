@@ -19,7 +19,7 @@ struct Frame
     int rootPc = 9, degree = 0, bellCount = 0, lastBellNote = 72, seed = 1;
     float runGain = 0, evoTime = 0, musTime = 0, elapsed = 0, lastBellPan = 0, light = 0.5f, space = 0.5f, harmony = 0.5f;
     int scale = 1, timerMin = 0, scene = 0;
-    float rain = 0, evolution = 0.5f, density = 0.5f;
+    float evolution = 0.5f, density = 0.5f;
     bool running = false, frozen = false, playButton = false, hostPlaying = false;
     bool reduced = false;                    // reduced animation mode
 };
@@ -95,6 +95,8 @@ private:
     void paintStarfield (juce::Graphics&, juce::Rectangle<float>);
     void paintNebula (juce::Graphics&, juce::Rectangle<float>);
     void paintNeon (juce::Graphics&, juce::Rectangle<float>);
+    void paintOcean (juce::Graphics&, juce::Rectangle<float>);
+    void paintAurora (juce::Graphics&, juce::Rectangle<float>);
     void paintSparks (juce::Graphics&);
     void paintOverlay (juce::Graphics&, juce::Rectangle<float>);
     void rebuildCache();                     // seed/size dependent scenery

@@ -23,12 +23,12 @@ mientras la armonía, la luz y el espacio evolucionan despacio durante minutos u
   de tiempo: lo que exportas del DAW suena igual que lo que oíste, y la misma semilla siempre da el mismo viaje.
 - **Exportación de audio largo:** de 1 minuto a 3 horas en **WAV, FLAC u OGG**, con fundido final (YouTube, meditación, estudio).
 - **Temporizador de sesión** con fundidos de entrada y salida, y afinación a **432 Hz**.
-- **Generador por estados de ánimo:** Cine, Ambient, Meditación, Oscuro y Sci-Fi (de tres a cinco variantes cada uno). Cada resultado se
+- **Generador por estados de ánimo:** 8 estados: Cine, Ambient, Meditación, Oscuro, Sci-Fi, Etéreo, Océano y Nostalgia (de tres a cinco variantes cada uno). Cada resultado se
   renderiza, se comprueba y se nivela antes de que lo oigas. Mutar, mezclar e historial de la sesión.
-- **91 presets de fábrica** (incluidas noches de ciudad futurista bajo la lluvia y naves abandonadas), navegador con etiquetas, favoritos y valoraciones, comparación A/B, deshacer/rehacer, MIDI learn.
+- **136 presets de fábrica** (incluidas noches de ciudad futurista bajo la lluvia y naves abandonadas), navegador con etiquetas, favoritos y valoraciones, comparación A/B, deshacer/rehacer, MIDI learn.
 - **MIDI:** cambia la tonalidad desde tu teclado, toca notas encima, o ambas.
-- **Cuatro paisajes animados** (Valle, Campo estelar, Nebulosa, Lluvia de neón) que reaccionan a cada capa, con **pantalla completa** y atajos de teclado.
-- **Lluvia** (gotas y siseo) y un carácter de pad **analógico** de los 80, con vibrato lento y apertura del filtro en cada acorde.
+- **Seis paisajes animados** (Valle, Campo estelar, Nebulosa, Neón, Océano, Aurora) que reaccionan a cada capa, con **pantalla completa** y atajos de teclado.
+- **Generador de ruido** (rosa, marrón, blanco, olas de océano, crepitar de vinilo), pad **analógico** de los 80 con chorus de ensemble, y campanas que tocan pequeñas frases melódicas.
 - Escalable del 50 al 200 %, interfaz en **inglés y español** (automática o manual).
 
 ## Descarga

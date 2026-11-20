@@ -19,6 +19,7 @@ public:
     ~InfinitumEditor() override;
     void paint (juce::Graphics&) override;
     void resized() override;
+    void parentHierarchyChanged() override;
     bool keyPressed (const juce::KeyPress&) override;
 
     static constexpr int kDesignW = 1280, kDesignH = 800;

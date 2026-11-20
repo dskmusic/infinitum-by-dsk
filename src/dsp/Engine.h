@@ -78,6 +78,7 @@ private:
     float lp (int layer, int field) const { return p[P::layer (layer, field)]; }
     void rebuildMutation (float f0, float morph, float chaos, float rate, float tilt);
     void triggerBell (int64_t slot);
+    void playBell (int note, float vel, float pan);
     void spawnGrain();
 
     double sr = 48000.0;
@@ -91,7 +92,7 @@ private:
     double sessionT = 0;
     int64_t expectedHost = 0;
     bool wasHost = false, wasInternal = false, running = false, idle = true;
-    float runGain = 0, runInc = 0;
+    float runGain = 0, runInc = 0, freezeAmt = 0, tailGain = 1, tailCoef = 0.99f;
     double silentFor = 0;
 
     // evolution
@@ -134,8 +135,20 @@ private:
     float pink[2][3] {};
     Svf windF[2][2];
     Rng windRng { 31337 };
-    float windGust = 0, rainEnv[2] {};
-    Biquad rainHp[2];
+    float windGust = 0;
+    // noise generator (pink / brown / white / ocean / vinyl)
+    Rng noiseRng { 4711 };
+    float pinkN[2][3] {}, brownN[2] {}, crackle[2] {}, oceanEnv[2] {}, noiseCut = 1000;
+    Svf noiseF[2];
+    Biquad crackleHp[2];
+    // pad ensemble chorus
+    DelayLine chorus[2];
+    float chorusPh = 0;
+    // bell phrases: notes queued on the control-tick clock (deterministic)
+    struct PendingBell { int64_t tick = -1; int note = 0; float vel = 0, pan = 0; };
+    std::array<PendingBell, 16> bellQueue {};
+    int64_t ctrlTick = 0;
+    Biquad shmHp[2];
     double swellT = 100.0;               // seconds since the last chord change (pad filter bloom)
 
     // bells

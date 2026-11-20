@@ -16,7 +16,7 @@ namespace P
         evolution, density, light, space, freeze,
         tuning, midiMode, fadeIn, fadeOut, timer,
         width, warmth, lowCut, highCut, revDamp, dlyTime, dlyFb, dlyTone, dlyMix,
-        scene, rain,
+        scene, noiseType, noiseLevel, noiseTone,
         numGlobal
     };
     enum LayerField : int { lOn, lLevel, lPresence, lTone, lChar, numLayerFields };
@@ -28,7 +28,8 @@ namespace P
 
 enum ParamKind { pkFloat, pkInt, pkBool, pkChoice };
 enum MidiMode { mmOff, mmKey, mmPlay, mmKeyPlay };
-enum Scene { scValley, scStarfield, scNebula, scNeon, numScenes };
+enum Scene { scValley, scStarfield, scNebula, scNeon, scOcean, scAurora, numScenes };
+enum NoiseType { ntOff, ntPink, ntBrown, ntWhite, ntOcean, ntVinyl };
 
 struct ParamDef
 {

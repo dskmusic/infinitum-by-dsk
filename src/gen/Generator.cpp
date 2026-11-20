@@ -14,9 +14,10 @@ struct Arch
     std::vector<int> scales;                          // indices into scaleNames()
     Range2 octave { 1.6f, 2.4f }, harmony { 0.3f, 0.7f }, chordRate { 0.2f, 0.5f }, evolution { 0.3f, 0.6f },
            density { 0.4f, 0.7f }, light { 0.4f, 0.7f }, space { 0.6f, 0.9f }, warmth { 0.1f, 0.35f }, dly { 0.15f, 0.4f },
-           rain { 0.0f, 0.0f }, dlyFb { 0.3f, 0.65f }, dlyTime { 250.0f, 900.0f };
+           noiseLevel { 0.15f, 0.35f }, dlyFb { 0.3f, 0.65f }, dlyTime { 250.0f, 900.0f };
     float tuning432 = 0.0f;                           // probability of A4 = 432 Hz
-    float rainChance = 0.0f;                          // probability of using rain at all
+    float noiseChance = 0.25f;                        // probability of using the noise generator
+    std::vector<int> noises { ntPink, ntBrown };      // noise colours that fit
     std::vector<int> scenes { scValley };             // landscapes that fit (first = most typical)
     bool fixedFocus = false;                          // sub-mood already decides the layer balance
     // per layer: level, presence, tone, character
@@ -51,7 +52,7 @@ Arch baseArch (const juce::String& mood)
         a.layer[lyBells] = { { { 0.15f, 0.35f }, { 0.3f, 0.6f }, { 0.2f, 0.5f }, { 0.05f, 0.25f } } };
         a.layer[lyWind][0] = { 0.1f, 0.3f };
         a.scenes = { scValley, scStarfield, scValley };
-        a.rainChance = 0.15f; a.rain = { 0.1f, 0.35f };
+        a.noises = { ntOcean, ntPink, ntBrown }; a.noiseChance = 0.45f;
     }
     else if (mood == "Dark")
     {
@@ -60,7 +61,7 @@ Arch baseArch (const juce::String& mood)
         a.layer[lyPad][2] = { 0.15f, 0.4f }; a.layer[lyDrone][2] = { 0.15f, 0.45f };
         a.layer[lyWind] = { { { 0.25f, 0.5f }, { 0.3f, 0.7f }, { 0.1f, 0.4f }, { 0.4f, 0.8f } } };
         a.scenes = { scNebula, scValley, scNeon };
-        a.rainChance = 0.3f; a.rain = { 0.2f, 0.6f };
+        a.noises = { ntBrown, ntPink }; a.noiseChance = 0.4f;
     }
     else if (mood == "Sci-Fi")
     {
@@ -70,12 +71,40 @@ Arch baseArch (const juce::String& mood)
         a.layer[lyShimmer][3] = { 0.5f, 1.0f };
         a.scenes = { scStarfield, scNebula, scNeon };
     }
+    else if (mood == "Ethereal") // angelic, weightless: vowel-like drones, high shimmer, bright, slow
+    {
+        a.scales = { Lydian, Major, MajPent, Suspended }; a.harmony = { 0.45f, 0.85f }; a.chordRate = { 0.1f, 0.4f }; a.evolution = { 0.25f, 0.5f };
+        a.light = { 0.6f, 0.95f }; a.space = { 0.85f, 1.0f }; a.octave = { 2.0f, 3.0f }; a.warmth = { 0.0f, 0.2f };
+        a.layer[lyDrone] = { { { 0.5f, 0.7f }, { 0.9f, 1.0f }, { 0.55f, 0.85f }, { 0.15f, 0.4f } } };
+        a.layer[lyShimmer] = { { { 0.55f, 0.75f }, { 0.75f, 1.0f }, { 0.55f, 0.85f }, { 0.3f, 0.8f } } };
+        a.layer[lyBells] = { { { 0.2f, 0.35f }, { 0.4f, 0.75f }, { 0.55f, 0.85f }, { 0.2f, 0.45f } } };
+        a.layer[lyWind][0] = { 0.05f, 0.2f };
+        a.scenes = { scAurora, scNebula, scValley }; a.noiseChance = 0.1f;
+    }
+    else if (mood == "Oceanic") // the sea: slow swells, deep pads, waves of filtered noise
+    {
+        a.scales = { MajPent, Dorian, Mixolydian, Lydian, Minor }; a.harmony = { 0.3f, 0.7f }; a.chordRate = { 0.05f, 0.35f }; a.evolution = { 0.25f, 0.5f };
+        a.light = { 0.3f, 0.75f }; a.space = { 0.75f, 0.95f }; a.octave = { 1.0f, 2.0f };
+        a.layer[lyPad] = { { { 0.55f, 0.75f }, { 0.75f, 1.0f }, { 0.25f, 0.5f }, { 0.4f, 0.7f } } };
+        a.layer[lyWind] = { { { 0.2f, 0.4f }, { 0.4f, 0.8f }, { 0.15f, 0.4f }, { 0.4f, 0.7f } } };
+        a.layer[lyBells][0] = { 0.1f, 0.3f };
+        a.scenes = { scOcean }; a.noises = { ntOcean }; a.noiseChance = 0.95f; a.noiseLevel = { 0.3f, 0.5f };
+    }
+    else if (mood == "Nostalgia") // warm lo-fi memories: major 7ths, wobbly tape-like pads, vinyl crackle
+    {
+        a.scales = { Major, Lydian, Dorian, Mixolydian }; a.harmony = { 0.55f, 0.95f }; a.chordRate = { 0.3f, 0.6f }; a.evolution = { 0.3f, 0.55f };
+        a.light = { 0.45f, 0.75f }; a.space = { 0.5f, 0.8f }; a.warmth = { 0.45f, 0.75f }; a.octave = { 1.6f, 2.4f };
+        a.layer[lyPad] = { { { 0.65f, 0.85f }, { 0.85f, 1.0f }, { 0.3f, 0.55f }, { 0.65f, 0.95f } } };
+        a.layer[lyShimmer][0] = { 0.15f, 0.35f };
+        a.layer[lyBells] = { { { 0.25f, 0.4f }, { 0.4f, 0.75f }, { 0.25f, 0.5f }, { 0.25f, 0.5f } } };
+        a.scenes = { scValley, scOcean }; a.noises = { ntVinyl }; a.noiseChance = 0.85f; a.noiseLevel = { 0.25f, 0.45f };
+    }
     else // Ambient
     {
         a.scales = { Major, Lydian, MajPent, Suspended, Mixolydian, Dorian };
         a.light = { 0.45f, 0.8f };
         a.scenes = { scValley, scNebula, scStarfield };
-        a.rainChance = 0.2f; a.rain = { 0.15f, 0.45f };
+        a.noises = { ntPink, ntOcean }; a.noiseChance = 0.3f;
     }
     return a;
 }
@@ -96,6 +125,15 @@ void applySub (Arch& a, const juce::String& sub)
     else if (sub == "Night") { a.scales = { Minor, Dorian, MinPent }; a.light = { 0.15f, 0.35f }; }
     else if (sub == "Deep Space") { a.light = { 0.05f, 0.35f }; a.space = { 0.85f, 1.0f }; a.octave = { 1.0f, 1.8f }; }
     else if (sub == "Machine") { a.layer[lyTexture][3] = { 0.0f, 0.3f }; a.layer[lyTexture][1] = { 0.7f, 1.0f }; a.layer[lyWind][1] = { 0.0f, 0.25f }; }
+    else if (sub == "Angelic") { a.layer[lyDrone][2] = { 0.6f, 0.85f }; a.layer[lyShimmer][3] = { 0.0f, 0.3f }; }
+    else if (sub == "Celestial") { a.scenes = { scNebula, scAurora }; a.layer[lyBells][1] = { 0.6f, 0.9f }; a.layer[lyShimmer][3] = { 0.6f, 1.0f }; }
+    else if (sub == "Dreamland") { a.evolution = { 0.45f, 0.7f }; a.layer[lyTexture][1] = { 0.6f, 0.95f }; }
+    else if (sub == "Shoreline") { a.light = { 0.55f, 0.85f }; a.layer[lyBells][1] = { 0.3f, 0.6f }; }
+    else if (sub == "Deep Blue") { a.light = { 0.1f, 0.35f }; a.octave = { 1.0f, 1.2f }; a.noiseLevel = { 0.2f, 0.35f }; }
+    else if (sub == "Tidal") { a.evolution = { 0.45f, 0.7f }; a.noiseLevel = { 0.4f, 0.6f }; }
+    else if (sub == "Lo-Fi Memory") { a.noiseLevel = { 0.35f, 0.55f }; a.layer[lyBells][3] = { 0.35f, 0.6f }; }
+    else if (sub == "Tape Dream") { a.layer[lyPad][3] = { 0.85f, 1.0f }; a.evolution = { 0.2f, 0.4f }; }
+    else if (sub == "Golden Hour") { a.light = { 0.6f, 0.8f }; a.scenes = { scValley }; }
     else if (sub == "Neo-Noir") // rain-soaked neon city of the future: lush analog brass pads, glassy bells, long echoes
     {
         a.scales = { Minor, Dorian, Lydian, Minor, Phrygian }; a.harmony = { 0.55f, 0.92f }; a.chordRate = { 0.25f, 0.5f };
@@ -107,7 +145,7 @@ void applySub (Arch& a, const juce::String& sub)
         a.layer[lyShimmer] = { { { 0.25f, 0.45f }, { 0.4f, 0.7f }, { 0.3f, 0.55f }, { 0.0f, 0.3f } } };
         a.layer[lyWind] = { { { 0.25f, 0.42f }, { 0.55f, 0.9f }, { 0.15f, 0.35f }, { 0.25f, 0.5f } } };
         a.layer[lyBells] = { { { 0.25f, 0.42f }, { 0.4f, 0.75f }, { 0.65f, 0.95f }, { 0.25f, 0.5f } } };
-        a.rainChance = 0.95f; a.rain = { 0.4f, 0.85f };
+        a.noises = { ntPink, ntBrown }; a.noiseChance = 0.7f; a.noiseLevel = { 0.15f, 0.3f };
         a.scenes = { scNeon }; a.fixedFocus = true;
     }
     else if (sub == "Derelict") // a dead ship drifting in deep space: metallic mutating hum, air vents, sonar pings, dread
@@ -156,6 +194,8 @@ float Generator::targetRmsDb (const juce::String& mood)
     if (mood == "Cinematic") return -19.5f;
     if (mood == "Sci-Fi") return -20.5f;
     if (mood == "Dark") return -21.0f;
+    if (mood == "Oceanic" || mood == "Ethereal") return -21.5f;
+    if (mood == "Nostalgia") return -20.0f;
     return -21.0f;
 }
 
@@ -221,7 +261,10 @@ Preset Generator::candidate (const GenRequest& req, uint32_t seed)
     b.set (P::dlyMix, b.rr (a.dly));
     b.set (P::dlyTime, b.rr (a.dlyTime));
     b.set (P::dlyFb, b.rr (a.dlyFb));
-    b.set (P::rain, r.uni() < a.rainChance ? b.rr (a.rain) : 0.0f);
+    const bool useNoise = r.uni() < a.noiseChance;
+    b.set (P::noiseType, useNoise ? (float) a.noises[(size_t) (r.next() % (uint32_t) a.noises.size())] : 0.0f);
+    b.set (P::noiseLevel, b.rr (a.noiseLevel));
+    b.set (P::noiseTone, 0.25f + 0.5f * r.uni());
     b.set (P::scene, (float) a.scenes[(size_t) (r.uni() < 0.6f ? 0 : r.next() % (uint32_t) a.scenes.size())]);
     b.set (P::dlyTone, 0.3f + r.uni() * 0.4f);
     b.set (P::revDamp, 0.25f + r.uni() * 0.4f);
@@ -230,7 +273,7 @@ Preset Generator::candidate (const GenRequest& req, uint32_t seed)
     // brighter landscapes keep more top end; dark ones roll it off (coherent with Light)
     b.set (P::highCut, 6000.0f + 14000.0f * juce::jlimit (0.0f, 1.0f, p.get (P::light) * 0.8f + r.uni() * 0.3f));
     b.set (P::fadeIn, mood == "Meditation" ? 8.0f : 3.0f + r.uni() * 4.0f);
-    b.set (P::fadeOut, mood == "Meditation" ? 15.0f : 6.0f + r.uni() * 6.0f);
+    b.set (P::fadeOut, mood == "Meditation" ? 5.0f : 2.0f + r.uni() * 2.0f);
 
     if (req.base != nullptr && ! req.locks.empty()) applyLocks (p, *req.base, req.locks);
 
@@ -374,7 +417,10 @@ juce::StringArray Generator::deriveTags (const Preset& p)
     if ((int) p.get (P::tuning) == 1) t.add ("432 Hz");
     if (p.meta.category == "Meditation") t.add ("Calm");
     if (p.meta.subcategory == "Tension" || p.meta.subcategory == "Ritual" || p.meta.subcategory == "Derelict") t.add ("Tense");
-    if (p.get (P::rain) > 0.2f) t.add ("Rain");
+    if ((int) p.get (P::noiseType) == ntOcean) t.add ("Ocean");
+    if ((int) p.get (P::noiseType) == ntVinyl) t.add ("Vinyl");
+    if (p.meta.category == "Ethereal") t.add ("Choir");
+    if (p.meta.category == "Nostalgia") t.add ("Nostalgic");
     if (lay (lyPad, P::lChar) > 0.7f && amount (lyPad) > 0.4f) t.add ("Analog");
     if (p.meta.subcategory == "Neo-Noir") t.add ("Noir");
     if (p.meta.subcategory == "Derelict") t.add ("Haunted");
@@ -402,6 +448,12 @@ juce::String Generator::makeName (const juce::String& mood, Rng& rng, const juce
                           { "Breath", "Temple", "Lotus", "Silence", "Mantra", "Stillness", "Garden", "Light", "Presence", "Heart", "Sanctuary", "Ocean", "Balance", "Spirit", "Awareness", "Haven", "Rest", "Pulse", "Grace", "Unity" } } },
         { "Dark", { { "Black", "Hollow", "Drowned", "Cursed", "Abyssal", "Moonless", "Forgotten", "Silent", "Haunted", "Shadow", "Bleak", "Ashen", "Sunken", "Grim", "Endless", "Cold", "Veiled", "Restless", "Obsidian", "Midnight" },
                     { "Abyss", "Catacombs", "Ritual", "Depths", "Void", "Crypt", "Marsh", "Mire", "Omen", "Ruins", "Labyrinth", "Hollow", "Chasm", "Wraith", "Tomb", "Forest", "Night", "Well", "Altar", "Eclipse" } } },
+        { "Ethereal", { { "Angelic", "Weightless", "Luminous", "Celestial", "Crystal", "Heavenly", "Floating", "Radiant", "Pure", "Silver", "Halo", "Soft", "Endless", "Gossamer", "Seraphic", "Feathered", "Glowing", "Pale", "Divine", "Opaline" },
+                        { "Choir", "Wings", "Light", "Veil", "Spire", "Prism", "Grace", "Hymn", "Clouds", "Ascension", "Vespers", "Aura", "Psalm", "Lantern", "Sky", "Bloom", "Cathedral", "Mist", "Sanctum", "Dawn" } } },
+        { "Oceanic", { { "Deep", "Tidal", "Salted", "Blue", "Drowned", "Coral", "Endless", "Calm", "Rolling", "Foamy", "Moonlit", "Silent", "Distant", "Abyssal", "Sunken", "Lunar", "Wandering", "Pearl", "Misty", "Open" },
+                       { "Shore", "Tides", "Reef", "Harbour", "Lagoon", "Currents", "Waves", "Swell", "Undertow", "Bay", "Horizon", "Driftwood", "Lighthouse", "Kelp Forest", "Seafloor", "Tidepool", "Mariner", "Sirens", "Estuary", "Atlantic" } } },
+        { "Nostalgia", { { "Faded", "Golden", "Sunday", "Polaroid", "Dusty", "Warm", "Old", "Summer", "Velvet", "Childhood", "Lost", "Sepia", "Hazy", "Sweet", "Late", "Analog", "Rewound", "Grandma's", "Sleepy", "Autumn" },
+                         { "Memories", "Tapes", "Afternoon", "Letters", "Cassette", "Photographs", "Radio", "Bedroom", "Porch", "Vinyl", "Holidays", "Seaside", "Daydream", "Lullaby", "Postcards", "Home Movies", "Attic", "Sunset", "Records", "Window" } } },
         { "Sci-Fi", { { "Orbital", "Quantum", "Stellar", "Ionic", "Derelict", "Alien", "Neural", "Silent", "Cryo", "Hyper", "Distant", "Signal", "Plasma", "Binary", "Cosmic", "Synthetic", "Polar", "Lunar", "Void", "Magnetic" },
                       { "Station", "Nebula", "Drift", "Colony", "Array", "Beacon", "Outpost", "Transmission", "Reactor", "Expanse", "Corridor", "Probe", "Singularity", "Hive", "Orbit", "Relay", "Horizon", "Archive", "Vessel", "Pulsar" } } },
     };

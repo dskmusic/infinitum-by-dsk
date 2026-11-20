@@ -48,12 +48,14 @@ void Engine::prepare (double sampleRate, int mb)
     {
         grnBuf[c].init ((int) (sr * 5.0));
         dly[c].init ((int) (sr * 2.5));
+        chorus[c].init ((int) (sr * 0.05));
         for (auto& s : shift[c]) s.prepare (sr);
     }
     shm.prepare (sr);
     rev.prepare (sr);
     for (auto* s : { &widthS, &warmthS, &dlyMixS, &revMixS, &masterS }) s->setTime (0.05f, sr);
     limRel = coefFor (0.15f, sr);
+    tailCoef = coefFor (0.35f, sr);
     reset (seed);
 }
 
@@ -71,6 +73,7 @@ void Engine::reseed (uint32_t s)
     grnRng = Rng (seed * 31u + 555u);
     windRng = Rng (seed * 13u + 31337u);
     bellRng = Rng (seed * 17u + 7u);
+    noiseRng = Rng (seed * 19u + 4711u);
     chordSlot = -1; // forces a chord update (the pad glides to it)
 }
 
@@ -80,6 +83,8 @@ void Engine::reset (uint32_t s)
     ctrlLeft = 0;
     musT = evoT = sessionT = 0;
     runGain = 0; runInc = 0;
+    freezeAmt = 0;
+    tailGain = 1;
     silentFor = 0;
     idle = true;
     for (size_t i = 0; i < evoFreq.size(); ++i)
@@ -129,8 +134,19 @@ void Engine::reset (uint32_t s)
     for (auto& c : windF) for (auto& f : c) f.reset();
     windRng = Rng (seed * 13u + 31337u);
     windGust = 0;
-    rainEnv[0] = rainEnv[1] = 0;
-    for (auto& b : rainHp) { b.reset(); b.highpass (sr, 1100.0, 0.6); }
+    noiseRng = Rng (seed * 19u + 4711u);
+    for (int c = 0; c < 2; ++c)
+    {
+        for (auto& v : pinkN[c]) v = 0;
+        brownN[c] = crackle[c] = oceanEnv[c] = 0;
+        noiseF[c].reset();
+        crackleHp[c].reset(); crackleHp[c].highpass (sr, 1800.0, 0.7);
+        chorus[c].clear();
+        shmHp[c].reset(); shmHp[c].highpass (sr, 320.0, 0.6);
+    }
+    chorusPh = 0;
+    for (auto& q : bellQueue) q.tick = -1;
+    ctrlTick = 0;
     swellT = 100.0;
     // bells
     for (auto& b : bells) b = Bell();
@@ -258,18 +274,40 @@ void Engine::rebuildMutation (float f0, float morph, float chaos, float rate, fl
 }
 
 // ================================================================ events
+// A bell event is a short phrase: 1-4 notes walking the scale from a chord tone (motif-like, never random noise).
 void Engine::triggerBell (int64_t slot)
 {
     const auto& s = scaleSteps ((int) pv (P::scale));
+    const uint32_t h = (uint32_t) slot;
+    const int base = 12 * ((int) pv (P::octave) + 4) + rootPc;
+    int deg = curDegree + 2 * (int) (hashUni (seed, h * 5 + 1) * 3.0f);           // a chord tone
+    const float pan = (hashUni (seed, h * 5 + 2) * 2.0f - 1.0f) * 0.8f;
+    const int len = 1 + (int) (std::pow (hashUni (seed, h * 5 + 3), 1.6f) * 4.0f);  // mostly short phrases
+    const int dir = hashUni (seed, h * 5 + 4) < 0.5f ? -1 : 1;
+    const float stepTime = 0.22f + 0.45f * hashUni (seed, h * 5 + 5);             // seconds between notes
+    for (int i = 0; i < len; ++i)
+    {
+        const int note = base + degreeSemis (s, deg) + (hashUni (seed, h * 7 + (uint32_t) i) < 0.25f ? 12 : 0);
+        const float vel = 1.0f - 0.18f * (float) i;
+        if (i == 0) playBell (note, vel, pan);
+        else
+            for (auto& q : bellQueue)
+                if (q.tick < 0)
+                {
+                    q.tick = ctrlTick + (int64_t) ((float) i * stepTime * (float) sr / kCtrl);
+                    q.note = note; q.vel = vel; q.pan = juce::jlimit (-0.9f, 0.9f, pan + 0.12f * (float) i * (float) dir);
+                    break;
+                }
+        deg += dir * (1 + (hashUni (seed, h * 11 + (uint32_t) i) < 0.3f ? 1 : 0));
+    }
+}
+
+void Engine::playBell (int note, float vel, float pan)
+{
     const float tone = toneEff[lyBells];
     Bell* b = nullptr;
     for (auto& x : bells) if (! x.on) { b = &x; break; }
     if (b == nullptr) { b = &bells[0]; for (auto& x : bells) if (x.amp < b->amp) b = &x; }
-    const uint32_t h = (uint32_t) slot;
-    // mostly chord tones, sometimes a scale colour note; two upper octaves
-    const int deg = (hashUni (seed ^ 0xBE11u, h * 3 + 1) < 0.7f ? curDegree + 2 * (int) (hashUni (seed, h * 3 + 2) * 3.0f)
-                                                                 : (int) (hashUni (seed, h * 3 + 2) * (float) s.size()));
-    const int note = 12 * ((int) pv (P::octave) + 4) + rootPc + degreeSemis (s, deg) + (hashUni (seed, h * 3 + 3) < 0.35f ? 12 : 0);
     const float f = noteToHz ((float) note, a4);
     const float ratio = tone < 0.5f ? 2.0f + tone * 2.0f : 3.5f + (tone - 0.5f) * 7.0f;
     b->on = true;
@@ -278,9 +316,8 @@ void Engine::triggerBell (int64_t slot)
     b->minc = f * ratio / (float) sr;
     b->idx = 0.6f + tone * 3.0f;
     b->idxCoef = coefFor (0.25f + 0.6f * (1.0f - tone), sr);
-    b->amp = 0.18f + 0.12f * bellRng.uni();
+    b->amp = (0.18f + 0.12f * bellRng.uni()) * vel;
     b->ampCoef = coefFor (1.6f + 3.5f * pv (P::space), sr);
-    const float pan = (bellRng.uni() * 2.0f - 1.0f) * 0.8f;
     panGains (pan, b->panL, b->panR);
     tele.bellCount.fetch_add (1);
     tele.lastBellNote.store (note);
@@ -302,8 +339,9 @@ void Engine::spawnGrain()
     g->inc = inc;
     const float bufLen = (float) grnBuf[0].mask;
     float pos = 0.05f * (float) sr + grnRng.uni() * (float) sr * (0.5f + 2.5f * grnChar);
-    if (inc > 1.0f) pos = juce::jmax (pos, g->len * (inc - 1.0f) + 64.0f);
-    if (inc < 0.0f) pos = juce::jmin (pos, bufLen - g->len * (1.0f - inc) - 64.0f);
+    const float drift = (grnRecord ? 1.0f : 0.0f) - inc; // read-position change per sample (relative to the write head)
+    if (drift < 0.0f) pos = juce::jmax (pos, g->len * -drift + 64.0f);
+    else pos = juce::jmin (pos, bufLen - g->len * drift - 64.0f);
     g->pos = juce::jlimit (4.0f, bufLen - 4.0f, pos);
     g->t = 0;
     panGains ((grnRng.uni() * 2.0f - 1.0f) * 0.85f, g->panL, g->panR);
@@ -349,7 +387,13 @@ void Engine::control()
     const bool frozen = pv (P::freeze) > 0.5f;
     const float evoRate = 0.15f * std::pow (30.0f, pv (P::evolution));
     if (running && ! frozen) { musT += dt; evoT += dt * evoRate; }
+    // Freeze is smoothed (~0.4 s): feedback and reverb times glide instead of jumping (no click)
+    freezeAmt += ((frozen ? 1.0f : 0.0f) - freezeAmt) * (1.0f - coefFor (0.4f, sr / kCtrl));
+    const float fz = freezeAmt;
     if (running) sessionT += dt;
+    ++ctrlTick;
+    for (auto& q : bellQueue)
+        if (q.tick >= 0 && q.tick <= ctrlTick) { if (running) playBell (q.note, q.vel, q.pan); q.tick = -1; }
     a4 = (int) pv (P::tuning) == 1 ? 432.0f : 440.0f;
     lightMul = std::pow (2.0f, (pv (P::light) - 0.5f) * 3.0f);
     updateChord (curDegree < 0);
@@ -436,8 +480,8 @@ void Engine::control()
     {
         shmBlend = lp (lyShimmer, P::lChar);
         const float space = pv (P::space);
-        shm.set (0.6f + 0.4f * space, 0.25f + 0.5f * (1.0f - toneEff[lyShimmer]), frozen ? 3.0f : 1.0f);
-        shmGainFb = 0.35f + 0.3f * space + (frozen ? 0.2f : 0.0f);
+        shm.set (0.6f + 0.4f * space, 0.25f + 0.5f * (1.0f - toneEff[lyShimmer]), 1.0f + 2.0f * fz);
+        shmGainFb = 0.35f + 0.3f * space + 0.2f * fz;
         for (auto& b : shmDamp) b.lowpass (sr, 2500.0 + 9000.0 * toneEff[lyShimmer] * juce::jmin (1.5f, lightMul));
     }
     // ---- wind
@@ -451,6 +495,22 @@ void Engine::control()
         {
             windF[c][0].set (std::tan (kPi * c1 * (c ? 1.07f : 0.94f) / (float) sr), k);
             windF[c][1].set (std::tan (kPi * juce::jmin ((float) sr * 0.4f, c1 * 2.6f) / (float) sr), k * 1.3f);
+        }
+    }
+    // ---- noise generator: tone filter + ocean swell envelope (two out-of-phase waves)
+    {
+        const int nt = (int) pv (P::noiseType);
+        const float tone = pv (P::noiseTone);
+        for (int c = 0; c < 2; ++c)
+        {
+            const double period = 8.5 + 2.5 * hashUni (seed, 900u + (uint32_t) c);
+            const float x = (float) (musT / period - std::floor (musT / period) + (c ? 0.37 : 0.0));
+            const float xx = x - std::floor (x);
+            oceanEnv[c] = xx < 0.38f ? smoothstep (0.0f, 0.38f, xx) : std::pow (1.0f - (xx - 0.38f) / 0.62f, 1.7f);
+            float cut = 120.0f * std::pow (2.0f, tone * 7.0f);
+            if (nt == ntOcean) cut = 180.0f + (500.0f + 3500.0f * tone) * oceanEnv[c];
+            if (nt == ntVinyl) cut = 2500.0f + 6000.0f * tone;
+            noiseF[c].set (std::tan (kPi * juce::jlimit (40.0f, (float) sr * 0.45f, cut * lightMul) / (float) sr), 1.4f);
         }
     }
     // ---- bells: one chance per 1/8 s slot of musical time
@@ -471,11 +531,11 @@ void Engine::control()
         if (lc != cacheLow) { cacheLow = lc; for (auto& b : lowCutF) b.highpass (sr, lc); }
         if (hc != cacheHigh) { cacheHigh = hc; for (auto& b : highCutF) b.lowpass (sr, hc); }
         if (tilt != cacheTilt) { cacheTilt = tilt; for (auto& b : tiltF) b.shelf (sr, 2500.0, tilt, true); }
-        const float space = pv (P::space), damp = pv (P::revDamp), fr = frozen ? 1.0f : 0.0f;
+        const float space = pv (P::space), damp = pv (P::revDamp), fr = std::round (fz * 50.0f) / 50.0f;
         if (space != cacheRev || damp != cacheDamp || fr != cacheFreeze)
         {
             cacheRev = space; cacheDamp = damp; cacheFreeze = fr;
-            rev.set (0.35f + 0.75f * space, damp, frozen ? 2.5f : 1.0f);
+            rev.set (0.35f + 0.75f * space, damp, 1.0f + 1.5f * fr);
         }
         dlySamples = juce::jlimit (16.0f, (float) dly[0].mask - 16.0f, pv (P::dlyTime) * 0.001f * (float) sr);
     }
@@ -487,8 +547,7 @@ void Engine::control()
 void Engine::renderChunk (float* L, float* R, int n)
 {
     const float sources = runGain > 0.0f || running ? 1.0f : 0.0f;
-    const bool frozen = pv (P::freeze) > 0.5f;
-    const float shimIn = frozen ? 0.25f : 1.0f;
+    const float shimIn = 1.0f - 0.75f * freezeAmt;
     const float dlyFb = pv (P::dlyFb), dlyToneC = 0.15f + 0.8f * pv (P::dlyTone);
     const float runTarget = running ? 1.0f : 0.0f;
     const float fadeIn = juce::jmax (0.05f, pv (P::fadeIn)), fadeOut = juce::jmax (0.05f, pv (P::fadeOut));
@@ -497,7 +556,11 @@ void Engine::renderChunk (float* L, float* R, int n)
     const float droneOn = lp (lyDrone, P::lOn), padOnF = lp (lyPad, P::lOn);
     // texture and shimmer listen to drone + pad even when those layers are muted in the mix
     const bool feed = (lp (lyTexture, P::lOn) > 0.5f && gainNow[lyTexture] > 1.0e-5f) || (lp (lyShimmer, P::lOn) > 0.5f && gainNow[lyShimmer] > 1.0e-5f);
-    const float windCh = lp (lyWind, P::lChar), rainAmt = pv (P::rain);
+    const float windCh = lp (lyWind, P::lChar);
+    bool midiAlive = false;
+    for (int v = kChordVoices; v < kPadVoices; ++v) midiAlive |= pad[(size_t) v].gain > 1.0e-4f || pad[(size_t) v].gainTarget > 0;
+    const int noiseType = (int) pv (P::noiseType);
+    const float noiseLvl = pv (P::noiseLevel) * pv (P::noiseLevel) * 0.6f;
 
     for (int i = 0; i < n; ++i)
     {
@@ -551,6 +614,17 @@ void Engine::renderChunk (float* L, float* R, int n)
             if (pvc.midi) { midiL += l * pl * pvc.gain; midiR += r * pr * pvc.gain; }
             else { padL += l * pl * pvc.gain; padR += r * pr * pvc.gain; }
         }
+        {   // ensemble chorus on the chord voices: two slowly modulated taps per side, cross-mixed (string-machine width)
+            chorusPh += 0.37f / (float) sr;
+            if (chorusPh >= 1.0f) chorusPh -= 1.0f;
+            chorus[0].push (padL); chorus[1].push (padR);
+            const float ms = 0.001f * (float) sr;
+            const float aL = chorus[0].read (ms * (11.0f + 3.0f * fastSin (chorusPh))), bL = chorus[0].read (ms * (17.0f + 4.0f * fastSin (chorusPh + 0.33f)));
+            const float aR = chorus[1].read (ms * (13.0f + 3.0f * fastSin (chorusPh + 0.5f))), bR = chorus[1].read (ms * (19.0f + 4.0f * fastSin (chorusPh + 0.83f)));
+            const float dL = padL, dR = padR;
+            padL = dL * 0.62f + (aL + bR) * 0.38f;
+            padR = dR * 0.62f + (aR + bL) * 0.38f;
+        }
         padL *= 0.075f; padR *= 0.075f;
         feedL += padL * 0.6f; feedR += padR * 0.6f;
         const float padG = gainNow[lyPad] * (padOnF > 0.5f ? 1.0f : 0.0f);
@@ -574,7 +648,7 @@ void Engine::renderChunk (float* L, float* R, int n)
             const float d = juce::jlimit (2.0f, (float) grnBuf[0].mask - 4.0f, g.pos);
             tl += grnBuf[0].read (d) * env * g.panL;
             tr += grnBuf[1].read (d) * env * g.panR;
-            g.pos += 1.0f - g.inc;
+            g.pos += (grnRecord ? 1.0f : 0.0f) - g.inc; // frozen buffer: the write head stops, grains keep moving
             g.t += 1.0f;
             if (g.t >= g.len) g.on = false;
         }
@@ -605,17 +679,40 @@ void Engine::renderChunk (float* L, float* R, int n)
             wl *= g; wr *= g;
         }
 
-        // ---- rain: random drops + soft hiss, through a high-pass
+        // ---- noise generator
         float rl = 0, rr = 0;
-        if (sources > 0 && rainAmt > 0.001f)
+        if (sources > 0 && noiseType != ntOff && noiseLvl > 0.0001f)
         {
             for (int c = 0; c < 2; ++c)
             {
-                if (windRng.uni() < rainAmt * 0.004f) rainEnv[c] = 0.25f + 0.75f * windRng.uni();
-                const float nz = windRng.bi();
-                const float y = rainHp[c].tick (nz * (rainEnv[c] + 0.12f * rainAmt));
-                rainEnv[c] *= 0.992f;
-                (c == 0 ? rl : rr) = y * rainAmt * 0.42f;
+                const float w = noiseRng.bi();
+                auto& pk = pinkN[c];
+                pk[0] = 0.99765f * pk[0] + w * 0.0990460f;
+                pk[1] = 0.96300f * pk[1] + w * 0.2965164f;
+                pk[2] = 0.57000f * pk[2] + w * 1.0526913f;
+                const float pink = (pk[0] + pk[1] + pk[2] + w * 0.1848f) * 0.2f;
+                brownN[c] = 0.996f * brownN[c] + 0.035f * w;
+                const float brown = brownN[c] * 2.2f;
+                float x = 0;
+                switch (noiseType)
+                {
+                    case ntPink: x = pink; break;
+                    case ntBrown: x = brown; break;
+                    case ntWhite: x = w * 0.3f; break;
+                    case ntOcean: x = (0.6f * pink + 0.7f * brown) * (0.08f + oceanEnv[c]); break;
+                    case ntVinyl:
+                    {
+                        if (noiseRng.uni() < 0.00035f) crackle[c] = 0.4f + 0.6f * noiseRng.uni();
+                        const float cr = crackleHp[c].tick (noiseRng.bi() * crackle[c]);
+                        crackle[c] *= 0.86f;
+                        x = cr * 0.9f + brown * 0.15f + pink * 0.05f;
+                        break;
+                    }
+                    default: break;
+                }
+                float bp, hp;
+                const float y = noiseF[c].tick (x, bp, hp);
+                (c == 0 ? rl : rr) = (noiseType == ntVinyl ? x * 0.5f + y * 0.5f : y) * noiseLvl;
             }
         }
 
@@ -641,8 +738,8 @@ void Engine::renderChunk (float* L, float* R, int n)
         float sl = 0, sr2 = 0;
         {
             const float send = gainNow[lyShimmer] * (lp (lyShimmer, P::lOn) > 0.5f ? 1.0f : 0.0f);
-            const float inL = (feedL + tl * 0.5f) * send * shimIn * rg + midiL * send * shimIn;
-            const float inR = (feedR + tr * 0.5f) * send * shimIn * rg + midiR * send * shimIn;
+            const float inL = shmHp[0].tick ((feedL + tl * 0.5f) * send * shimIn * rg + midiL * send * shimIn); // no mud in the shimmer
+            const float inR = shmHp[1].tick ((feedR + tr * 0.5f) * send * shimIn * rg + midiR * send * shimIn);
             if (send > 1.0e-5f || std::abs (shmFb[0]) + std::abs (shmFb[1]) > 1.0e-6f)
             {
                 const float oct0 = shift[0][0].process (shmFb[0], 2.0f), oct1 = shift[1][0].process (shmFb[1], 2.0f);
@@ -706,6 +803,12 @@ void Engine::renderChunk (float* L, float* R, int n)
             const float w = widthS.step (pv (P::width));
             const float m = 0.5f * (xl + xr), s = 0.5f * (xl - xr) * w;
             xl = m + s; xr = m - s;
+        }
+        // ---- after Stop: once the sources have faded, the reverb / shimmer / delay tails close in ~1.5 s (clear, not endless)
+        {
+            const bool open = running || runGain > 0.0f || midiAlive;
+            tailGain = open ? juce::jmin (1.0f, tailGain + 1.0f / (0.05f * (float) sr)) : tailGain * tailCoef;
+            xl *= tailGain; xr *= tailGain;
         }
         // ---- master + safety limiter
         const float mg = masterS.step (dbToGain (pv (P::master)));

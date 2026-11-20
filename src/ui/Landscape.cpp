@@ -50,7 +50,6 @@ void FrameSource::update (Frame& f, double dt)
     f.seed = (int) proc.getParam (P::seed);
     f.frozen = proc.getParam (P::freeze) > 0.5f;
     f.scene = (int) proc.getParam (P::scene);
-    f.rain = proc.getParam (P::rain);
     f.evolution = proc.getParam (P::evolution);
     f.density = proc.getParam (P::density);
 }
@@ -223,9 +222,18 @@ void Landscape::paint (juce::Graphics& g)
         case scStarfield: paintStarfield (g, b); break;
         case scNebula: paintNebula (g, b); break;
         case scNeon: paintNeon (g, b); break;
+        case scOcean: paintOcean (g, b); break;
+        case scAurora: paintAurora (g, b); break;
         default: paintValley (g, b); break;
     }
     paintSparks (g);
+    // cinematic vignette on every scene
+    {
+        juce::ColourGradient vg (juce::Colours::transparentBlack, b.getCentreX(), b.getCentreY(), juce::Colours::black.withAlpha (0.45f), b.getX(), b.getY(), true);
+        vg.addColour (0.6, juce::Colours::transparentBlack);
+        g.setGradientFill (vg);
+        g.fillRect (b);
+    }
     if (f.frozen) { g.setColour (juce::Colour (0xff9fd8ff).withAlpha (0.10f)); g.fillRect (b); }
     const float dim = 0.45f * (1.0f - f.runGain);
     if (dim > 0.01f) { g.setColour (juce::Colours::black.withAlpha (dim)); g.fillRect (b); }
@@ -688,7 +696,7 @@ void Landscape::paintNeon (juce::Graphics& g, juce::Rectangle<float> b)
         }
     // rain
     {
-        const float amount = juce::jlimit (0.0f, 1.0f, f.rain + 0.25f * pres[lyWind]);
+        const float amount = juce::jlimit (0.0f, 1.0f, 0.3f + 0.6f * pres[lyWind]);
         const int n = (int) (amount * 380.0f);
         g.setColour (juce::Colour (0xffbcd6ff).withAlpha (0.18f + 0.15f * amount));
         for (int i = 0; i < n; ++i)
@@ -768,7 +776,7 @@ void Landscape::paintOverlay (juce::Graphics& g, juce::Rectangle<float> b)
         g.drawText (L ("▶  PULSA PLAY", "▶  PRESS PLAY"), b, juce::Justification::centred);
     }
     auto leg = b.reduced (16, 12).removeFromBottom (16);
-    const float lw = juce::jmin (100.0f, leg.getWidth() / kNumLayers);
+    const float lw = juce::jmin (86.0f, leg.getWidth() / kNumLayers);
     for (int l = 0; l < kNumLayers; ++l)
     {
         auto cell = leg.removeFromLeft (lw).reduced (3, 0);
@@ -779,6 +787,209 @@ void Landscape::paintOverlay (juce::Graphics& g, juce::Rectangle<float> b)
         g.setColour (juce::Colours::white.withAlpha (0.9f));
         g.setFont (font (10.0f, true));
         g.drawText (layerName (l), cell, juce::Justification::centred);
+    }
+}
+
+// ---- Ocean: sky, moon/sun with its glittering path on the water, perspective waves, distant islands, lighthouse
+void Landscape::paintOcean (juce::Graphics& g, juce::Rectangle<float> b)
+{
+    const float w = b.getWidth(), h = b.getHeight(), lt = f.light, t = (float) f.time, mt = f.musTime;
+    const float horizon = h * 0.52f;
+    const auto skyTop = mix3 (lt, juce::Colour (0xff02040d), juce::Colour (0xff20194a), juce::Colour (0xff3a7cc4));
+    const auto skyLow = mix3 (lt, juce::Colour (0xff14204a), juce::Colour (0xffe58a63), juce::Colour (0xfff5e1b8));
+    g.setGradientFill (juce::ColourGradient (skyTop, 0, 0, skyLow, 0, horizon, false));
+    g.fillRect (b.withHeight (horizon + 1));
+    const float starA = juce::jlimit (0.0f, 1.0f, (0.62f - lt) * 2.2f);
+    for (size_t i = 0; i < stars.size() && starA > 0.01f; ++i)
+    {
+        const float tw = 0.55f + 0.45f * std::sin (t * twinkle[i] + (float) i);
+        g.setColour (juce::Colours::white.withAlpha (starA * tw * 0.7f));
+        g.fillEllipse (stars[i].x * w, stars[i].y * horizon * 0.9f, starSize[i], starSize[i]);
+    }
+    // sun / moon
+    const float ph = wrap01 (f.evoTime / 420.0f + (float) (f.seed % 97) * 0.0137f);
+    const float sx = w * (0.15f + 0.7f * ph), sy = horizon - std::sin (ph * kPi) * h * 0.38f - 10.0f;
+    const bool sun = lt > 0.5f;
+    const auto sc = sun ? juce::Colour (0xffffd27a) : juce::Colour (0xffe6ecff);
+    {
+        const float rad = 16.0f + 8.0f * lt, gl = 110.0f + 120.0f * f.energy;
+        softBlob (g, sx, sy, gl, gl, sc.withAlpha (0.35f));
+        g.setColour (sc);
+        g.fillEllipse (sx - rad, sy - rad, rad * 2, rad * 2);
+    }
+    // a few soft clouds
+    for (int i = 0; i < numClouds; ++i)
+    {
+        const float cx = std::fmod (w * hashF ((uint32_t) f.seed, (uint32_t) i + 50) + mt * 4.0f, w * 1.4f) - w * 0.2f;
+        const float cy = horizon * (0.2f + 0.5f * hashF ((uint32_t) f.seed, (uint32_t) i + 60));
+        softBlob (g, cx, cy, w * 0.14f, h * 0.035f, mix3 (lt, juce::Colour (0xff2a3260), juce::Colour (0xffeaa08a), juce::Colours::white).withAlpha (0.2f + 0.15f * lt));
+    }
+    // aurora-ish shimmer glow low on the horizon
+    softBlob (g, w * 0.5f, horizon, w * 0.6f, h * 0.12f * (0.4f + pres[lyShimmer]), col::accent.withAlpha (0.12f * pres[lyShimmer] * (0.5f + glow[lyShimmer])));
+    // distant islands (Drone)
+    {
+        juce::Path isl;
+        isl.startNewSubPath (0, horizon);
+        for (int i = 0; i <= 120; ++i)
+        {
+            const float x = w * (float) i / 120.0f;
+            const float n = std::sin (x * 0.011f + (float) (f.seed % 50)) * std::sin (x * 0.0047f + 1.3f);
+            isl.lineTo (x, horizon - juce::jmax (0.0f, n) * h * 0.08f * (0.5f + 0.5f * pres[lyDrone]));
+        }
+        isl.lineTo (w, horizon); isl.closeSubPath();
+        g.setColour (skyTop.interpolatedWith (juce::Colours::black, 0.4f).withAlpha (0.9f));
+        g.fillPath (isl);
+    }
+    // sea
+    const auto seaTop = skyLow.interpolatedWith (juce::Colour (0xff0a1a33), 0.55f), seaBot = juce::Colour (0xff020610);
+    g.setGradientFill (juce::ColourGradient (seaTop, 0, horizon, seaBot, 0, h, false));
+    g.fillRect (b.withTop (horizon));
+    // glittering path of the sun / moon
+    for (int i = 0; i < 70; ++i)
+    {
+        const float u = (float) i / 70.0f, y = horizon + 2.0f + (h - horizon) * u * u;
+        const float spread = 8.0f + 140.0f * u;
+        const float x = sx + (hashF ((uint32_t) i, (uint32_t) (t * 4.0f)) - 0.5f) * spread * 2.0f;
+        g.setColour (sc.withAlpha ((0.15f + 0.5f * (1.0f - u)) * (0.5f + 0.5f * lt)));
+        g.fillRect (x, y, 4.0f + 30.0f * u * hashF ((uint32_t) i, 3), 1.0f + u * 1.5f);
+    }
+    // waves in perspective (Pad = swell height, Wind = choppiness)
+    const float swell = 0.4f + 0.6f * pres[lyPad] + 0.4f * glow[lyWind];
+    for (int r = 0; r < 18; ++r)
+    {
+        const float u = (float) (r + 1) / 18.0f, y0 = horizon + (h - horizon) * u * u;
+        const float amp = (1.0f + 9.0f * u * u) * swell, k = 0.02f / (0.3f + u);
+        juce::Path wave;
+        for (int i = 0; i <= 80; ++i)
+        {
+            const float x = w * (float) i / 80.0f;
+            const float y = y0 + amp * std::sin (x * k + t * (0.6f + 0.5f * u) + (float) r * 1.7f) + amp * 0.4f * std::sin (x * k * 2.3f - t * 0.9f);
+            if (i == 0) wave.startNewSubPath (x, y); else wave.lineTo (x, y);
+        }
+        g.setColour (skyLow.brighter (0.4f).withAlpha (0.05f + 0.16f * u * (0.5f + lt)));
+        g.strokePath (wave, juce::PathStrokeType (0.8f + 1.4f * u));
+    }
+    // foam sparkles (Texture)
+    const float fa = pres[lyTexture] * (0.3f + glow[lyTexture] * 1.5f);
+    for (int i = 0; i < 60 && fa > 0.01f; ++i)
+    {
+        const float u = hashF ((uint32_t) i, 1201), y = horizon + (h - horizon) * u * u;
+        const float x = std::fmod (w * hashF ((uint32_t) i, 1202) + mt * 6.0f, w);
+        g.setColour (juce::Colours::white.withAlpha (juce::jlimit (0.0f, 0.8f, fa * (0.5f + 0.5f * std::sin (t * 3.0f + (float) i)))));
+        g.fillRect (x, y, 2.0f + 4.0f * u, 1.0f);
+    }
+    // lighthouse with a rotating beam (Shimmer)
+    {
+        const bool left = (f.seed % 2) == 0;
+        const float lx = left ? w * 0.09f : w * 0.91f, ly = horizon + h * 0.02f;
+        juce::Path rock;
+        rock.addEllipse (lx - 50, ly - 6, 100, 22);
+        g.setColour (juce::Colour (0xff04060c));
+        g.fillPath (rock);
+        juce::Path tower;
+        tower.addQuadrilateral (lx - 7, ly, lx + 7, ly, lx + 4, ly - 52, lx - 4, ly - 52);
+        g.fillPath (tower);
+        const float ang = t * 0.9f;
+        const float beamA = (0.15f + 0.35f * pres[lyShimmer]) * (0.5f + 0.5f * std::cos (ang));
+        const float dir = std::sin (ang) >= 0 ? 1.0f : -1.0f;
+        juce::Path beam;
+        beam.addTriangle (lx, ly - 50, lx + dir * w * 0.6f, ly - 50 - h * 0.08f, lx + dir * w * 0.6f, ly - 50 + h * 0.06f);
+        g.setGradientFill (juce::ColourGradient (juce::Colour (0xfffff2c8).withAlpha (beamA), lx, ly - 50, juce::Colour (0xfffff2c8).withAlpha (0.0f), lx + dir * w * 0.6f, ly - 50, false));
+        g.fillPath (beam);
+        softBlob (g, lx, ly - 50, 14, 14, juce::Colour (0xfffff2c8).withAlpha (0.9f));
+    }
+}
+
+// ---- Aurora: arctic night, curtains of light with vertical rays, snowy peaks, frozen lake reflection, snowfall
+void Landscape::paintAurora (juce::Graphics& g, juce::Rectangle<float> b)
+{
+    const float w = b.getWidth(), h = b.getHeight(), t = (float) f.time, lt = f.light, mt = f.musTime;
+    const float horizon = h * 0.66f;
+    const auto skyTop = juce::Colour (0xff01030a).interpolatedWith (juce::Colour (0xff0a1a3a), lt * 0.6f);
+    const auto skyLow = juce::Colour (0xff0b1838).interpolatedWith (juce::Colour (0xff3a5a8a), lt * 0.6f);
+    g.setGradientFill (juce::ColourGradient (skyTop, 0, 0, skyLow, 0, horizon, false));
+    g.fillRect (b);
+    for (size_t i = 0; i < stars.size(); ++i)
+    {
+        const float tw = 0.55f + 0.45f * std::sin (t * twinkle[i] + (float) i);
+        g.setColour (juce::Colours::white.withAlpha ((0.75f - 0.4f * lt) * tw));
+        g.fillEllipse (stars[i].x * w, stars[i].y * horizon, starSize[i], starSize[i]);
+    }
+    // curtains (Shimmer + Pad): a glowing band and many vertical rays rising from a waving base line
+    const float power = juce::jlimit (0.15f, 1.0f, 0.25f + 0.6f * pres[lyShimmer] + 0.25f * pres[lyPad] + 0.4f * glow[lyShimmer]);
+    for (int k = 0; k < 3; ++k)
+    {
+        const float baseY = h * (0.36f + 0.08f * (float) k), height = h * (0.22f + 0.08f * (float) (2 - k));
+        const auto c1 = k == 1 ? juce::Colour (0xff6dffb0) : (k == 0 ? juce::Colour (0xff4fe3c1) : juce::Colour (0xff9be15d));
+        const auto c2 = k == 2 ? juce::Colour (0xffff5fb4) : col::accent3;
+        auto baseAt = [&] (float x) { return baseY + std::sin (x * 0.004f + t * 0.11f + (float) k * 2.0f) * h * 0.07f + std::sin (x * 0.011f - t * 0.07f + (float) k) * h * 0.03f; };
+        juce::Path band;
+        for (int i = 0; i <= 80; ++i) { const float x = w * (float) i / 80.0f; if (i == 0) band.startNewSubPath (x, baseAt (x)); else band.lineTo (x, baseAt (x)); }
+        for (int i = 80; i >= 0; --i) { const float x = w * (float) i / 80.0f; band.lineTo (x, baseAt (x) - height); }
+        band.closeSubPath();
+        juce::ColourGradient gr (c1.withAlpha (0.0f), 0, baseY + h * 0.03f, c2.withAlpha (0.0f), 0, baseY - height, false);
+        gr.addColour (0.12, c1.withAlpha (0.28f * power));
+        gr.addColour (0.55, c1.interpolatedWith (c2, 0.5f).withAlpha (0.12f * power));
+        g.setGradientFill (gr);
+        g.fillPath (band);
+        for (int i = 0; i < 140; ++i)
+        {
+            const float x = w * hashF ((uint32_t) (k * 1000 + i), 1301);
+            const float flick = 0.5f + 0.5f * std::sin (t * (0.6f + hashF ((uint32_t) i, 1302) * 1.5f) + x * 0.02f);
+            const float y0 = baseAt (x), len = height * (0.4f + 0.6f * hashF ((uint32_t) i, 1303)) * flick;
+            g.setGradientFill (juce::ColourGradient (c1.withAlpha (0.35f * power * flick), x, y0, c2.withAlpha (0.0f), x, y0 - len, false));
+            g.fillRect (x, y0 - len, 1.6f, len);
+        }
+    }
+    // snowy peaks (Drone far, Pad near)
+    auto peaks = [&] (int k, float base, float amp, float sp)
+    {
+        juce::Path p;
+        p.startNewSubPath (0, h);
+        const float s0 = (float) (f.seed % 1000) * 0.21f + (float) k;
+        for (int i = 0; i <= 60; ++i)
+        {
+            const float x = w * (float) i / 60.0f, xs = x + mt * sp;
+            const float n = std::abs (std::sin (xs * 0.006f + s0)) * 0.7f + 0.3f * std::abs (std::sin (xs * 0.017f + s0 * 2.0f));
+            p.lineTo (x, base - amp * n);
+        }
+        p.lineTo (w, h); p.closeSubPath();
+        return p;
+    };
+    const float farAmp = h * 0.22f * (0.5f + 0.5f * pres[lyDrone]), nearAmp = h * 0.14f * (0.5f + 0.5f * pres[lyPad]);
+    auto far = peaks (0, horizon, farAmp, 0.4f);
+    g.setGradientFill (juce::ColourGradient (juce::Colour (0xffdfe9ff).withAlpha (0.85f), 0, horizon - farAmp, juce::Colour (0xff1a2a4a), 0, horizon, false));
+    g.fillPath (far);
+    auto nearP = peaks (1, horizon + h * 0.08f, nearAmp, 1.0f);
+    g.setGradientFill (juce::ColourGradient (juce::Colour (0xffb8c8e8), 0, horizon - nearAmp, juce::Colour (0xff0b1426), 0, horizon + h * 0.1f, false));
+    g.fillPath (nearP);
+    // frozen lake with a faint reflection of the aurora
+    const float ly = horizon + h * 0.12f;
+    g.setGradientFill (juce::ColourGradient (juce::Colour (0xff10284a).interpolatedWith (juce::Colour (0xff4fe3c1), 0.18f * power), 0, ly, juce::Colour (0xff050a14), 0, h, false));
+    g.fillRect (b.withTop (ly));
+    for (int i = 0; i < 18; ++i)
+    {
+        const float y = ly + 3.0f + (float) i * (h - ly) / 18.0f;
+        g.setColour (juce::Colour (0xff6dffb0).withAlpha (0.05f * power * (1.0f - (float) i / 18.0f)));
+        g.fillRect (w * hashF ((uint32_t) i, 1401), y, w * 0.3f, 1.0f);
+    }
+    // snowfall (Wind) and floating ice crystals (Texture)
+    const int flakes = (int) (40 + 160 * pres[lyWind]);
+    for (int i = 0; i < flakes; ++i)
+    {
+        const float sp = 0.5f + hashF ((uint32_t) i, 1501);
+        const float x = std::fmod (w * hashF ((uint32_t) i, 1502) + std::sin (t * 0.5f + (float) i) * 12.0f + t * 8.0f * sp, w);
+        const float y = std::fmod (h * hashF ((uint32_t) i, 1503) + t * 22.0f * sp, h);
+        g.setColour (juce::Colours::white.withAlpha (0.35f + 0.4f * sp * 0.5f));
+        const float s = 1.2f + 1.6f * sp;
+        g.fillEllipse (x, y, s, s);
+    }
+    const float ia = pres[lyTexture] * (0.3f + glow[lyTexture] * 1.5f);
+    for (int i = 0; i < 40 && ia > 0.01f; ++i)
+    {
+        const float x = w * hashF ((uint32_t) i, 1601), y = horizon * (0.3f + 0.7f * hashF ((uint32_t) i, 1602));
+        g.setColour (juce::Colour (0xffcff8ff).withAlpha (juce::jlimit (0.0f, 0.9f, ia * (0.5f + 0.5f * std::sin (t * 2.5f + (float) i)))));
+        g.fillRect (x, y, 1.5f, 1.5f);
     }
 }
 }
