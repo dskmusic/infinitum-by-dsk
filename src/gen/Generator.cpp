@@ -12,7 +12,7 @@ struct Range2 { float lo, hi; };
 struct Arch
 {
     std::vector<int> scales;                          // indices into scaleNames()
-    Range2 octave { 1.6f, 2.4f }, harmony { 0.3f, 0.7f }, chordRate { 0.2f, 0.5f }, evolution { 0.3f, 0.6f },
+    Range2 octave { 1.6f, 2.4f }, harmony { 0.4f, 0.8f }, chordRate { 0.15f, 0.4f }, evolution { 0.25f, 0.5f },
            density { 0.4f, 0.7f }, light { 0.4f, 0.7f }, space { 0.6f, 0.9f }, warmth { 0.1f, 0.35f }, dly { 0.15f, 0.4f },
            noiseLevel { 0.15f, 0.35f }, dlyFb { 0.3f, 0.65f }, dlyTime { 250.0f, 900.0f };
     float tuning432 = 0.0f;                           // probability of A4 = 432 Hz
@@ -35,7 +35,7 @@ Arch baseArch (const juce::String& mood)
     a.layer[lyTexture] = { { { 0.35f, 0.60f }, { 0.35f, 0.75f }, { 0.30f, 0.70f }, { 0.30f, 0.70f } } };
     a.layer[lyShimmer] = { { { 0.35f, 0.60f }, { 0.40f, 0.85f }, { 0.35f, 0.70f }, { 0.20f, 0.60f } } };
     a.layer[lyWind]    = { { { 0.15f, 0.40f }, { 0.20f, 0.60f }, { 0.30f, 0.70f }, { 0.30f, 0.70f } } };
-    a.layer[lyBells]   = { { { 0.20f, 0.45f }, { 0.30f, 0.70f }, { 0.30f, 0.70f }, { 0.15f, 0.45f } } };
+    a.layer[lyBells]   = { { { 0.20f, 0.40f }, { 0.30f, 0.65f }, { 0.30f, 0.65f }, { 0.08f, 0.32f } } };
     a.layer[lyBass]    = { { { 0.25f, 0.45f }, { 0.45f, 0.85f }, { 0.20f, 0.45f }, { 0.05f, 0.35f } } };
     if (mood == "Cinematic")
     {
@@ -263,7 +263,7 @@ Preset Generator::candidate (const GenRequest& req, uint32_t seed)
 
     // ---- harmony
     int scale = a.scales[(size_t) (r.next() % (uint32_t) a.scales.size())];
-    if (req.mystery > 0.6f && r.uni() < (req.mystery - 0.5f) * 1.2f)
+    if (req.mystery > 0.7f && r.uni() < (req.mystery - 0.6f) * 1.2f)
     {
         const int exotic[] { Phrygian, HarmMinor, Hirajoshi, WholeTone, Lydian };
         scale = exotic[r.next() % 5];
@@ -415,16 +415,24 @@ Preset Generator::generate (const GenRequest& req, int* attempts, Validation* re
         if (attempts) *attempts = k + 1;
         if (k == 0) { first = p; fv = v; }
         if (! v.ok) continue;
-        int layers = 0;
-        for (int l = 0; l < kNumLayers; ++l) layers += p.get (P::layer (l, P::lOn)) > 0.5f;
-        // interesting = it moves (but not too much), it is wide, and several layers take part
-        v.score = juce::jmin (v.movement, 6.0f) - juce::jmax (0.0f, v.movement - 9.0f) + 4.0f * juce::jmin (v.width, 0.8f) + 0.3f * (float) layers;
+        v.score = interestScore (p, v);
         if (found == 0 || v.score > bv.score) { best = p; bv = v; }
         ++found;
     }
     if (found == 0) { if (result) *result = fv; return first; }
     if (result) *result = bv;
     return best;
+}
+
+float Generator::interestScore (const Preset& p, const Validation& v)
+{
+    int layers = 0;
+    for (int l = 0; l < kNumLayers; ++l) layers += p.get (P::layer (l, P::lOn)) > 0.5f;
+    // alive but calm: gentle movement is rewarded, restlessness is not; width and a full ensemble help;
+    // richer harmony (7ths / 9ths) and a present pad make it more musical
+    const float mv = v.movement < 4.0f ? v.movement : 4.0f - 0.8f * (v.movement - 4.0f);
+    return mv + 4.0f * juce::jmin (v.width, 0.8f) + 0.3f * (float) layers + 1.2f * p.get (P::harmony)
+           + 1.0f * p.get (P::layer (lyPad, P::lLevel)) * p.get (P::layer (lyPad, P::lPresence));
 }
 
 Preset Generator::mutate (const Preset& src, float amount, uint32_t seed, const std::set<juce::String>& locks)

@@ -98,6 +98,7 @@ void Engine::reset (uint32_t s)
     }
     presence.fill (0); gainNow.fill (0); gainInc.fill (0); toneEff.fill (0.5f); energyAcc.fill (0);
     keyOverride = -1; curDegree = -1; curRoot = -1; chordSlot = -1; bellSlot = -1;
+    degKey = -1; degSlot = 0; degValue = 0;
     // drone
     mut = MutOsc();
     mut.rng = Rng (seed * 7919u + 3u);
@@ -173,31 +174,58 @@ float Engine::evoNoise (int ch, double t) const
     return (float) (0.5 + 0.5 * s);
 }
 
-int Engine::degreeRaw (int64_t slot) const
+// Functional harmony as a Markov chain over scale degrees (deterministic: walked from slot 0 with the seed).
+// Major-like modes favour I-IV-V-vi movement; minor modes the cinematic i-VI-III-VII / i-iv family.
+// Every 8 chords the progression leans back home, so it breathes in phrases instead of wandering.
+int Engine::nextDegree (int from, int64_t slot) const
 {
-    if (slot <= 0) return 0;
-    const auto& s = scaleSteps ((int) pv (P::scale));
-    const int m = (int) s.size();
+    const int sc = (int) pv (P::scale);
+    const int m = (int) scaleSteps (sc).size();
     const float harmony = pv (P::harmony);
-    // weights: tonic and the "pillar" degrees first; colour degrees grow with Harmony
     float w[8] {};
-    for (int d = 0; d < m; ++d) w[d] = 0.6f + 0.8f * harmony;
-    w[0] = 3.0f;
-    if (m == 7) { w[3] = 2.0f; w[4] = 1.6f; w[5] = 1.8f; w[2] = 1.2f; w[1] = 0.4f + 0.8f * harmony; w[6] = 0.2f + 0.6f * harmony; }
+    if (m == 7)
+    {
+        const bool minor = sc == 1 || sc == 2 || sc == 3 || sc == 6;
+        static const float major[7][7] {   // to:  I    ii   iii  IV   V    vi   vii
+                                          { 0, 0.6f, 0.8f, 3.0f, 2.2f, 2.6f, 0.2f },   // from I
+                                          { 0.8f, 0, 0.4f, 1.2f, 3.0f, 0.8f, 0.3f },   // ii
+                                          { 0.8f, 0.6f, 0, 1.6f, 0.6f, 2.6f, 0.2f },   // iii
+                                          { 2.6f, 1.2f, 0.6f, 0, 2.4f, 1.4f, 0.2f },   // IV
+                                          { 3.0f, 0.6f, 0.8f, 1.4f, 0, 2.0f, 0.2f },   // V
+                                          { 1.6f, 1.6f, 1.0f, 3.0f, 1.4f, 0, 0.2f },   // vi
+                                          { 3.0f, 0.4f, 1.2f, 0.6f, 0.6f, 1.0f, 0 } }; // vii
+        static const float minorT[7][7] {  // to:  i    ii°  III  iv   v    VI   VII
+                                          { 0, 0.2f, 1.4f, 2.4f, 1.0f, 3.0f, 2.2f },   // from i
+                                          { 1.2f, 0, 0.6f, 0.8f, 2.4f, 0.6f, 0.6f },
+                                          { 1.2f, 0.2f, 0, 1.6f, 0.6f, 2.0f, 2.6f },   // III -> VII / VI
+                                          { 2.6f, 0.4f, 0.8f, 0, 1.6f, 1.6f, 1.6f },   // iv
+                                          { 3.0f, 0.2f, 0.6f, 1.2f, 0, 1.6f, 0.6f },   // v
+                                          { 1.4f, 0.4f, 2.6f, 2.0f, 0.6f, 0, 2.4f },   // VI -> III / VII / iv
+                                          { 2.8f, 0.2f, 2.0f, 0.8f, 0.4f, 1.6f, 0 } }; // VII -> i / III
+        for (int d = 0; d < 7; ++d) w[d] = (minor ? minorT : major)[from][d];
+        // colour chords (ii, iii, vii / ii°) only with more Harmony
+        const float colour = 0.3f + 0.9f * harmony;
+        if (! minor) { w[1] *= colour; w[2] *= colour; w[6] *= colour * 0.5f; } else { w[1] *= colour * 0.5f; w[4] *= colour; }
+    }
+    else
+    {
+        for (int d = 0; d < m; ++d) w[d] = d == from ? 0.0f : (d == 0 ? 2.5f : 1.0f);
+    }
+    if (slot % 8 == 0 && from != 0) w[0] += 4.0f;          // phrase ends at home
     float total = 0;
     for (int d = 0; d < m; ++d) total += w[d];
     float u = hashUni (seed ^ 0xC0FFEEu, (uint32_t) (slot * 7 + 1)) * total;
-    for (int d = 0; d < m; ++d) { u -= w[d]; if (u <= 0) return d; }
+    for (int d = 0; d < m; ++d) { u -= w[d]; if (u <= 0 && w[d] > 0) return d; }
     return 0;
 }
 
 int Engine::chordDegreeFor (int64_t slot) const
 {
-    if (pv (P::harmony) < 0.12f) return 0;
-    const int m = (int) scaleSteps ((int) pv (P::scale)).size();
-    int d = degreeRaw (slot);
-    if (slot > 0 && d == degreeRaw (slot - 1)) d = (d + (m == 7 ? 3 : 2)) % m; // never the same chord twice in a row
-    return d;
+    if (pv (P::harmony) < 0.12f || slot <= 0) return 0;
+    const int key = (int) pv (P::scale) * 1000 + (int) (pv (P::harmony) * 10.0f);
+    if (slot < degSlot || key != degKey || seed != degSeed) { degSlot = 0; degValue = 0; degKey = key; degSeed = seed; }
+    while (degSlot < slot) { ++degSlot; degValue = nextDegree (degValue, degSlot); }
+    return degValue;
 }
 
 void Engine::updateChord (bool force)
@@ -238,11 +266,47 @@ void Engine::updateChord (bool force)
         if (harmony > 0.80f) tones[k++] = degreeSemis (s, d + 8);
     }
     const int base = 12 * ((int) pv (P::octave) + 2) + rootPc;
-    for (int i = 0; i < kChordVoices; ++i)
+    const bool lead = ! force && chordNotes[0] > 0;
+    if (! lead)
+        for (int i = 0; i < kChordVoices; ++i)
+        {
+            int n = base + tones[i % k] + 12 * (i / k);
+            while (n > base + 26) n -= 12;   // keep the pad inside ~2 octaves
+            chordNotes[(size_t) i] = n;
+        }
+    else
     {
-        int n = base + tones[i % k] + 12 * (i / k);
-        while (n > base + 26) n -= 12;   // keep the pad inside ~2 octaves
-        chordNotes[(size_t) i] = n;
+        // voice-leading: every chord tone goes to the voice that can reach it with the smallest step,
+        // the remaining voices double the nearest chord tone. Smooth, no jumps, always inside the register.
+        auto nearestOf = [&] (int tone, int prev)
+        {
+            int bestN = base + tone, bestD = 1000;
+            for (int o = -1; o <= 3; ++o)
+            {
+                const int n = base + tone + 12 * o;
+                if (n < base - 3 || n > base + 26) continue;
+                if (std::abs (n - prev) < bestD) { bestD = std::abs (n - prev); bestN = n; }
+            }
+            return bestN;
+        };
+        std::array<int, kChordVoices> prev = chordNotes, next {};
+        std::array<bool, kChordVoices> used {};
+        for (int t = 0; t < juce::jmin (k, kChordVoices); ++t)
+        {
+            int bv = -1, bd = 1000;
+            for (int v = 0; v < kChordVoices; ++v)
+                if (! used[(size_t) v]) { const int d = std::abs (nearestOf (tones[t], prev[(size_t) v]) - prev[(size_t) v]); if (d < bd) { bd = d; bv = v; } }
+            used[(size_t) bv] = true;
+            next[(size_t) bv] = nearestOf (tones[t], prev[(size_t) bv]);
+        }
+        for (int v = 0; v < kChordVoices; ++v)
+            if (! used[(size_t) v])
+            {
+                int bn = prev[(size_t) v], bd = 1000;
+                for (int t = 0; t < k; ++t) { const int n = nearestOf (tones[t], prev[(size_t) v]); if (std::abs (n - prev[(size_t) v]) < bd) { bd = std::abs (n - prev[(size_t) v]); bn = n; } }
+                next[(size_t) v] = bn;
+            }
+        chordNotes = next;
     }
     std::sort (chordNotes.begin(), chordNotes.end());
     for (int i = 0; i < kChordVoices; ++i) pad[(size_t) i].target = (float) chordNotes[(size_t) i];

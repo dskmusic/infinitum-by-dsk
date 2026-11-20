@@ -54,8 +54,17 @@ int runToolExtras (const juce::String& cmd, int argc, char** argv)
         for (auto& mood : picks)
             for (auto& v : *arr)
             {
-                auto p = gx::Preset::fromVar (v);
-                if (p.meta.category != mood && p.meta.subcategory != mood) continue;
+                juce::ignoreUnused (v);
+                gx::Preset p;
+                float best = -1.0e9f;
+                for (auto& c : *arr)   // the most alive, most musical preset of that mood
+                {
+                    auto q = gx::Preset::fromVar (c);
+                    if (q.meta.category != mood && q.meta.subcategory != mood) continue;
+                    auto val = gx::Generator::validate (q, false);
+                    const float sc = gx::Generator::interestScore (q, val);
+                    if (val.ok && sc > best) { best = sc; p = q; }
+                }
                 const auto f = dir.getChildFile (juce::File::createLegalFileName ("Infinitum demo - " + gx::categoryLabel (mood) + " - " + p.meta.name + ".ogg"));
                 const auto err = gx::exportAudio (p, f, gx::efOgg, mins * 60.0, 48000.0);
                 std::printf ("%s %s\n", f.getFileName().toRawUTF8(), err.toRawUTF8());

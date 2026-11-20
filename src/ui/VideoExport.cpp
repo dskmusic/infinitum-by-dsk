@@ -1,6 +1,12 @@
 #include "VideoExport.h"
 #include <cstdio>
 #include <thread>
+#if JUCE_WINDOWS
+ #ifndef NOMINMAX
+  #define NOMINMAX
+ #endif
+ #include <windows.h>
+#endif
 
 namespace gx::ui
 {
@@ -9,22 +15,6 @@ namespace
 constexpr int kFps = 30;
 constexpr double kSr = 48000.0;
 
-FILE* openPipe (const juce::String& cmd)
-{
-#if JUCE_WINDOWS
-    return _wpopen (("\"" + cmd + "\"").toWideCharPointer(), L"wb"); // cmd.exe needs the whole line quoted once more
-#else
-    return popen (cmd.toRawUTF8(), "w");
-#endif
-}
-int closePipe (FILE* f)
-{
-#if JUCE_WINDOWS
-    return _pclose (f);
-#else
-    return pclose (f);
-#endif
-}
 } // namespace
 
 // ---------------------------------------------------------------- ffmpeg
@@ -85,6 +75,73 @@ juce::String ffmpegInstructions()
               "You can also download it from https://ffmpeg.org/download.html and pick the executable with \"Choose ffmpeg...\".");
 }
 
+// ---------------------------------------------------------------- pipe (no console window)
+bool VideoExporter::Pipe::open (const juce::StringArray& args)
+{
+#if JUCE_WINDOWS
+    juce::String cmd;
+    for (auto& a : args) cmd << (cmd.isEmpty() ? "" : " ") << (a.containsChar (' ') ? a.quoted() : a);
+    SECURITY_ATTRIBUTES sa { sizeof (sa), nullptr, TRUE };
+    HANDLE rd = nullptr, wr = nullptr;
+    if (! CreatePipe (&rd, &wr, &sa, 1 << 20)) return false;
+    SetHandleInformation (wr, HANDLE_FLAG_INHERIT, 0);
+    STARTUPINFOW si {};
+    si.cb = sizeof (si);
+    si.dwFlags = STARTF_USESTDHANDLES;
+    si.hStdInput = rd;
+    si.hStdOutput = GetStdHandle (STD_OUTPUT_HANDLE);
+    si.hStdError = GetStdHandle (STD_ERROR_HANDLE);
+    PROCESS_INFORMATION pi {};
+    std::wstring line (cmd.toWideCharPointer());
+    const BOOL ok = CreateProcessW (nullptr, line.data(), nullptr, nullptr, TRUE, CREATE_NO_WINDOW | BELOW_NORMAL_PRIORITY_CLASS, nullptr, nullptr, &si, &pi);
+    CloseHandle (rd);
+    if (! ok) { CloseHandle (wr); return false; }
+    CloseHandle (pi.hThread);
+    h = pi.hProcess; in = wr;
+    return true;
+#else
+    juce::String cmd;
+    for (auto& a : args) cmd << (cmd.isEmpty() ? "" : " ") << a.quoted();
+    FILE* f = popen ((cmd + " 2>/dev/null").toRawUTF8(), "w");
+    h = f;
+    return f != nullptr;
+#endif
+}
+
+bool VideoExporter::Pipe::write (const void* data, size_t bytes)
+{
+#if JUCE_WINDOWS
+    const char* p = static_cast<const char*> (data);
+    while (bytes > 0)
+    {
+        DWORD done = 0;
+        if (! WriteFile ((HANDLE) in, p, (DWORD) juce::jmin<size_t> (bytes, 1 << 20), &done, nullptr) || done == 0) return false;
+        p += done; bytes -= done;
+    }
+    return true;
+#else
+    return std::fwrite (data, 1, bytes, (FILE*) h) == bytes;
+#endif
+}
+
+int VideoExporter::Pipe::close()
+{
+    if (h == nullptr) return 0;
+#if JUCE_WINDOWS
+    CloseHandle ((HANDLE) in);
+    WaitForSingleObject ((HANDLE) h, INFINITE);
+    DWORD code = 1;
+    GetExitCodeProcess ((HANDLE) h, &code);
+    CloseHandle ((HANDLE) h);
+    h = in = nullptr;
+    return (int) code;
+#else
+    const int rc = pclose ((FILE*) h);
+    h = nullptr;
+    return rc;
+#endif
+}
+
 // ---------------------------------------------------------------- exporter
 bool VideoExporter::start (const Preset& p, const juce::File& out, double seconds, int width, int height, const juce::File& ffmpeg, juce::String& error)
 {
@@ -106,7 +163,7 @@ void VideoExporter::cancel() { cancelFlag = true; }
 
 void VideoExporter::finish (const juce::String& err)
 {
-    if (pipe != nullptr) { const int rc = closePipe (pipe); pipe = nullptr; if (err.isEmpty() && rc != 0) result = "ffmpeg error " + juce::String (rc); else result = err; }
+    if (pipe.isOpen()) { const int rc = pipe.close(); if (err.isEmpty() && rc != 0) result = "ffmpeg error " + juce::String (rc); else result = err; }
     else result = err;
     if (audioThread.joinable()) audioThread.join();
     audioPending = false;
@@ -126,20 +183,23 @@ bool VideoExporter::step (double budgetMs)
         if (audioError.isNotEmpty()) { finish (audioError); return false; }
         // soundtrack ready: start ffmpeg reading raw frames from stdin
         target.deleteFile();
-        const juce::String cmd = "\"" + ffmpegExe.getFullPathName() + "\" -y -loglevel error -f rawvideo -pix_fmt bgra -s " + juce::String (w) + "x" + juce::String (h)
-                                 + " -r " + juce::String (kFps) + " -i - -i \"" + wav.getFullPathName() + "\" -c:v libx264 -preset medium -crf 19 -pix_fmt yuv420p"
-                                 + " -c:a aac -b:a 256k -shortest -movflags +faststart \"" + target.getFullPathName() + "\"";
-        pipe = openPipe (cmd);
-        if (pipe == nullptr) { finish ("cannot start ffmpeg"); return false; }
+        // the landscape is painted at half size and upscaled by ffmpeg (soft, painterly images scale beautifully)
+        rw = w / 2; rh = h / 2;
+        juce::StringArray args { ffmpegExe.getFullPathName(), "-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "bgra",
+                                 "-s", juce::String (rw) + "x" + juce::String (rh), "-r", juce::String (kFps), "-i", "-", "-i", wav.getFullPathName(),
+                                 "-vf", "scale=" + juce::String (w) + ":" + juce::String (h) + ":flags=lanczos",
+                                 "-c:v", "libx264", "-preset", "veryfast", "-tune", "film", "-crf", "20", "-pix_fmt", "yuv420p",
+                                 "-c:a", "aac", "-b:a", "256k", "-shortest", "-movflags", "+faststart", target.getFullPathName() };
+        if (! pipe.open (args)) { finish ("cannot start ffmpeg"); return false; }
         eng = std::make_unique<Engine>();
         eng->prepare (kSr, 1600);
         eng->reset ((uint32_t) preset.get (P::seed));
         view = std::make_unique<Landscape>();
         view->showOverlay = false;
         view->fullBleed = true;
-        view->setSize (w, h);
+        view->setSize (rw, rh);
         buf.setSize (2, (int) (kSr / kFps));
-        row.resize ((size_t) w * 4);
+        row.resize ((size_t) rw * 4);
         fr = Frame();
     }
     if (cancelFlag.load()) { finish ("cancelled"); return false; }
@@ -174,20 +234,20 @@ bool VideoExporter::step (double budgetMs)
         fr.scale = (int) preset.get (P::scale); fr.seed = (int) preset.get (P::seed); fr.frozen = preset.get (P::freeze) > 0.5f;
         fr.scene = (int) preset.get (P::scene); fr.evolution = preset.get (P::evolution); fr.density = preset.get (P::density);
         view->tick (fr);
-        juce::Image img (juce::Image::ARGB, w, h, true, juce::SoftwareImageType());
+        juce::Image img (juce::Image::ARGB, rw, rh, true, juce::SoftwareImageType());
         {
             juce::Graphics g (img);
             view->paintEntireComponent (g, true);
             g.setColour (juce::Colours::white.withAlpha (0.35f)); // discreet signature
-            g.setFont (font ((float) h * 0.018f, true));
-            g.drawText ("Infinitum by DSK", juce::Rectangle<int> (0, 0, w - (int) (h * 0.025f), h - (int) (h * 0.02f)), juce::Justification::bottomRight);
+            g.setFont (font ((float) rh * 0.022f, true));
+            g.drawText ("Infinitum by DSK", juce::Rectangle<int> (0, 0, rw - (int) (rh * 0.025f), rh - (int) (rh * 0.02f)), juce::Justification::bottomRight);
         }
         const juce::Image::BitmapData bd (img, juce::Image::BitmapData::readOnly);
-        for (int y = 0; y < h; ++y)
+        for (int y = 0; y < rh; ++y)
         {
             const uint8_t* src = bd.getLinePointer (y);
-            for (int x = 0; x < w; ++x) { const uint8_t* px = src + x * bd.pixelStride; std::memcpy (&row[(size_t) x * 4], px, 4); row[(size_t) x * 4 + 3] = 255; }
-            if (std::fwrite (row.data(), 1, row.size(), pipe) != row.size()) { finish ("ffmpeg stopped (disk full?)"); return false; }
+            for (int x = 0; x < rw; ++x) { const uint8_t* px = src + x * bd.pixelStride; std::memcpy (&row[(size_t) x * 4], px, 4); row[(size_t) x * 4 + 3] = 255; }
+            if (! pipe.write (row.data(), row.size())) { finish ("ffmpeg stopped (disk full?)"); return false; }
         }
         ++frame;
     }

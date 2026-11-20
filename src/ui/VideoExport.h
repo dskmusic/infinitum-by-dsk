@@ -18,7 +18,7 @@ public:
     bool step (double budgetMs);                // false when finished (or failed)
     void cancel();
     float progress() const { return total > 0 ? (float) frame / (float) total : 0.0f; }
-    bool running() const { return pipe != nullptr || audioPending; }
+    bool running() const { return pipe.isOpen() || audioPending; }
     juce::String result;                        // empty = ok, otherwise error / "cancelled"
     std::atomic<float> audioProgress { 0 };
 
@@ -28,7 +28,17 @@ private:
     juce::File target, wav, ffmpegExe;
     int w = 1920, h = 1080, frame = 0, total = 0;
     double secs = 60;
-    FILE* pipe = nullptr;
+    // ffmpeg child process with a writable stdin, started without any console window
+    struct Pipe
+    {
+        bool open (const juce::StringArray& args);
+        bool write (const void* data, size_t bytes);
+        int close();                       // waits for ffmpeg, returns its exit code
+        bool isOpen() const { return h != nullptr; }
+        void* h = nullptr;                 // Windows: process handle / POSIX: FILE*
+        void* in = nullptr;                // Windows: stdin write handle
+    } pipe;
+    int rw = 960, rh = 540;               // internal render size (ffmpeg upscales: 4x faster than painting at 1080p)
     bool audioPending = false;
     std::thread audioThread;
     std::atomic<bool> audioDone { false }, cancelFlag { false };

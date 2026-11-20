@@ -44,16 +44,16 @@ const Item items[] {
       "\"Full screen\" shows them full size: 1-6 change landscape, arrows = light and evolution, F freeze, N new seed, R noise type, T relax mode (no texts), H help and Esc to exit." },
     { "7. Memorias rápidas", "7. Quick memories",
       "Los botones 1-8 bajo el Play guardan sonidos para tu sesión. Un botón vacío guarda el sonido actual; uno lleno lo recupera con un fundido suave de 2 segundos. "
-      "Mayús+clic (o clic derecho) vuelve a guardar. Se guardan con tu proyecto.",
+      "Mayús+clic vuelve a guardar y mantener pulsado un botón lo borra. Se guardan con tu proyecto.",
       "Buttons 1-8 under Play keep sounds for your session. An empty button stores the current sound; a filled one recalls it with a smooth 2-second crossfade. "
-      "Shift+click (or right-click) stores again. They are saved with your project." },
+      "Shift+click stores again, and pressing and holding a button clears it. They are saved with your project." },
     { "8. Temporizador y modo Dormir", "8. Timer and Sleep mode",
       "Pon el TEMPORIZADOR en minutos y Infinitum se apagará solo con un fundido. Activa MODO DORMIR y, durante ese tiempo, el paisaje se oscurece, se calma y baja de volumen poco a poco: perfecto para dormir o meditar.",
       "Set the TIMER in minutes and Infinitum switches itself off with a fade. Turn on SLEEP MODE and, during that time, the landscape darkens, calms down and gets quieter little by little: perfect for sleep or meditation." },
     { "9. Exportar audio y vídeo", "9. Export audio and video",
-      "En EXPORTAR puedes renderizar de 1 minuto a 3 horas en WAV, FLAC u OGG, y también un vídeo MP4 del paisaje con su sonido, listo para YouTube. "
+      "En EXPORTAR puedes renderizar de 1 minuto a 3 horas en WAV, FLAC u OGG, y también un vídeo MP4 del paisaje con su sonido, listo para YouTube (el vídeo es lento de crear: tarda algo más que su duración). "
       "Para el vídeo hace falta ffmpeg (gratis): Infinitum lo busca solo y, si no lo encuentra, te ofrece instalarlo o te explica cómo.",
-      "On EXPORT you can render 1 minute to 3 hours to WAV, FLAC or OGG, and also an MP4 video of the landscape with its sound, ready for YouTube. "
+      "On EXPORT you can render 1 minute to 3 hours to WAV, FLAC or OGG, and also an MP4 video of the landscape with its sound, ready for YouTube (video is slow to create: a bit longer than its length). "
       "Video needs ffmpeg (free): Infinitum looks for it and, if it is missing, offers to install it or explains how." },
     { "10. Trucos", "10. Tips",
       "Clic derecho en cualquier mando: MIDI Learn. Doble clic: valor por defecto. A/B compara dos sonidos; Deshacer y Rehacer siempre están ahí. "

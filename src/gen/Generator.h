@@ -37,6 +37,7 @@ public:
     static juce::StringArray deriveTags (const Preset& p);
     static juce::String makeName (const juce::String& mood, Rng& rng, const juce::String& sub = {});
     static float targetRmsDb (const juce::String& mood);
+    static float interestScore (const Preset& p, const Validation& v); // higher = more alive (best-of)
 };
 
 void applyLocks (Preset& dst, const Preset& src, const std::set<juce::String>& locks);

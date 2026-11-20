@@ -73,7 +73,8 @@ private:
     void handleMidi (const juce::MidiMessage& m);
     void updateChord (bool force);
     int chordDegreeFor (int64_t slot) const;
-    int degreeRaw (int64_t slot) const;
+    int nextDegree (int from, int64_t slot) const;
+    mutable int64_t degSlot = 0; mutable int degValue = 0, degKey = -1; mutable uint32_t degSeed = 0;
     float evoNoise (int channel, double t) const;  // 0..1, smooth, never-repeating (incommensurate sines)
     float pv (int index) const { return p[index]; }
     float lp (int layer, int field) const { return p[P::layer (layer, field)]; }

@@ -20,6 +20,7 @@ public:
     void paint (juce::Graphics&) override;
     void resized() override;
     void parentHierarchyChanged() override;
+    float initialScale() const;
     bool keyPressed (const juce::KeyPress&) override;
 
     static constexpr int kDesignW = 1280, kDesignH = 800;
@@ -73,6 +74,6 @@ private:
     std::array<gx::Preset, 2> abSlots;
     std::array<bool, 2> abValid { false, false };
     int abActive = 0;
-    bool pendingRebuild = false;
+    bool pendingRebuild = false, sizedInWindow = false;
     juce::ComponentBoundsConstrainer constrainer;
 };

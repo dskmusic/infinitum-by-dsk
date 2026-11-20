@@ -54,7 +54,13 @@ InfinitumEditor::InfinitumEditor (InfinitumProcessor& p)
     setResizable (true, true);
     if (p.wrapperType == juce::AudioProcessor::wrapperType_Standalone)
         constrainer.setFixedAspectRatio (0.0); // the Standalone window can take any shape (and be maximised)
-    const float s = juce::jlimit (0.5f, 2.0f, settings.scale());
+    if (! settings.file().containsKey ("launched"))   // first launch: always 100 %
+    {
+        settings.setScale (1.0f);
+        settings.file().setValue ("launched", true);
+        settings.file().saveIfNeeded();
+    }
+    const float s = initialScale();
     setSize ((int) (kDesignW * s), (int) (kDesignH * s));
     header->setPresetName (proc.currentMeta.name);
     showPage (0);
@@ -138,12 +144,38 @@ void InfinitumEditor::resized()
     toastLabel.setBounds (root.getLocalBounds().withSizeKeepingCentre (560, 34).withY (root.getHeight() - 110));
 }
 
-// Standalone: JUCE's window only shows minimise + close; add the maximise button.
+// The saved interface size, but never bigger than the screen we open on (e.g. 1280x800 on a 150 % laptop display)
+float InfinitumEditor::initialScale() const
+{
+    float s = juce::jlimit (0.5f, 2.0f, settings.scale());
+    if (auto* d = juce::Desktop::getInstance().getDisplays().getPrimaryDisplay())
+    {
+        const auto area = d->userArea;
+        s = juce::jmin (s, (float) (area.getWidth() - 40) / kDesignW, (float) (area.getHeight() - 90) / kDesignH);
+    }
+    return juce::jmax (0.5f, s);
+}
+
+// Standalone: JUCE's window only shows minimise + close; add the maximise button, and open at the proper size once.
 void InfinitumEditor::parentHierarchyChanged()
 {
-    if (processor.wrapperType == juce::AudioProcessor::wrapperType_Standalone)
-        if (auto* w = findParentComponentOfClass<juce::DocumentWindow>())
-            w->setTitleBarButtonsRequired (juce::DocumentWindow::allButtons, false);
+    if (processor.wrapperType != juce::AudioProcessor::wrapperType_Standalone) return;
+    if (auto* w = findParentComponentOfClass<juce::DocumentWindow>())
+    {
+        w->setTitleBarButtonsRequired (juce::DocumentWindow::allButtons, false);
+        if (! sizedInWindow)
+        {
+            sizedInWindow = true;
+            const float s = initialScale();
+            juce::Component::SafePointer<InfinitumEditor> sp (this);
+            juce::MessageManager::callAsync ([sp, s]
+            {
+                if (sp == nullptr) return;
+                sp->setSize ((int) (kDesignW * s), (int) (kDesignH * s));
+                if (auto* win = sp->findParentComponentOfClass<juce::DocumentWindow>()) win->centreWithSize (win->getWidth(), win->getHeight());
+            });
+        }
+    }
 }
 
 void InfinitumEditor::setUiScale (float s)

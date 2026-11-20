@@ -15,7 +15,7 @@ their own, while harmony, light and space evolve slowly for minutes and hours wi
   Presence (how much of the time it is there), Tone and Character; slow, never-repeating modulation decides when it appears.
 - **Rich sound:** Spectral Mutation drone, PWM + saw analog pad with ensemble chorus and an 80s filter bloom, granular clouds tuned to
   octaves and fifths, pitch-shifted shimmer, a chord-following sub bass, melodic bell phrases, and a new hall reverb with pre-delay.
-- **Harmony that moves:** 12 scales, any key, from open fifths to 7th and 9th chords, automatic chord changes with voice-leading,
+- **Harmony that moves:** 12 scales, any key, from open fifths to 7th and 9th chords, real chord progressions (I-IV-V-vi, cinematic i-VI-III-VII) with smooth voice-leading,
   or **chords locked to your DAW tempo** (every 1-16 bars).
 - **Four big macros:** Evolution, Density, Light (night to midday) and Space (room to endless cathedral), plus a click-free **Freeze**.
 - **Play / Stop** that also follows your DAW. Evolution comes from a **seed** and the timeline position: DAW bounces match playback,

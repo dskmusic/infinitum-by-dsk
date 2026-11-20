@@ -221,7 +221,7 @@ static void testLiveChanges()
     for (int i = 0; i < gx::kChordVoices; ++i)
     {
         const int n = e1.tele.chordNotes[(size_t) i].load();
-        inRange &= n >= base && n <= base + 26;
+        inRange &= n >= base - 3 && n <= base + 26; // voice-leading may dip a few semitones below the register base
         const auto& st = gx::scaleSteps (1);
         inScale &= std::find (st.begin(), st.end(), ((n - (int) c.get (gx::P::key)) % 12 + 12) % 12) != st.end();
     }

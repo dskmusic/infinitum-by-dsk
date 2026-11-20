@@ -38,9 +38,15 @@ LandscapePage::LandscapePage (Context& c)
     }
     for (int m = 0; m < 8; ++m)
     {
-        auto* b = memButtons.add (new juce::TextButton (juce::String (m + 1)));
-        b->setTooltip (L ("Memoria rápida: clic para recuperar (con fundido), clic derecho o Mayús+clic para guardar el sonido actual",
-                          "Quick memory: click to recall (with a crossfade), right-click or Shift+click to store the current sound"));
+        auto* b = memButtons.add (new MemButton (juce::String (m + 1)));
+        b->setTooltip (L ("Memoria rápida: clic para recuperar (con fundido) o guardar si está vacía; Mayús+clic guarda de nuevo; mantener pulsado la borra",
+                          "Quick memory: click to recall (with a crossfade) or store if empty; Shift+click stores again; press and hold to clear"));
+        b->onLongPress = [this, m]
+        {
+            if (ctx.proc.memories[(size_t) m].isVoid()) return;
+            ctx.proc.memories[(size_t) m] = juce::var();
+            if (ctx.toast) ctx.toast (L ("Memoria ", "Memory ") + juce::String (m + 1) + L (" borrada", " cleared"));
+        };
         b->onClick = [this, m]
         {
             const auto mods = juce::ModifierKeys::getCurrentModifiersRealtime();

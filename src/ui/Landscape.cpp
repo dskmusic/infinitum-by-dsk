@@ -493,18 +493,6 @@ void Landscape::paintStarfield (juce::Graphics& g, juce::Rectangle<float> b)
             g.fillRect (x, y, 1.0f, 1.0f);
         }
     }
-    // a far spiral galaxy
-    {
-        const float gx = w * (0.25f + 0.5f * hashF ((uint32_t) f.seed, 3200)), gy = h * (0.25f + 0.2f * hashF ((uint32_t) f.seed, 3201)), R = h * 0.22f;
-        softBlob (g, gx, gy, R * 0.5f, R * 0.25f, juce::Colour (0xfffff0d0).withAlpha (0.22f));
-        for (int i = 0; i < 260; ++i)
-        {
-            const float u = hashF ((uint32_t) i, 3202), arm = (float) (i % 2) * kPi;
-            const float ang = arm + t * 0.004f + u * 7.0f + (hashF ((uint32_t) i, 3203) - 0.5f) * 0.5f;
-            g.setColour (juce::Colour (0xffcfd8ff).withAlpha (0.25f * (1.0f - u)));
-            g.fillRect (gx + std::cos (ang) * R * std::sqrt (u), gy + std::sin (ang) * R * std::sqrt (u) * 0.4f, 1.2f, 1.2f);
-        }
-    }
     {   // shooting stars
         const int slot = (int) (t / 5.0f);
         const float ph = (t - (float) slot * 5.0f) / 0.7f;
@@ -862,30 +850,6 @@ void Landscape::paintNeon (juce::Graphics& g, juce::Rectangle<float> b)
             const float x = std::fmod (w * hashF ((uint32_t) i, 1102) + t * 60.0f * sp, w + 40.0f) - 20.0f;
             const float y = std::fmod (h * hashF ((uint32_t) i, 1103) + t * 520.0f * sp, h + 30.0f) - 30.0f;
             g.drawLine (x, y, x - 3.5f, y + 14.0f * sp, 0.8f);
-        }
-    }
-    // hologram floating over the city (Shimmer): a slowly turning wireframe with scanlines
-    {
-        const float cx = w * 0.72f, cy = h * 0.3f, R = h * 0.12f, rot = t * 0.4f;
-        const float ha = 0.25f + 0.45f * pres[lyShimmer];
-        juce::Path wire;
-        for (int k = 0; k < 6; ++k)
-        {
-            const float a0 = rot + (float) k * kPi / 3.0f, a1 = a0 + kPi / 3.0f;
-            wire.startNewSubPath (cx + std::cos (a0) * R, cy + std::sin (a0) * R * 0.35f);
-            wire.lineTo (cx + std::cos (a1) * R, cy + std::sin (a1) * R * 0.35f);
-            wire.startNewSubPath (cx + std::cos (a0) * R, cy + std::sin (a0) * R * 0.35f);
-            wire.lineTo (cx, cy - R * 1.1f);
-            wire.startNewSubPath (cx + std::cos (a0) * R, cy + std::sin (a0) * R * 0.35f);
-            wire.lineTo (cx, cy + R * 0.9f);
-        }
-        softBlob (g, cx, cy, R * 1.6f, R * 1.3f, juce::Colour (0xff3ff0ff).withAlpha (0.10f * ha));
-        g.setColour (juce::Colour (0xff7ff8ff).withAlpha (ha * (std::sin (t * 7.0f) > 0.95f ? 0.3f : 1.0f)));
-        g.strokePath (wire, juce::PathStrokeType (1.1f));
-        for (float y = cy - R * 1.1f; y < cy + R; y += 4.0f)
-        {
-            g.setColour (juce::Colour (0xff7ff8ff).withAlpha (0.05f * ha));
-            g.fillRect (cx - R * 1.1f, y, R * 2.2f, 1.0f);
         }
     }
     // wet street: reflections of the signs, stretched and rippling

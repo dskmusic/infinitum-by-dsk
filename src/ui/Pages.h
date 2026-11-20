@@ -92,7 +92,22 @@ private:
     juce::TextButton fullscreen;
     PlayButton play;
     ParamToggle freeze;
-    juce::OwnedArray<juce::TextButton> memButtons;
+    // memory slot button: click = recall / store, hold 0.7 s = clear
+    struct MemButton : public juce::TextButton, private juce::Timer
+    {
+        using juce::TextButton::TextButton;
+        std::function<void()> onLongPress;
+        bool consumed = false;
+        void mouseDown (const juce::MouseEvent& e) override { consumed = false; startTimer (700); juce::TextButton::mouseDown (e); }
+        void mouseUp (const juce::MouseEvent& e) override
+        {
+            stopTimer();
+            if (consumed) { setState (juce::Button::buttonNormal); return; } // the long press already acted: no click
+            juce::TextButton::mouseUp (e);
+        }
+        void timerCallback() override { stopTimer(); if (isDown()) { consumed = true; if (onLongPress) onLongPress(); } }
+    };
+    juce::OwnedArray<MemButton> memButtons;
     void recallMemory (int slot);
     void storeMemory (int slot);
     struct Morph { std::vector<float> from, to; double start = -1; bool switched = false; } morph;

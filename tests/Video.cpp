@@ -7,6 +7,7 @@
 #include "gen/Generator.h"
 #include <BinaryData.h>
 #include <map>
+#include <algorithm>
 
 namespace
 {
@@ -135,17 +136,22 @@ public:
         wait (0.4);
     }
     // load the first factory preset of a sub-mood (keeps playing: live change)
+    // load the best-scoring factory preset of a sub-mood (nth = the next best ones); keeps playing: live change
     void load (const juce::String& sub, int nth = 0)
     {
+        std::vector<std::pair<float, gx::Preset>> ranked;
         if (auto* arr = bank.getProperty ("presets", {}).getArray())
             for (auto& v : *arr)
             {
                 auto p = gx::Preset::fromVar (v);
-                if (p.meta.subcategory != sub || nth-- > 0) continue;
-                p.applyTo (proc);
-                proc.presetGeneration.fetch_add (1);
-                return;
+                if (p.meta.subcategory != sub) continue;
+                auto val = gx::Generator::validate (p, false);
+                if (val.ok) ranked.push_back ({ gx::Generator::interestScore (p, val), p });
             }
+        if (ranked.empty()) return;
+        std::sort (ranked.begin(), ranked.end(), [] (auto& a, auto& b) { return a.first > b.first; });
+        ranked[(size_t) juce::jmin (nth, (int) ranked.size() - 1)].second.applyTo (proc);
+        proc.presetGeneration.fetch_add (1);
     }
 
     template <typename T>
@@ -398,12 +404,12 @@ int runVideo (int argc, char** argv)
 
     // ---- neo-noir
     d.caption ("Neon nights", "Analog 80s pads, ensemble chorus, glassy bell phrases", "Noches de neón", "pads analógicos de los 80, chorus de ensemble y frases de campanas de cristal");
-    d.load ("Neo-Noir", 1);
+    d.load ("Neo-Noir");
     d.click (d.button ("Neon Rain"), 6.0);
 
     // ---- derelict
     d.caption ("Or a derelict ship in deep space...", "", "O una nave abandonada en el espacio...");
-    d.load ("Derelict", 2);
+    d.load ("Derelict");
     d.click (d.button ("Starfield"), 4.0);
     d.caption ("Freeze the moment", "", "Congela el momento");
     d.click (d.button ("FREEZE"), 2.4);
@@ -412,7 +418,7 @@ int runVideo (int argc, char** argv)
     // ---- sound page
     d.caption ("Drone · Pad · Texture · Shimmer · Wind · Bells · Bass", "Noise generator: pink, brown, white, ocean waves, vinyl",
                "Drone · Pad · Textura · Shimmer · Viento · Campanas · Bajo", "generador de ruido: rosa, marrón, blanco, olas, vinilo");
-    d.load ("Golden Hour");
+    d.load ("Glow");
     d.click (d.button ("SOUND"), 4.0);
 
     // ---- generator

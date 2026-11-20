@@ -15,7 +15,7 @@ mientras la armonía, la luz y el espacio evolucionan despacio durante minutos u
   Presencia (cuánto tiempo está presente), Tono y Carácter; una modulación lenta que nunca se repite decide cuándo aparece.
 - **Sonido rico:** drone Spectral Mutation, pad analógico PWM + sierra con chorus de ensemble y apertura del filtro de los 80, nubes
   granulares afinadas a octavas y quintas, shimmer, bajo que sigue el acorde, frases de campanas y una nueva reverb tipo hall con pre-delay.
-- **Armonía en movimiento:** 12 escalas, cualquier tonalidad, de quintas abiertas a acordes de 7ª y 9ª, cambios de acorde automáticos
+- **Armonía en movimiento:** 12 escalas, cualquier tonalidad, de quintas abiertas a acordes de 7ª y 9ª, progresiones reales (I-IV-V-vi, i-VI-III-VII de cine) con conducción de voces suave
   o **sincronizados al tempo de tu DAW** (cada 1-16 compases).
 - **Cuatro macros grandes:** Evolución, Densidad, Luz (de noche a mediodía) y Espacio (de una sala a una catedral infinita), y **Congelar** sin chasquidos.
 - **Play / Stop** que también sigue a tu DAW. La evolución sale de una **semilla** y de la posición en la línea de tiempo: lo que exportas

@@ -341,6 +341,15 @@ void ExportPage::startVideo()
     const auto name = ctx.proc.currentMeta.name.isNotEmpty() ? ctx.proc.currentMeta.name : juce::String ("Infinitum");
     const auto def = juce::File::getSpecialLocation (juce::File::userMoviesDirectory)
                          .getChildFile (juce::File::createLegalFileName (name + " - " + juce::String (vDuration.getSelectedId()) + " min.mp4"));
+    const int mins = vDuration.getSelectedId();
+    const juce::String est = juce::String (juce::jmax (1, (int) std::ceil (mins * (vRes.getSelectedId() == 720 ? 0.9 : 1.5)))) ;
+    if (! juce::AlertWindow::showOkCancelBox (juce::MessageBoxIconType::InfoIcon, L ("Exportar vídeo", "Export video"),
+            L ("Crear un vídeo es un proceso lento: se dibuja cada fotograma del paisaje.\n\nPara ", "Creating a video is a slow process: every frame of the landscape is drawn.\n\nFor ")
+              + juce::String (mins) + L (" min de vídeo calcula unos ", " min of video expect about ") + est
+              + L (" min (depende de tu ordenador). Puedes seguir usando Infinitum mientras tanto y cancelar cuando quieras.",
+                   " min (depends on your computer). You can keep using Infinitum meanwhile and cancel at any time."),
+            L ("Continuar", "Continue"), L ("Cancelar", "Cancel")))
+        return;
     chooser = std::make_unique<juce::FileChooser> (L ("Guardar vídeo", "Save video"), def, "*.mp4");
     chooser->launchAsync (juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::warnAboutOverwriting, [this] (const juce::FileChooser& fc)
     {
