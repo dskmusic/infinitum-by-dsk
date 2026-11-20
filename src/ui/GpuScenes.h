@@ -27,6 +27,10 @@ private:
     std::unique_ptr<juce::OpenGLShaderProgram> prog[numScenes];
     std::atomic<bool> ok[numScenes] {};
     juce::uint32 vbo = 0;
+    std::unique_ptr<juce::OpenGLShaderProgram> bloom;   // second pass: lights glow into the air (optional)
+    juce::OpenGLFrameBuffer fb;
+    int fbW = 0, fbH = 0;
+    void drawQuad (juce::OpenGLShaderProgram&);
 };
 
 // A hidden OpenGL context used to render landscapes into images (video export, screenshots, demo video).

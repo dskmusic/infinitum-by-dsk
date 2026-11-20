@@ -74,6 +74,27 @@ vec3 skyGrad (float t, float L)
     vec3 low = mix (mix (vec3 (0.07, 0.10, 0.25), vec3 (0.90, 0.47, 0.36), clamp (L * 2.0, 0.0, 1.0)), vec3 (0.95, 0.85, 0.67), clamp (L * 2.0 - 1.0, 0.0, 1.0));
     return mix (low, top, pow (clamp (t, 0.0, 1.0), 0.55));
 }
+// weather, slowly changing with the Evolution clock: haze (0 clear .. 1 thick) and precipitation (0 .. 1)
+float wHaze() { return smoothstep (0.4, 0.85, noise (vec2 (uEvoT / 95.0 + S.x * 0.37, 1.3))); }
+float wRain() { return smoothstep (0.6, 0.88, noise (vec2 (uEvoT / 120.0 + S.y * 0.41, 7.7))); }
+// falling streaks at three depths, every column with its own speed and phase
+vec3 rainOverlay (vec2 p, vec2 uv, float amount, vec3 tint)
+{
+    vec3 add = vec3 (0.0);
+    if (amount <= 0.001) return add;
+    for (int l = 0; l < 3; l++)
+    {
+        float fl = float (l);
+        float cx = p.x * (150.0 - 40.0 * fl) + uv.y * (5.0 + 3.0 * fl);
+        float cid = floor (cx), fx = fract (cx);
+        float h1 = hash12 (vec2 (cid, 3.0 + fl)), h2 = hash12 (vec2 (cid, 7.0 + fl));
+        float tt = uv.y * (2.0 + h2) + uTime * (0.9 + 0.8 * h1) * (0.8 + 0.45 * fl) * (2.0 + h2) + h2 * 17.0;
+        float fy = fract (tt), len = 0.16 + 0.12 * fl;
+        float exists = step (1.0 - 0.45 * amount, hash12 (vec2 (cid + 0.37, floor (tt) + fl * 31.0)));
+        add += tint * exists * smoothstep (0.09 + 0.05 * fl, 0.0, abs (fx - 0.5)) * step (fy, len) * (1.0 - fy / len) * (0.05 + 0.04 * fl);
+    }
+    return add * amount;
+}
 vec3 aces (vec3 x) { return clamp ((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0); }
 vec3 post (vec3 c, vec2 uv)
 {
@@ -94,8 +115,10 @@ void main()
 {
     S = vec2 (fract (uSeed * 0.6180339) * 97.0, fract (uSeed * 0.7548776) * 89.0);
     vec2 uv0 = gl_FragCoord.xy / uRes;
-    float z = 1.03 + 0.015 * sin (uTime * 0.021);                      // slow cinematic camera
-    vec2 uv = (uv0 - 0.5) / z + 0.5 + vec2 (sin (uTime * 0.013) * 0.007, sin (uTime * 0.017 + 1.0) * 0.005);
+    // slow cinematic camera: a gentle dolly in and out and a lateral travelling, never still, never noticeable
+    float z = 1.05 + 0.03 * sin (uTime * 0.019) + 0.01 * sin (uTime * 0.047 + 2.0);
+    vec2 pan = vec2 (0.018 * sin (uTime * 0.011) + 0.006 * sin (uTime * 0.031 + 1.0), 0.006 * sin (uTime * 0.017 + 1.0));
+    vec2 uv = (uv0 - 0.5) / z + 0.5 + pan;
     gl_FragColor = vec4 (post (scene (uv), uv0), 1.0);
 }
 )GLSL";
@@ -1074,6 +1097,32 @@ vec3 scene (vec2 uv)
 )GLSL";
 } // namespace
 
+// ------------------------------------------------------------------ bloom (second pass)
+const char* bloomShader = R"GLSL(
+uniform sampler2D uTex;
+uniform vec2 uRes;
+uniform float uAmt;
+void main()
+{
+    vec2 uv = gl_FragCoord.xy / uRes;
+    vec3 c = texture2D (uTex, uv).rgb;
+    vec3 b = vec3 (0.0), w = vec3 (0.0);
+    vec2 asp = vec2 (uRes.y / uRes.x, 1.0);
+    for (int i = 0; i < 32; i++)
+    {
+        float fi = float (i);
+        float r = sqrt ((fi + 0.5) / 32.0);
+        float a = fi * 2.39996;
+        vec2 o = vec2 (cos (a), sin (a)) * asp;
+        vec3 s1 = texture2D (uTex, uv + o * r * 0.018).rgb;     // tight glow
+        vec3 s2 = texture2D (uTex, uv + o * r * 0.07).rgb;      // wide halo
+        b += max (s1 - 0.5, 0.0) * (1.0 - 0.5 * r);
+        w += max (s2 - 0.55, 0.0) * (1.0 - 0.7 * r);
+    }
+    gl_FragColor = vec4 (c + (b * 0.09 + w * 0.05) * uAmt, 1.0);
+}
+)GLSL";
+
 // ------------------------------------------------------------------ GpuScenes
 bool GpuScenes::init (juce::OpenGLContext& c)
 {
@@ -1112,6 +1161,14 @@ bool GpuScenes::init (juce::OpenGLContext& c)
     bool any = false;
     for (auto& o : ok) any |= o.load();
     if (! any) { release(); return false; }
+    {   // optional bloom pass (a failure here only costs the glow)
+        auto b = std::make_unique<juce::OpenGLShaderProgram> (c);
+        if (b->addVertexShader (juce::OpenGLHelpers::translateVertexShaderToV3 (vertexShader))
+            && b->addFragmentShader (juce::OpenGLHelpers::translateFragmentShaderToV3 (bloomShader)) && b->link())
+            bloom = std::move (b);
+        else
+            error << "bloom: " << b->getLastError() << "\n";
+    }
     const GLfloat quad[] { -1.0f, -1.0f, 1.0f, -1.0f, -1.0f, 1.0f, 1.0f, 1.0f };
     glGenBuffers (1, &vbo);
     glBindBuffer (GL_ARRAY_BUFFER, vbo);
@@ -1123,16 +1180,39 @@ bool GpuScenes::init (juce::OpenGLContext& c)
 void GpuScenes::release()
 {
     for (auto& p : prog) p.reset();
+    bloom.reset();
+    fb.release(); fbW = fbH = 0;
     for (auto& o : ok) o = false;
     if (vbo != 0 && ctx != nullptr) glDeleteBuffers (1, &vbo);
     vbo = 0;
 }
 
+void GpuScenes::drawQuad (juce::OpenGLShaderProgram& p)
+{
+    const GLint pos = glGetAttribLocation (p.getProgramID(), "position");
+    if (pos < 0) return;
+    glBindBuffer (GL_ARRAY_BUFFER, vbo);
+    glEnableVertexAttribArray ((GLuint) pos);
+    glVertexAttribPointer ((GLuint) pos, 2, GL_FLOAT, GL_FALSE, 0, nullptr);
+    glDrawArrays (GL_TRIANGLE_STRIP, 0, 4);
+    glDisableVertexAttribArray ((GLuint) pos);
+    glBindBuffer (GL_ARRAY_BUFFER, 0);
+}
+
 void GpuScenes::render (const SceneUniforms& u, int w, int h)
 {
     auto* p = prog[juce::jlimit (0, numScenes - 1, u.scene)].get();
-    if (p == nullptr) return;
     if (p == nullptr || vbo == 0) return;
+    GLint previous = 0;
+    glGetIntegerv (GL_FRAMEBUFFER_BINDING, &previous);
+    bool glow = bloom != nullptr && ctx != nullptr;
+    if (glow && (fbW != w || fbH != h))
+    {
+        fb.release();
+        glow = fb.initialise (*ctx, w, h);
+        fbW = glow ? w : 0; fbH = glow ? h : 0;
+    }
+    if (glow) glBindFramebuffer (GL_FRAMEBUFFER, fb.getFrameBufferID());
     glViewport (0, 0, w, h);
     glDisable (GL_BLEND);
     glDisable (GL_CULL_FACE);     // both triangles of the full-screen quad, whatever the winding
@@ -1146,13 +1226,21 @@ void GpuScenes::render (const SceneUniforms& u, int w, int h)
     p->setUniform ("uFrozen", u.frozen); p->setUniform ("uSeed", u.seed); p->setUniform ("uFade", u.fade);
     p->setUniform ("uPres", u.pres, kNumLayers);
     p->setUniform ("uGlow", u.glow, kNumLayers);
-    const GLint pos = glGetAttribLocation (p->getProgramID(), "position");
-    glBindBuffer (GL_ARRAY_BUFFER, vbo);
-    glEnableVertexAttribArray ((GLuint) pos);
-    glVertexAttribPointer ((GLuint) pos, 2, GL_FLOAT, GL_FALSE, 0, nullptr);
-    glDrawArrays (GL_TRIANGLE_STRIP, 0, 4);
-    glDisableVertexAttribArray ((GLuint) pos);
-    glBindBuffer (GL_ARRAY_BUFFER, 0);
+    drawQuad (*p);
+    if (glow)
+    {
+        static const float amount[numScenes] { 0.7f, 0.8f, 0.6f, 1.1f, 0.75f, 0.9f };   // per landscape
+        glBindFramebuffer (GL_FRAMEBUFFER, (GLuint) previous);
+        glViewport (0, 0, w, h);
+        bloom->use();
+        glActiveTexture (GL_TEXTURE0);
+        glBindTexture (GL_TEXTURE_2D, fb.getTextureID());
+        bloom->setUniform ("uTex", (GLint) 0);
+        bloom->setUniform ("uRes", (GLfloat) w, (GLfloat) h);
+        bloom->setUniform ("uAmt", amount[juce::jlimit (0, numScenes - 1, u.scene)]);
+        drawQuad (*bloom);
+        glBindTexture (GL_TEXTURE_2D, 0);
+    }
 }
 
 // ------------------------------------------------------------------ OffscreenGpu
