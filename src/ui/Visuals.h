@@ -1,5 +1,6 @@
 #pragma once
 #include "Widgets.h"
+#include "GpuScenes.h"
 #include <juce_dsp/juce_dsp.h>
 
 namespace gx::ui
@@ -79,10 +80,17 @@ private:
 // Generative landscape with four scenes (Valley, Starfield, Nebula, Neon Rain). Every layer has a visual role:
 // drone and pad shape the big masses, texture is dust/grain, shimmer is aurora/beams, wind is mist/fog,
 // bells are sparks/comets/flying lights; the seed decides the scenery (lake, forest, planet, skyline...).
-class Landscape : public juce::Component, public Animated
+class Landscape : public juce::Component, public Animated, private juce::OpenGLRenderer
 {
 public:
     Landscape();
+    ~Landscape() override;
+    // GPU landscapes (shaders) when the system supports them; the painted ones are the fallback
+    void setGpu (bool on);
+    bool gpuActive() const { return glOk.load(); }
+    // background supplied from outside (offscreen GPU render for videos / screenshots)
+    void setExternalBackground (const juce::Image& img) { external = img; }
+    SceneUniforms uniforms() const;
     void tick (const Frame&) override;
     void paint (juce::Graphics&) override;
     void resized() override { cacheKey = {}; }
@@ -123,6 +131,17 @@ private:
     juce::Point<float> flarePos; juce::Colour flareCol; float flareAmt = 0;   // anamorphic flare of the sun / moon
     void paintPost (juce::Graphics&, juce::Rectangle<float>);
     void paintWhale (juce::Graphics&, float x, float y, float L, float dir, float t, juce::Colour body);
+    void newOpenGLContextCreated() override;
+    void renderOpenGL() override;
+    void openGLContextClosing() override;
+    std::unique_ptr<juce::OpenGLContext> gl;
+    GpuScenes scenes;
+    std::atomic<bool> glOk { false };
+    juce::SpinLock ulock;
+    SceneUniforms uni;
+    juce::Image external;
+    int lastScene = -1, lastSeedSeen = -1;
+    double sceneChangedAt = -10.0;
     double fadeStart = 0;
 };
 

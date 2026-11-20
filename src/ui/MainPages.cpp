@@ -27,6 +27,7 @@ LandscapePage::LandscapePage (Context& c)
       harmony (c, L ("Armonía", "Harmony"), "global"), macros (c, "Macros", "macro"), session (c, L ("Sesión", "Session"), "global")
 {
     addAndMakeVisible (landscape);
+    landscape.setGpu (c.settings.gpu());
     landscape.onClick = [this] { if (! ctx.proc.isPlayingInternal() && ! ctx.proc.isHostPlaying()) ctx.proc.setPlaying (true); };
     for (int s = 0; s < numScenes; ++s)
     {
@@ -34,7 +35,7 @@ LandscapePage::LandscapePage (Context& c)
         b->setClickingTogglesState (false);
         b->setTooltip (L ("Paisaje visual (se guarda con el preset)", "Visual landscape (saved with the preset)"));
         b->onClick = [this, s] { ctx.proc.setParamPlain (P::scene, (float) s); };
-        addAndMakeVisible (b);
+        landscape.addAndMakeVisible (b);   // children of the landscape: an OpenGL view would hide siblings drawn over it
     }
     for (int m = 0; m < 8; ++m)
     {
@@ -60,7 +61,7 @@ LandscapePage::LandscapePage (Context& c)
     for (auto* b : sceneButtons) b->getProperties().set ("small", true);
     fullscreen.setTooltip (L ("Paisaje a pantalla completa (Esc para salir, H para ver los atajos)", "Full-screen landscape (Esc to exit, H for shortcuts)"));
     fullscreen.onClick = [this] { if (onFullscreen) onFullscreen(); };
-    addAndMakeVisible (fullscreen);
+    landscape.addAndMakeVisible (fullscreen);
     addAndMakeVisible (play);
     addAndMakeVisible (freeze);
     freeze.setTooltip (L ("Congela el paisaje: la evolución se detiene y la textura y el shimmer se quedan suspendidos.",
@@ -215,7 +216,7 @@ void LandscapePage::resized()
     auto r = getLocalBounds().reduced (8);
     landscape.setBounds (r.removeFromTop (r.getHeight() - 258)); // the landscape takes all the extra height
     {
-        auto bar = landscape.getBounds().reduced (14, 10).removeFromBottom (22);
+        auto bar = landscape.getLocalBounds().reduced (14, 10).removeFromBottom (22);
         fullscreen.setBounds (bar.removeFromRight (124));
         bar.removeFromRight (8);
         for (int s = sceneButtons.size(); --s >= 0;) sceneButtons[s]->setBounds (bar.removeFromRight (s == scStarfield ? 104 : 84).reduced (2, 0));
@@ -364,6 +365,7 @@ FullscreenView::FullscreenView (Context& c, std::function<void()> onClose) : ctx
     view.setInterceptsMouseClicks (false, false);
     view.fullBleed = true;
     addAndMakeVisible (view);
+    view.setGpu (c.settings.gpu());
 }
 
 void FullscreenView::tick (const Frame& f)

@@ -14,7 +14,7 @@ juce::String ffmpegInstructions();            // localized, human-readable
 class VideoExporter
 {
 public:
-    bool start (const Preset& p, const juce::File& out, double seconds, int width, int height, const juce::File& ffmpeg, juce::String& error);
+    bool start (const Preset& p, const juce::File& out, double seconds, int width, int height, const juce::File& ffmpeg, juce::String& error, bool useGpu = true);
     bool step (double budgetMs);                // false when finished (or failed)
     void cancel();
     float progress() const { return total > 0 ? (float) frame / (float) total : 0.0f; }
@@ -38,7 +38,8 @@ private:
         void* h = nullptr;                 // Windows: process handle / POSIX: FILE*
         void* in = nullptr;                // Windows: stdin write handle
     } pipe;
-    int rw = 960, rh = 540;               // internal render size (ffmpeg upscales: 4x faster than painting at 1080p)
+    int rw = 960, rh = 540;
+    bool gpu = false;               // internal render size (ffmpeg upscales: 4x faster than painting at 1080p)
     bool audioPending = false;
     std::thread audioThread;
     std::atomic<bool> audioDone { false }, cancelFlag { false };

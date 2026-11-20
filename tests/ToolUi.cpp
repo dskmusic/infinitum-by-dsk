@@ -16,6 +16,21 @@ static juce::String factoryNotes (const gx::Preset& p)
     return n;
 }
 
+
+// GPU landscapes are not captured by component snapshots: render them offscreen and hand them to every visible Landscape
+static void feedGpuLandscapes (juce::Component* c, float scale)
+{
+    if (c == nullptr || ! c->isShowing()) return;
+    if (auto* l = dynamic_cast<gx::ui::Landscape*> (c))
+    {
+        l->setGpu (false);
+        if (gx::ui::OffscreenGpu::get().available())
+            l->setExternalBackground (gx::ui::OffscreenGpu::get().render (l->uniforms(), juce::roundToInt (l->getWidth() * scale), juce::roundToInt (l->getHeight() * scale)));
+        return;
+    }
+    for (auto* ch : c->getChildren()) feedGpuLandscapes (ch, scale);
+}
+
 int runVideo (int argc, char** argv); // Video.cpp
 
 int runToolExtras (const juce::String& cmd, int argc, char** argv)
@@ -249,6 +264,7 @@ int runToolExtras (const juce::String& cmd, int argc, char** argv)
         };
         auto shot = [&] (const char* name)
         {
+            feedGpuLandscapes (ed.get(), 1.0f);
             auto img = ed->createComponentSnapshot (ed->getLocalBounds(), true, 1.0f);
             juce::File f = out.getChildFile (juce::String (name) + ".png");
             f.deleteFile();

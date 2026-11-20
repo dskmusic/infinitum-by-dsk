@@ -104,13 +104,64 @@ void softBlob (juce::Graphics& g, float x, float y, float rx, float ry, juce::Co
 
 Landscape::Landscape()
 {
-    setInterceptsMouseClicks (true, false);
+    setInterceptsMouseClicks (true, true);   // children: the scene buttons
     for (size_t i = 0; i < stars.size(); ++i)
     {
         stars[i] = { rng.nextFloat(), rng.nextFloat() };
         twinkle[i] = 0.4f + rng.nextFloat() * 2.5f;
         starSize[i] = rng.nextFloat() < 0.08f ? 2.3f : (rng.nextFloat() < 0.3f ? 1.6f : 1.1f);
     }
+}
+
+Landscape::~Landscape() { setGpu (false); }
+
+void Landscape::setGpu (bool on)
+{
+    if (on && gl == nullptr && gpuStatus().load() >= 0)
+    {
+        gl = std::make_unique<juce::OpenGLContext>();
+        gl->setRenderer (this);
+        gl->setComponentPaintingEnabled (true);
+        gl->setContinuousRepainting (false);
+        gl->attachTo (*this);
+    }
+    else if (! on && gl != nullptr)
+    {
+        gl->detach();
+        gl.reset();
+        glOk = false;
+        repaint();
+    }
+}
+
+void Landscape::newOpenGLContextCreated()
+{
+    const bool ok = scenes.init (*gl);
+    glOk = ok;
+    if (! ok) gpuStatus() = -1;
+    else if (gpuStatus().load() == 0) gpuStatus() = 1;
+}
+
+void Landscape::openGLContextClosing() { scenes.release(); glOk = false; }
+
+void Landscape::renderOpenGL()
+{
+    if (! glOk.load()) return;
+    SceneUniforms u;
+    { const juce::SpinLock::ScopedLockType sl (ulock); u = uni; }
+    const double sc = gl->getRenderingScale();
+    scenes.render (u, juce::roundToInt (sc * getWidth()), juce::roundToInt (sc * getHeight()));
+}
+
+SceneUniforms Landscape::uniforms() const
+{
+    SceneUniforms u;
+    u.scene = f.scene; u.time = (float) f.time; u.mus = f.musTime; u.evoT = f.evoTime; u.light = f.light; u.evo = f.evolution;
+    u.density = f.density; u.space = f.space; u.energy = f.energy; u.run = f.runGain; u.frozen = f.frozen ? 1.0f : 0.0f;
+    u.seed = (float) f.seed;
+    u.fade = 0.35f + 0.65f * (float) juce::jlimit (0.0, 1.0, (f.time - sceneChangedAt) / 0.6);   // short, gentle dip on a scene change
+    for (int l = 0; l < kNumLayers; ++l) { u.pres[l] = pres[(size_t) l]; u.glow[l] = glow[(size_t) l]; }
+    return u;
 }
 
 void Landscape::rebuildCache()
@@ -178,7 +229,7 @@ void Landscape::rebuildCache()
 
 void Landscape::tick (const Frame& fr)
 {
-    if (getWidth() > 0 && lastT > 0 && (fr.scene != f.scene || fr.seed != f.seed) && ! f.reduced)
+    if (getWidth() > 0 && lastT > 0 && (fr.scene != f.scene || fr.seed != f.seed) && ! f.reduced && ! glOk.load() && ! external.isValid())
     {
         const bool ov = showOverlay;
         showOverlay = false;
@@ -211,6 +262,9 @@ void Landscape::tick (const Frame& fr)
         }
     }
     lastBells = f.bellCount;
+    if (f.scene != lastScene || f.seed != lastSeedSeen) { if (lastScene >= 0) sceneChangedAt = f.time; lastScene = f.scene; lastSeedSeen = f.seed; }
+    { const juce::SpinLock::ScopedLockType sl (ulock); uni = uniforms(); }
+    if (gl != nullptr) gl->triggerRepaint();
     for (auto& s : sparks) { s.x += s.vx * (float) dt; s.y += s.vy * (float) dt; s.life -= (float) dt / (s.kind == 2 ? 14.0f : 4.0f); }
     sparks.erase (std::remove_if (sparks.begin(), sparks.end(), [&] (const Spark& s) { return s.life <= 0 || s.x < -40 || s.x > b.getWidth() + 40; }), sparks.end());
     if (sparks.size() > 80) sparks.erase (sparks.begin(), sparks.begin() + (long) (sparks.size() - 80));
@@ -224,6 +278,26 @@ void Landscape::paint (juce::Graphics& g)
     if (key != cacheKey) rebuildCache();
     juce::Path clip;
     clip.addRoundedRectangle (b, fullBleed ? 0.0f : 10.0f);
+    if (glOk.load() || external.isValid())
+    {
+        // the scene comes from the GPU: only the note stars, the rounded corners and the texts are painted here
+        if (external.isValid()) { g.saveState(); g.reduceClipRegion (clip); g.drawImage (external, b); g.restoreState(); }
+        g.saveState();
+        g.reduceClipRegion (clip);
+        paintSparks (g);
+        g.restoreState();
+        if (! fullBleed && ! external.isValid())
+        {
+            juce::Path corners;
+            corners.addRectangle (b);
+            corners.addRoundedRectangle (b, 10.0f);
+            corners.setUsingNonZeroWinding (false);
+            g.setColour (col::bg);
+            g.fillPath (corners);
+        }
+        if (showOverlay) paintOverlay (g, b);
+        return;
+    }
     g.saveState();
     g.reduceClipRegion (clip);
     flareAmt = 0;

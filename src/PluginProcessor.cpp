@@ -20,13 +20,16 @@ InfinitumProcessor::InfinitumProcessor()
     // every new instance starts with a random factory preset (and its landscape); a saved project / state replaces it
     int size = 0;
     if (auto* data = BinaryData::getNamedResource ("factory_infinitumbank", size))
-        if (auto* arr = juce::JSON::parse (juce::String::fromUTF8 (data, size)).getProperty ("presets", {}).getArray(); arr != nullptr && ! arr->isEmpty())
+    {
+        const juce::var bank = juce::JSON::parse (juce::String::fromUTF8 (data, size));   // keep it alive while we read it
+        if (auto* arr = bank.getProperty ("presets", {}).getArray(); arr != nullptr && ! arr->isEmpty())
         {
             auto p = gx::Preset::fromVar ((*arr)[juce::Random::getSystemRandom().nextInt (arr->size())]);
             for (int i = 0; i < gx::P::numParams; ++i)
                 if (auto* prm = paramPtrs[(size_t) i]) prm->setValueNotifyingHost (prm->convertTo0to1 (p.params[(size_t) i]));
             currentMeta = p.meta;
         }
+    }
 #endif
 }
 
@@ -148,7 +151,7 @@ void InfinitumProcessor::getStateInformation (juce::MemoryBlock& mb)
 void InfinitumProcessor::setStateInformation (const void* data, int size)
 {
     // the Standalone opens with a fresh random preset each time instead of the last session
-    if (wrapperType == juce::AudioProcessor::wrapperType_Standalone && ! standaloneStateSkipped) { standaloneStateSkipped = true; return; }
+    if (wrapperType == juce::AudioProcessor::wrapperType_Standalone) return;   // presets, A/B and undo never go through here
     gx::Preset p;
     const auto text = juce::String::fromUTF8 (static_cast<const char*> (data), size);
     if (gx::Preset::fromJson (text, p))

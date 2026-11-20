@@ -28,6 +28,8 @@ public:
         if (s == "en" || s == "es") return s;
         return juce::SystemStats::getUserLanguage().startsWithIgnoreCase ("es") || juce::SystemStats::getDisplayLanguage().startsWithIgnoreCase ("es") ? "es" : "en";
     }
+    bool gpu() const { return props->getBoolValue ("gpu", true); }
+    void setGpu (bool b) { props->setValue ("gpu", b); props->saveIfNeeded(); }
     float noteStars() const { return (float) props->getDoubleValue ("noteStars", 0.3); }
     void setNoteStars (float v) { props->setValue ("noteStars", v); props->saveIfNeeded(); }
     bool previewOnSelect() const { return props->getBoolValue ("preview", true); }

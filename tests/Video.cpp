@@ -9,6 +9,21 @@
 #include <map>
 #include <algorithm>
 
+
+// GPU landscapes are not captured by component snapshots: render them offscreen and hand them to every visible Landscape
+static void feedGpuLandscapesV (juce::Component* c, float scale)
+{
+    if (c == nullptr || ! c->isShowing()) return;
+    if (auto* l = dynamic_cast<gx::ui::Landscape*> (c))
+    {
+        l->setGpu (false);
+        if (gx::ui::OffscreenGpu::get().available())
+            l->setExternalBackground (gx::ui::OffscreenGpu::get().render (l->uniforms(), juce::roundToInt (l->getWidth() * scale), juce::roundToInt (l->getHeight() * scale)));
+        return;
+    }
+    for (auto* ch : c->getChildren()) feedGpuLandscapesV (ch, scale);
+}
+
 namespace
 {
 constexpr int kFps = 30, kW = 1920, kH = 1080, kSub = 4;
@@ -187,6 +202,21 @@ public:
 
     InfinitumProcessor proc;
     std::unique_ptr<InfinitumEditor> ed;
+    std::unique_ptr<Landscape> relaxView;
+    FrameSource relaxFs { proc };
+    Frame relaxFrame;
+    void relax (double seconds)
+    {
+        relaxView = std::make_unique<Landscape>();
+        relaxView->showOverlay = false;
+        relaxView->fullBleed = true;
+        relaxView->setSize (kW, kH);
+        relaxView->addToDesktop (0);          // must be 'showing' for the GPU feed
+        relaxView->setTopLeftPosition (-30000, -30000);
+        relaxView->setVisible (true);
+        wait (seconds);
+        relaxView.reset();
+    }
 
     // ------------------------------------------------------------ title cards
     double cardFrom = -1, cardTo = -1; bool endCard = false;
@@ -244,8 +274,19 @@ private:
         {   // scope: native (Direct2D) contexts only flush when the Graphics is destroyed
             juce::Graphics g (img);
             g.fillAll (col::bgDeep);
-            auto ui = ed->createComponentSnapshot (ed->getLocalBounds(), true, kUiScale);
-            g.drawImageAt (ui, kUiX, 0);
+            feedGpuLandscapesV (ed.get(), kUiScale);
+            if (relaxView != nullptr)   // relax mode: the landscape alone, full frame, no texts
+            {
+                relaxFs.update (relaxFrame, 1.0 / kFps);
+                relaxView->tick (relaxFrame);
+                feedGpuLandscapesV (relaxView.get(), 1.0f);
+                g.drawImageAt (relaxView->createComponentSnapshot (relaxView->getLocalBounds(), true, 1.0f), 0, 0);
+            }
+            else
+            {
+                auto ui = ed->createComponentSnapshot (ed->getLocalBounds(), true, kUiScale);
+                g.drawImageAt (ui, kUiX, 0);
+            }
             drawCaption (g);
             drawCursor (g);
             drawCard (g);
@@ -261,7 +302,7 @@ private:
 
     void drawCursor (juce::Graphics& g)
     {
-        if (cardFrom >= 0) return;
+        if (cardFrom >= 0 || relaxView != nullptr) return;
         const auto p = toScreen (cursor);
         const double ca = vt - clickAt;
         if (ca >= 0 && ca < 0.45)
@@ -432,6 +473,14 @@ int runVideo (int argc, char** argv)
     d.caption ("Freeze the moment", "", "Congela el momento");
     d.click (d.button ("FREEZE"), 2.4);
     d.click (d.button ("FREEZE"), 0.6);
+
+    // ---- relax mode: full screen, nothing but the landscape
+    d.load ("Deep Space");
+    d.click (d.button ("Starfield"), 1.0);
+    d.caption ("Relax mode", "Full screen, no texts: just the landscape", "Modo relax", "pantalla completa, sin textos: solo el paisaje");
+    d.relax (2.5);
+    d.clearCaption();
+    d.relax (5.5);
 
     // ---- sound page
     d.caption ("Drone · Pad · Texture · Shimmer · Wind · Bells · Bass", "Noise generator: pink, brown, white, ocean waves, vinyl",

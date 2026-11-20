@@ -143,8 +143,9 @@ int VideoExporter::Pipe::close()
 }
 
 // ---------------------------------------------------------------- exporter
-bool VideoExporter::start (const Preset& p, const juce::File& out, double seconds, int width, int height, const juce::File& ffmpeg, juce::String& error)
+bool VideoExporter::start (const Preset& p, const juce::File& out, double seconds, int width, int height, const juce::File& ffmpeg, juce::String& error, bool useGpu)
 {
+    gpu = useGpu && OffscreenGpu::get().available();
     preset = p; target = out; secs = seconds; w = width; h = height; ffmpegExe = ffmpeg;
     frame = 0; total = (int) (seconds * kFps); result = {};
     cancelFlag = false; audioDone = false; audioProgress = 0;
@@ -184,7 +185,7 @@ bool VideoExporter::step (double budgetMs)
         // soundtrack ready: start ffmpeg reading raw frames from stdin
         target.deleteFile();
         // the landscape is painted at half size and upscaled by ffmpeg (soft, painterly images scale beautifully)
-        rw = w / 2; rh = h / 2;
+        rw = gpu ? w : w / 2; rh = gpu ? h : h / 2;   // GPU frames are rendered at full size
         juce::StringArray args { ffmpegExe.getFullPathName(), "-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "bgra",
                                  "-s", juce::String (rw) + "x" + juce::String (rh), "-r", juce::String (kFps), "-i", "-", "-i", wav.getFullPathName(),
                                  "-vf", "scale=" + juce::String (w) + ":" + juce::String (h) + ":flags=lanczos",
@@ -234,6 +235,7 @@ bool VideoExporter::step (double budgetMs)
         fr.scale = (int) preset.get (P::scale); fr.seed = (int) preset.get (P::seed); fr.frozen = preset.get (P::freeze) > 0.5f;
         fr.scene = (int) preset.get (P::scene); fr.evolution = preset.get (P::evolution); fr.density = preset.get (P::density);
         view->tick (fr);
+        if (gpu) view->setExternalBackground (OffscreenGpu::get().render (view->uniforms(), rw, rh));
         juce::Image img (juce::Image::ARGB, rw, rh, true, juce::SoftwareImageType());
         {
             juce::Graphics g (img);

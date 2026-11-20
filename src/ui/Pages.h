@@ -261,6 +261,7 @@ public:
     void paint (juce::Graphics&) override;
 private:
     juce::ComboBox scaleBox, animBox, langBox;
+    juce::ToggleButton gpuToggle { L ("Paisajes en alta calidad (tarjeta gráfica)", "High-quality landscapes (graphics card)") };
     juce::ToggleButton aiMsgs { L ("Mensajes de la IA al generar", "AI messages while generating") }, preview { L ("Al elegir un preset, empezar a sonar", "Start playing when a preset is selected") };
     juce::Slider historyLimit, starAmount;
     juce::TextButton openFolder { L ("Abrir carpeta de presets", "Open presets folder") }, clearLearn { L ("Borrar asignaciones MIDI Learn", "Clear MIDI Learn assignments") }, aboutBtn { L ("Acerca de Infinitum", "About Infinitum") };
