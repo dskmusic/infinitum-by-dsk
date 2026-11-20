@@ -15,8 +15,11 @@ static juce::String factoryNotes (const gx::Preset& p)
     return n;
 }
 
+int runVideo (int argc, char** argv); // Video.cpp
+
 int runToolExtras (const juce::String& cmd, int argc, char** argv)
 {
+    if (cmd == "video") return runVideo (argc, argv);
     if (cmd == "demos")
     {
         // InfinitumTool demos <dir> [minutes]: the first factory preset of every mood, rendered to OGG for listening

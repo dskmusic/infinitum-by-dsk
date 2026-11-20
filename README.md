@@ -2,7 +2,8 @@
 
 **An endless soundscape generator — a landscape of sound that never repeats.**
 
-Free VST3 / AU / Standalone instrument by [DSK Music](https://dskmusic.com) for ambient, film scoring and meditation.
+Free VST3 / AU / Standalone instrument by [DSK Music](https://www.dskmusic.com/infinitum/) for ambient, film scoring and meditation.
+**[Download](#download)** · [Product page](https://www.dskmusic.com/infinitum/) · [Latest release](https://github.com/dskmusic/infinitum-by-dsk/releases/latest)
 Press **Play** and six layers — a mutating drone, a pad, a granular texture, shimmer, wind and bells — drift in and out on
 their own, while harmony, light and space evolve slowly for minutes and hours without ever looping.
 
@@ -38,8 +39,32 @@ their own, while harmony, light and space evolve slowly for minutes and hours wi
 
 ## Download
 
-Coming soon on [dskmusic.com](https://dskmusic.com) and in the [Releases](../../releases) of this repository
-(Windows installer and zips, macOS universal installer, Linux).
+**Product page:** https://www.dskmusic.com/infinitum/
+
+| System | Recommended | Other formats |
+|---|---|---|
+| **Windows** 10/11 (64-bit) | [Installer (.exe)](https://github.com/dskmusic/infinitum-by-dsk/releases/latest/download/Infinitum-by-DSK-win-x64-setup.exe) | [VST3 (zip)](https://github.com/dskmusic/infinitum-by-dsk/releases/latest/download/Infinitum-by-DSK-win-x64-vst3.zip) · [Standalone (zip)](https://github.com/dskmusic/infinitum-by-dsk/releases/latest/download/Infinitum-by-DSK-win-x64-standalone.zip) |
+| **macOS** 11+ (Universal: Apple Silicon + Intel) | [Installer (.pkg)](https://github.com/dskmusic/infinitum-by-dsk/releases/latest/download/Infinitum-by-DSK-macos-universal-installer.pkg) | [VST3](https://github.com/dskmusic/infinitum-by-dsk/releases/latest/download/Infinitum-by-DSK-macos-universal-vst3.zip) · [AU](https://github.com/dskmusic/infinitum-by-dsk/releases/latest/download/Infinitum-by-DSK-macos-universal-au.zip) · [Standalone](https://github.com/dskmusic/infinitum-by-dsk/releases/latest/download/Infinitum-by-DSK-macos-universal-standalone.zip) |
+| **Linux** x86_64 | [VST3 (tar.gz)](https://github.com/dskmusic/infinitum-by-dsk/releases/latest/download/Infinitum-by-DSK-linux-x64-vst3.tar.gz) | [Standalone (tar.gz)](https://github.com/dskmusic/infinitum-by-dsk/releases/latest/download/Infinitum-by-DSK-linux-x64-standalone.tar.gz) |
+
+All files and release notes: [latest release](https://github.com/dskmusic/infinitum-by-dsk/releases/latest) · checksums: [SHA256SUMS.txt](https://github.com/dskmusic/infinitum-by-dsk/releases/latest/download/SHA256SUMS.txt)
+
+> The binaries are not code-signed. **Windows:** if SmartScreen appears, click *More info* → *Run anyway*.
+> **macOS:** if the installer "can't be opened" or is "damaged", right-click it → *Open*, or run `xattr -dr com.apple.quarantine <file>` in Terminal.
+
+### Install
+
+- **Windows installer:** installs the VST3 to `C:\Program Files\Common Files\VST3` and the Standalone app.
+- **macOS installer:** installs VST3, AU and the Standalone app. Rescan plugins in your DAW (Logic: AU Manager).
+- **Manual:** copy `Infinitum by DSK.vst3` to your VST3 folder (`~/.vst3` on Linux).
+
+### Quick start
+
+1. Load **Infinitum** as an instrument and press **Play** (in the plugin, or your DAW's transport).
+2. Turn **Evolution**, **Density**, **Light** and **Space**, pick a landscape, or press **GENERATE** on the Generator page.
+3. Long render for videos or meditation: **Export** page → duration → WAV, FLAC or OGG.
+
+Presets and settings are stored in `Documents/DSK Music/Infinitum/`.
 
 ## Build from source
 

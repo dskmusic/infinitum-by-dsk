@@ -32,14 +32,14 @@ juce::String exportAudio (const Preset& preset, const juce::File& file, int form
     else fmt = std::make_unique<juce::WavAudioFormat>();
 
     file.deleteFile();
-    auto stream = file.createOutputStream();
+    std::unique_ptr<juce::OutputStream> stream (file.createOutputStream().release());
     if (stream == nullptr) return "cannot write " + file.getFullPathName();
     const int bits = format == efOgg ? 16 : 24;
     int quality = 0;
     if (format == efOgg) quality = juce::jmax (0, fmt->getQualityOptions().size() - 2); // ~256 kbps
-    std::unique_ptr<juce::AudioFormatWriter> writer (fmt->createWriterFor (stream.get(), sr, 2, bits, {}, quality));
+    auto writer = fmt->createWriterFor (stream, juce::AudioFormatWriterOptions().withSampleRate (sr).withNumChannels (2)
+                                                    .withBitsPerSample (bits).withQualityOptionIndex (quality));
     if (writer == nullptr) return "this format is not available at " + juce::String ((int) sr) + " Hz";
-    stream.release(); // owned by the writer now
 
     Engine eng;
     constexpr int bs = 1024;
