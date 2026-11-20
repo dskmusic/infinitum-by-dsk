@@ -278,36 +278,133 @@ float web (vec2 q)
 }
 // a layer of giant kelp: olive-golden stipes with alternating blades, rounded shading, back-lit translucent edges,
 // fogged by distance (layer 0 far ... 2 near)
-void kelp (inout vec3 col, vec2 p, vec2 uv, float layer, float bed, float asp, float L)
+// a row of giant kelp planted in the sand at a given depth (layer 0 far ... 2 near): roots sit lower on screen the
+// nearer they are, are half buried (contact shadow + a little sand mound), stipes bend and taper, blades flutter
+// a row of giant kelp planted in the sand at a given depth (layer 0 far ... 2 near): roots sit lower on screen the
+// nearer they are, are half buried (contact shadow + a little sand mound), stipes bend and taper, blades flutter
+float bedAt (float x)   // top edge of the seabed on screen (far horizon of the sand plane)
 {
-    float scale = 0.5 + 0.25 * layer;
-    float fog = 0.78 - 0.32 * layer;
+    return 0.21 + 0.05 * fbm3 (vec2 (x * 1.6 + S.x, 0.3)) + 0.015 * sin (x * 2.7);
+}
+// a row of giant kelp planted in the sand at a given depth (layer 0 far ... 2 near): roots sit lower on screen the
+// nearer they are, are half buried (contact shadow + a little sand mound), stipes bend and taper, blades flutter
+void kelp (inout vec3 col, vec2 p, vec2 uv, float layer, float asp, float L)
+{
+    float scale = 0.45 + 0.3 * layer;
+    float fog = 0.78 - 0.33 * layer;
+    float drop = layer == 0.0 ? 0.008 : (layer == 1.0 ? 0.05 : 0.13);
     for (int k = 0; k < 7; k++)
     {
         float fk = float (k) + layer * 13.0;
-        if (hash12 (S + vec2 (fk, 9.0)) < 0.25) continue;
+        if (hash12 (S + vec2 (fk, 9.0)) < 0.22) continue;
         float x0 = ((float (k) + 0.15 + 0.7 * hash12 (S + vec2 (fk, 1.0))) / 7.0 * 1.1 - 0.05) * asp;
-        float hk = (0.4 + 0.5 * hash12 (S + vec2 (fk, 2.0))) * (0.55 + 0.55 * uPres[1]) * (0.55 + 0.45 * scale);
-        float base = bed + 0.03 * (2.0 - layer);
+        float base = bedAt (x0) - drop;
+        float hk = (0.45 + 0.55 * hash12 (S + vec2 (fk, 2.0))) * (0.55 + 0.55 * uPres[1]) * (0.5 + 0.5 * scale);
         float yy = (uv.y - base) / hk;
-        if (yy < 0.0 || yy > 1.0) continue;
-        float sway = (sin (uTime * 0.45 + fk * 1.3 + yy * 2.2) * 0.05 + sin (uTime * 0.21 + fk) * 0.025) * yy * yy;
-        float wdt = (0.004 + 0.006 * scale) * (1.0 - 0.45 * yy);
-        float leaf = 0.5 + 0.5 * smoothstep (-0.6, 0.9, sin (yy * (16.0 + 5.0 * hash12 (vec2 (fk, 4.0))) + fk * 3.0));   // smooth blades
-        float side = sin (yy * 11.0 + fk);                              // blades lean to alternate sides, smoothly
-        float w = wdt * (0.8 + 2.2 * leaf);
+        float wdt = (0.0035 + 0.0065 * scale);
+        // contact shadow on the sand around the root
+        float sd = length (vec2 ((p.x - x0) / (wdt * 6.0), (uv.y - base) / (0.01 * scale + 0.004)));
+        vec3 under = col * (1.0 - 0.45 * smoothstep (1.0, 0.0, sd) * step (uv.y, base + 0.004));
+        col = under;
+        if (yy < -0.02 || yy > 1.0) continue;
+        float y1 = max (yy, 0.0);
+        // the stipe bends with the current: slow sway that grows with height, plus a lazy S-curve of its own
+        float sway = (sin (uTime * 0.42 + fk * 1.3 + y1 * 2.0) * 0.045 + sin (uTime * 0.19 + fk) * 0.03) * y1 * y1
+                   + 0.012 * sin (y1 * 5.0 + fk * 2.3) * y1;
+        float leaf = 0.5 + 0.5 * smoothstep (-0.6, 0.9, sin (y1 * (16.0 + 5.0 * hash12 (vec2 (fk, 4.0))) + fk * 3.0 - uTime * 0.3));
+        float side = sin (y1 * 11.0 + fk + 0.3 * sin (uTime * 0.6 + fk));
+        float w = wdt * (0.7 + 2.3 * leaf * smoothstep (0.0, 0.15, y1)) * (1.0 - 0.35 * y1);
         float dx = p.x - x0 - sway - side * w * 0.35 * leaf;
-        float aa = 1.5 / uRes.y;   // anti-aliased edge, whatever the resolution
-        float a = smoothstep (w + aa, w - aa, abs (dx)) * smoothstep (1.0, 0.92, yy);
+        float aa = 1.5 / uRes.y;
+        float a = smoothstep (w + aa, w - aa, abs (dx)) * smoothstep (1.0, 0.9, yy);
         if (a <= 0.0) continue;
         float across = clamp (dx / w, -1.0, 1.0);
-        float shade = 0.5 + 0.5 * sqrt (1.0 - across * across);
+        float shade = 0.45 + 0.55 * sqrt (1.0 - across * across);
         float back = smoothstep (0.55, 1.0, abs (across));
-        vec3 c = mix (vec3 (0.06, 0.09, 0.04), vec3 (0.3, 0.36, 0.13), 0.25 + 0.75 * yy) * shade;
+        float veins = 0.95 + 0.05 * sin (y1 * 60.0 + across * 2.0);
+        vec3 c = mix (vec3 (0.05, 0.08, 0.035), vec3 (0.3, 0.36, 0.13), 0.2 + 0.8 * y1) * shade * veins;
         c += vec3 (0.22, 0.42, 0.14) * back * (0.3 + 0.7 * uv.y) * (0.4 + 0.6 * L);
         c *= (0.45 + 0.75 * uv.y) * (0.55 + 0.6 * L);
         col = mix (col, mix (c, col, fog), a);
+        // buried: a soft little mound of sand covers the root
+        float mound = base + (0.006 + 0.01 * scale) * (1.0 - smoothstep (0.0, 1.0, abs (p.x - x0) / (wdt * 5.0)));
+        col = mix (col, under, smoothstep (mound + 0.002, mound - 0.003, uv.y));
     }
+}
+// moon jellyfish (Aurelia): a living, slightly asymmetric bell that contracts and glides up, four horseshoe gonads,
+// radial canals, a fringe of fine tentacles that ripples with each pulse, frilly oral arms; far ones small and hazy
+void jelly (inout vec3 col, vec2 p, float fj, float asp)
+{
+    float z = 1.0 - fj / 4.0;                                    // 0 near ... 1 far (drawn far to near)
+    float rate = 0.32 + 0.1 * hash12 (S + vec2 (fj, 5.0));
+    float ph = uTime * rate + hash12 (S + vec2 (fj, 6.0)) * 7.0;
+    float f = fract (ph);
+    float c = smoothstep (0.0, 0.18, f) * (1.0 - smoothstep (0.18, 0.75, f));      // contraction: quick squeeze, slow release
+    float sp = 0.002 + 0.0015 * hash12 (S + fj);
+    float life = fract (hash12 (S + vec2 (fj, 9.0)) + uMus * sp);
+    float bob = 0.018 * (smoothstep (0.0, 0.45, f) - f);         // glides up on each pulse, sinks a little in between
+    vec2 jc = vec2 ((0.1 + 0.8 * fract (hash12 (S + vec2 (fj, 3.0)) + fj * 0.23)) * asp + sin (uTime * 0.07 + fj * 2.0) * 0.06,
+                    0.32 + 0.56 * life + bob);
+    float vis = smoothstep (0.0, 0.1, life) * smoothstep (1.0, 0.88, life);
+    if (vis <= 0.0) return;
+    float R = (0.075 + 0.03 * hash12 (vec2 (fj, 2.0))) * (1.0 - 0.5 * z) * (0.85 + 0.3 * uPres[0]);
+    vec2 q = (p - jc) / R;
+    if (abs (q.x) > 2.2 || q.y > 1.6 || q.y < -7.0) return;     // outside this jelly: skip the work
+    float tilt = 0.18 * sin (uTime * 0.11 + fj * 1.9) + 0.06 * sin (uTime * 0.37 + fj);
+    q = mat2 (cos (tilt), -sin (tilt), sin (tilt), cos (tilt)) * q;
+    q.x /= 1.0 - 0.18 * c;
+    q.y /= 0.82 + 0.16 * c;
+    float th = atan (q.x, q.y);
+    float wob = 1.0 + 0.045 * sin (3.0 * th + uTime * 0.9 + fj) + 0.03 * sin (5.0 * th - uTime * 1.3 + fj * 2.0) + 0.02 * noise (vec2 (th * 4.0, uTime * 0.5 + fj));
+    float rimY = -0.16 * q.x * q.x - 0.06 * c * q.x * q.x + 0.035 * (noise (vec2 (q.x * 5.0 + fj * 3.0, uTime * 0.8)) - 0.5);
+    float dome = length (vec2 (q.x, max (q.y, 0.0) * 0.95)) / wob;
+    float soft = 0.04 + 0.12 * z;                                // far ones are out of focus
+    float body = smoothstep (1.0, 1.0 - soft - 0.03, dome) * smoothstep (rimY - 0.04 - soft, rimY + 0.04, q.y);
+    float edge = body * pow (clamp (dome, 0.0, 1.0), 6.0);       // light gathers where the gel is seen edge-on
+    float milk = body * (0.025 + 0.04 * smoothstep (0.9, 0.2, dome));
+    float canals = body * pow (abs (cos ((th + 0.04 * sin (dome * 14.0 + fj)) * 8.0)), 30.0) * 0.22 * smoothstep (0.25, 0.95, dome);
+    // four horseshoe gonads around the centre (seen from the side: two near, two behind and fainter)
+    float gon = 0.0;
+    for (int g = 0; g < 4; g++)
+    {
+        float ga = float (g) * 1.5708 + 0.4 + 0.1 * sin (uTime * 0.3 + fj);
+        vec2 gc = vec2 (sin (ga) * 0.34, 0.3 + 0.1 * cos (ga));
+        float front = 0.55 + 0.45 * cos (ga);
+        float rr = length ((q - gc) * vec2 (1.0, 1.25));
+        float ring = smoothstep (0.09, 0.0, abs (rr - 0.15)) * smoothstep (-0.7, 0.3, dot (normalize (q - gc + 1e-4), vec2 (0.0, 1.0)));
+        gon += ring * front;
+    }
+    gon *= body;
+    // the bell margin glows a little and flutters
+    float margin = smoothstep (0.07, 0.0, abs (q.y - rimY)) * smoothstep (1.05, 0.85, abs (q.x)) * (0.6 + 0.4 * c);
+    // fine marginal tentacles: dense short fringe + a few long ones; a wave runs down them after each pulse
+    float t2 = clamp ((rimY - q.y) / 5.0, 0.0, 1.0);
+    float wave = sin (uTime * 1.3 - t2 * 7.0 + fj * 2.0) * (0.25 + 0.2 * c) * t2 + 0.15 * sin (uTime * 0.5 + fj) * t2 * t2;
+    float tx = q.x * (1.0 - 0.15 * t2) + wave;
+    float u = tx * 4.2 + fj * 0.37;                               // ~8 tentacles per bell width, drawn as anti-aliased lines
+    float dl = abs (fract (u) - 0.5) / 4.2 * R * uRes.y;          // distance to the nearest tentacle, in pixels
+    float fringe = smoothstep (0.6 + 0.9 * (1.0 - t2) + 2.5 * soft, 0.0, dl) * (0.55 + 0.45 * (1.0 - t2));
+    float longOnes = step (0.55, hash12 (vec2 (floor (u), fj * 7.0)));
+    float tlen = mix (0.18, 1.0, longOnes);
+    float ten = step (q.y, rimY) * smoothstep (1.0, 0.92, abs (q.x)) * smoothstep (tlen, tlen * 0.3, t2) * fringe;
+    // oral arms: four frilly ribbons hanging from the centre, curling slowly
+    float t3 = clamp (-q.y / 2.6, 0.0, 1.0);
+    float arms = 0.0;
+    for (int k = 0; k < 4; k++)
+    {
+        float fk = float (k) - 1.5;
+        float ax = q.x - fk * 0.09 - sin (uTime * 0.7 - t3 * 6.0 + fj + fk) * 0.28 * t3 - 0.1 * sin (uTime * 0.31 + fk) * t3 * t3;
+        float frill = 0.7 + 0.3 * sin (t3 * 46.0 + fk * 2.0 + uTime * 0.8);
+        float w = 0.085 * (1.0 - 0.75 * t3) * frill;
+        arms += smoothstep (w, w * 0.25, abs (ax)) * (0.6 + 0.4 * frill);
+    }
+    arms *= step (q.y, 0.05) * smoothstep (1.0, 0.3, t3);
+    float halo = exp (-length (q * vec2 (1.0, 0.8)) * 2.4) * 0.12;
+    vec3 tint = mix (vec3 (0.75, 0.92, 1.0), fj == 1.0 ? vec3 (1.0, 0.7, 0.9) : (fj == 3.0 ? vec3 (0.8, 0.75, 1.0) : vec3 (0.7, 1.0, 0.95)), 0.45);
+    vec3 gonC = mix (vec3 (0.95, 0.55, 0.85), vec3 (0.75, 0.6, 1.0), hash12 (vec2 (fj, 8.0)));
+    float k = vis * (1.0 - 0.55 * z) * (0.75 + 0.45 * uGlow[0]);
+    col *= 1.0 - 0.18 * body * vis;                              // the gel dims what is behind it a little
+    col += (tint * (edge * 0.7 + milk + canals + margin * 0.4 + ten * 0.45 + arms * 0.26 + halo) + gonC * gon * 0.35) * k * (0.85 + 0.25 * c);
 }
 vec3 scene (vec2 uv)
 {
@@ -326,8 +423,6 @@ vec3 scene (vec2 uv)
     float xs = p.x + (1.0 - uv.y) * 0.35;
     float rays = pow (noise (vec2 (xs * 4.0 + S.x, uTime * 0.1)), 3.0) + 0.6 * pow (noise (vec2 (xs * 9.0 - S.y, uTime * 0.17)), 4.0);
     col += vec3 (0.5, 0.88, 1.0) * rays * pow (uv.y, 1.3) * (0.16 + 0.42 * uPres[3]) * (0.5 + 0.7 * L);
-    float bed = 0.21 + 0.05 * fbm3 (vec2 (p.x * 1.6 + S.x, 0.3)) + 0.015 * sin (p.x * 2.7);
-    kelp (col, p, uv, 0.0, bed, asp, L);
     // a school of small fish far away, drifting across (Bass moves it)
     {
         vec2 sc = vec2 (fract (uMus * 0.003 + hash12 (S + 4.0)) * (asp + 0.8) - 0.4, 0.5 + 0.12 * sin (uTime * 0.05 + S.x));
@@ -342,59 +437,10 @@ vec3 scene (vec2 uv)
             float tail = length ((q + vec2 (0.016, 0.0)) / vec2 (0.005, 0.005 + 0.004 * sin (uTime * 6.0 + ff)));
             fish = max (fish, max (smoothstep (1.0, 0.6, body), smoothstep (1.0, 0.6, tail) * step (q.x, -0.011)));
         }
-        col = mix (col, col * 0.5 + vec3 (0.02, 0.05, 0.06) * L, fish * (0.45 + 0.3 * uPres[6]));
+        col = mix (col, col * 0.55 + vec3 (0.02, 0.05, 0.06) * L, fish * (0.4 + 0.3 * uPres[6]) * 0.8);
     }
-    kelp (col, p, uv, 1.0, bed, asp, L);
-    // marine snow drifting (Texture)
-    for (int i = 0; i < 2; i++)
-    {
-        float fi = float (i);
-        vec2 q = (p + vec2 (uMus * 0.004 * (1.0 + fi), -uTime * 0.006 * (1.0 + fi))) * (40.0 + 30.0 * fi) + S;
-        col += vec3 (0.6, 0.95, 0.9) * stars (q, 0.12, 0.06) * (0.1 + 0.3 * uPres[2]) * (0.6 + 0.4 * uGlow[2]);
-    }
-    // jellyfish (Drone pulses, Pad tints): translucent glowing bells with trailing tentacles
-    for (int j = 0; j < 4; j++)
-    {
-        float fj = float (j);
-        float sp = 0.0025 + 0.002 * hash12 (S + fj);
-        float life = fract (hash12 (S + fj + 9.0) + uMus * sp);
-        vec2 jc = vec2 ((0.14 + 0.24 * fj) * asp + sin (uTime * 0.12 + fj * 2.0) * 0.05, 0.3 + 0.55 * life + 0.02 * sin (uTime * 0.8 + fj));
-        float vis = smoothstep (0.0, 0.1, life) * smoothstep (1.0, 0.9, life);   // fades in below, out near the surface
-        float beat = 0.5 + 0.5 * sin (uTime * (1.1 + 0.25 * fj) + fj * 1.7);
-        float R = (0.055 + 0.03 * hash12 (vec2 (fj, 2.0))) * (0.85 + 0.3 * uPres[0]);
-        vec3 jcol = fj == 0.0 ? vec3 (1.0, 0.45, 0.85) : (fj == 1.0 ? vec3 (0.45, 1.0, 0.9) : (fj == 2.0 ? vec3 (0.72, 0.62, 1.0) : vec3 (1.0, 0.6, 0.75)));
-        // bell in its own frame (q.y up), pulsing: it narrows and lengthens on each beat
-        vec2 q = (p - jc) / R;
-        q.x /= 1.0 - 0.14 * beat;
-        q.y /= 0.85 + 0.12 * beat;
-        float rimY = -0.28 * q.x * q.x + 0.025 * sin (q.x * 26.0 + uTime * 2.0) * q.x * q.x;   // scalloped margin
-        float dome = length (vec2 (q.x, max (q.y, 0.0) * 1.1));
-        float inBell = smoothstep (1.0, 0.94, dome) * smoothstep (rimY - 0.03, rimY + 0.05, q.y);
-        float edge = inBell * pow (dome, 5.0);                                          // gel is brighter where you look through more of it
-        float canals = inBell * pow (abs (cos (atan (q.x, q.y + 0.4) * 8.0)), 24.0) * 0.35 * smoothstep (0.2, 0.9, dome);
-        float gonads = smoothstep (0.3, 0.05, length (vec2 (abs (q.x) - 0.26, q.y - 0.3))) * inBell * 1.3;
-        float marginGlow = smoothstep (0.06, 0.0, abs (q.y - rimY)) * step (abs (q.x), 1.0) * (0.6 + 0.4 * beat);
-        // oral arms: three ruffled ribbons from the centre
-        float tt = clamp (-q.y / 3.2, 0.0, 1.0);
-        float arms = 0.0;
-        for (int k = -1; k <= 1; k++)
-        {
-            float ax = q.x - float (k) * 0.16 - sin (uTime * 0.9 - tt * 7.0 + fj + float (k)) * 0.22 * tt;
-            float w = 0.11 * (1.0 - 0.7 * tt) * (0.75 + 0.25 * sin (tt * 40.0 + float (k) * 2.0));
-            arms += smoothstep (w, w * 0.2, abs (ax));
-        }
-        arms *= step (q.y, 0.0) * smoothstep (1.0, 0.25, tt);
-        // long fine tentacles hanging from the margin
-        float t2 = clamp ((rimY - q.y) / 5.5, 0.0, 1.0);
-        float tx = q.x + sin (uTime * 1.2 - t2 * 6.0 + fj * 2.0) * 0.35 * t2;
-        float ten = step (q.y, rimY) * step (abs (tx), 0.95) * smoothstep (1.0, 0.0, t2) * pow (abs (sin (tx * 22.0)), 40.0);
-        float halo = exp (-length (q) * 2.2) * 0.18;
-        // translucent: the bell tints what is behind it a little, the light is added on top
-        col = mix (col, col * (0.75 + 0.5 * jcol), inBell * 0.45 * vis);
-        vec3 light = jcol * (edge * 0.9 + inBell * 0.07 + canals + gonads * 0.45 + marginGlow * 0.5 + arms * 0.4 + ten * 0.35 + halo);
-        col += light * vis * (0.7 + 0.5 * uGlow[0]) * (0.75 + 0.35 * beat);
-    }
-    // seabed: rippled sand, dark rocks, a caustic web dancing on it, melting into the water far away
+    // seabed: rippled sand with pebbles and a caustic web, melting into the water far away
+    float bed = bedAt (p.x);
     {
         float a = smoothstep (0.0, 0.012, bed - uv.y);
         if (a > 0.0)
@@ -403,15 +449,31 @@ vec3 scene (vec2 uv)
             vec2 sp2 = vec2 (p.x * (3.0 + 6.0 * d), uv.y * 40.0);
             float ripple = 0.5 + 0.5 * sin (sp2.y * 1.2 + fbm3 (sp2 * 0.3) * 6.0 + p.x * 4.0);
             vec3 sand = mix (vec3 (0.08, 0.16, 0.16), vec3 (0.34, 0.42, 0.35), 0.3 + 0.35 * fbm (p * vec2 (10.0, 30.0) + S) + 0.25 * ripple * d);
-            float rock = smoothstep (0.58, 0.64, fbm3 (vec2 (p.x * 3.0, uv.y * 9.0) + S * 2.0));
-            sand = mix (sand, vec3 (0.03, 0.06, 0.07) * (0.6 + 0.6 * fbm (p * 20.0)), rock * 0.85);
+            vec2 pq = vec2 (p.x * (14.0 + 10.0 * d), uv.y * 60.0);
+            float peb = smoothstep (0.66, 0.7, fbm3 (pq + S * 3.0)) * d;
+            float pebLit = fbm3 (pq + S * 3.0 + vec2 (0.0, 0.25));
+            sand = mix (sand, mix (vec3 (0.05, 0.08, 0.09), vec3 (0.22, 0.27, 0.26), pebLit), peb * 0.8);
             float cw = web (vec2 (p.x * 7.0, uv.y * 18.0) + vec2 (uTime * 0.12, -uTime * 0.09));
-            sand += vec3 (0.35, 0.75, 0.75) * cw * (0.22 + 0.4 * L) * (1.0 - rock * 0.7) * (0.4 + 0.6 * d);
+            sand += vec3 (0.35, 0.75, 0.75) * cw * (0.22 + 0.4 * L) * (0.4 + 0.6 * d);
             sand *= 0.55 + 0.6 * L;
             col = mix (col, mix (sand, col, (1.0 - d) * 0.7 + 0.08), a);
         }
     }
-    kelp (col, p, uv, 2.0, bed - 0.05, asp, L);
+    kelp (col, p, uv, 0.0, asp, L);
+    jelly (col, p, 0.0, asp);
+    jelly (col, p, 1.0, asp);
+    kelp (col, p, uv, 1.0, asp, L);
+    // marine snow drifting (Texture)
+    for (int i = 0; i < 2; i++)
+    {
+        float fi = float (i);
+        vec2 q = (p + vec2 (uMus * 0.004 * (1.0 + fi), -uTime * 0.006 * (1.0 + fi))) * (40.0 + 30.0 * fi) + S;
+        col += vec3 (0.6, 0.95, 0.9) * stars (q, 0.12, 0.06) * (0.1 + 0.3 * uPres[2]) * (0.6 + 0.4 * uGlow[2]);
+    }
+    jelly (col, p, 2.0, asp);
+    jelly (col, p, 3.0, asp);
+    jelly (col, p, 4.0, asp);
+    kelp (col, p, uv, 2.0, asp, L);
     // out-of-focus specks right in front of the camera
     {
         vec2 bq = (p + vec2 (uTime * 0.004, -uTime * 0.012)) * 5.0;

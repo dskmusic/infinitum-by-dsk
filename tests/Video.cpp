@@ -158,6 +158,7 @@ public:
             {
                 auto p = gx::Preset::fromVar (v);
                 if (p.meta.name != name) continue;
+                markSwitch();
                 p.applyTo (proc);
                 proc.presetGeneration.fetch_add (1);
                 return;
@@ -183,6 +184,7 @@ public:
             }
         if (ranked.empty()) return;
         std::sort (ranked.begin(), ranked.end(), [] (auto& a, auto& b) { return a.first > b.first; });
+        markSwitch();
         ranked[(size_t) juce::jmin (nth, (int) ranked.size() - 1)].second.applyTo (proc);
         proc.presetGeneration.fetch_add (1);
     }
@@ -242,8 +244,20 @@ public:
         cardFrom = cardTo = -1;
     }
 
+    std::vector<size_t> switches;   // audio positions where the preset changes (softened with a short dip)
+    void markSwitch() { if (! trailerMode) switches.push_back (L.size()); }
     void finishAudio()
     {
+        {   // ~0.6 s fade down before each preset change, ~1.2 s fade back up after: no abrupt jumps between scenes
+            const size_t pre = (size_t) (kSr * 0.6), post = (size_t) (kSr * 1.2);
+            for (auto s : switches)
+                for (size_t i = s > pre ? s - pre : 0; i < juce::jmin (L.size(), s + post); ++i)
+                {
+                    const float t = i < s ? (float) (s - i) / (float) pre : (float) (i - s) / (float) post;
+                    const float g = 0.12f + 0.88f * t * t * (3.0f - 2.0f * t);
+                    L[i] *= g; R[i] *= g;
+                }
+        }
         // gentle level matching (slow AGC towards -18 dBFS RMS), soft limiter, fade-out at the end
         const size_t hop = (size_t) (kSr * 0.01), win = (size_t) (kSr * 1.0);
         std::vector<float> gainDb (L.size() / hop + 2, 0.0f);
@@ -294,6 +308,7 @@ private:
                 feedGpuLandscapesV (relaxView.get(), 1.0f);
                 g.drawImageAt (relaxView->createComponentSnapshot (relaxView->getLocalBounds(), true, 1.0f), 0, 0);
             }
+            else if (trailerMode) g.fillAll (juce::Colours::black);   // the teaser never shows the plugin window
             else
             {
                 auto ui = ed->createComponentSnapshot (ed->getLocalBounds(), true, kUiScale);
@@ -612,9 +627,9 @@ int runTrailer (int argc, char** argv)
     d.shot (scValley, 5.0);
     d.proc.setParamPlain (P::fadeOut, 6.0f);
     d.comingSoon = true;
-    d.card (true, 1.2, 4.6, 0.0);
-    d.proc.setPlaying (false);
-    d.card (true, 0.0, 1.6, 0.0);
+    d.proc.setPlaying (false);                          // the music fades out under the logo
+    d.card (true, 1.2, 5.4, 1.2);                       // one continuous card, then a fade to black
+    d.wait (0.5);
     d.finishAudio();
     std::printf ("trailer frames written to %s\n", dir.getChildFile ("frames").getFullPathName().toRawUTF8());
     return 0;
