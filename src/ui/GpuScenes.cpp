@@ -75,8 +75,8 @@ vec3 skyGrad (float t, float L)
     return mix (low, top, pow (clamp (t, 0.0, 1.0), 0.55));
 }
 // weather, slowly changing with the Evolution clock: haze (0 clear .. 1 thick) and precipitation (0 .. 1)
-float wHaze() { return smoothstep (0.4, 0.85, noise (vec2 (uEvoT / 95.0 + S.x * 0.37, 1.3))); }
-float wRain() { return smoothstep (0.6, 0.88, noise (vec2 (uEvoT / 120.0 + S.y * 0.41, 7.7))); }
+float wHaze() { return smoothstep (0.5, 0.9, noise (vec2 (uEvoT / 95.0 + S.x * 0.37, 1.3))); }
+float wRain() { return smoothstep (0.68, 0.92, noise (vec2 (uEvoT / 120.0 + S.y * 0.41, 7.7))); }
 // falling streaks at three depths, every column with its own speed and phase
 vec3 rainOverlay (vec2 p, vec2 uv, float amount, vec3 tint)
 {
@@ -125,76 +125,196 @@ void main()
 
 // ------------------------------------------------------------------ Valley
 const char* valley = R"GLSL(
+// the sun follows Light: under the horizon at night (then the moon is up), golden at dawn / dusk, high at midday
+void sunState (float L, float asp, float hor, out vec2 sp, out vec3 sc, out float el)
+{
+    float ph = fract (uEvoT / 600.0 + fract (uSeed * 0.0137));
+    el = mix (-0.12, 0.5, smoothstep (0.05, 0.95, L));
+    sp = vec2 ((0.15 + 0.7 * ph) * asp, hor + el);
+    float gold = 1.0 - smoothstep (0.04, 0.3, el);
+    sc = mix (vec3 (1.25, 1.05, 0.85), vec3 (1.45, 0.62, 0.28), gold);
+    if (el < 0.0) { sp = vec2 ((0.85 - 0.7 * ph) * asp, hor + 0.42); sc = vec3 (0.7, 0.78, 1.0); }
+}
+vec3 valleySky (vec2 p, float y, float hor, vec2 sp, vec3 sc, float el)
+{
+    float t = clamp ((y - hor) / (1.0 - hor), 0.0, 1.0);
+    float day = smoothstep (-0.06, 0.06, el);
+    vec3 zen = mix (vec3 (0.006, 0.01, 0.035), vec3 (0.12, 0.3, 0.62), smoothstep (-0.05, 0.3, el));
+    vec3 horz = mix (vec3 (0.035, 0.05, 0.11), mix (vec3 (0.98, 0.5, 0.28), vec3 (0.72, 0.84, 0.96), smoothstep (0.08, 0.35, el)), day);
+    vec3 c = mix (horz, zen, pow (t, 0.5));
+    float d = length (p - sp);
+    c += sc * (0.02 / (d * d + 0.018)) * (0.25 + 0.6 * (1.0 - smoothstep (0.05, 0.4, el))) * (el < 0.0 ? 0.2 : 1.0);
+    c += vec3 (1.0, 0.42, 0.18) * exp (-t * 6.0) * exp (-abs (p.x - sp.x) * 1.4) * (1.0 - smoothstep (0.02, 0.3, el)) * day * 0.55;
+    return c;
+}
+// mountain faces: ridges and gullies from a 2D ridged field, lit from the sun's side
+float mountainShade (vec2 q, float sunSide)
+{
+    float e = 0.02;
+    float h0 = ridged (q), hx = ridged (q + vec2 (e, 0.0)), hy = ridged (q + vec2 (0.0, e));
+    vec3 n = normalize (vec3 ((h0 - hx) * 1.6, (h0 - hy) * 0.8, e));
+    return clamp (0.12 + 1.05 * max (dot (n, normalize (vec3 (sunSide * 0.8, 0.45, 0.4))), 0.0), 0.0, 1.3);
+}
+// cloud density over the land below (its shadow), from the same field as the sky clouds
+float cloudShadow (float x)
+{
+    return smoothstep (0.5, 0.8, fbm (vec2 (x * 1.3 + uMus * 0.006, 3.3) + S)) * (0.6 + 0.5 * uDensity);
+}
+// conifer crowns on a slope (q in tree cells): returns coverage, lit side in .y
+vec2 forest (vec2 q, float sunSide)
+{
+    vec2 id = floor (q), f = fract (q) - vec2 (0.5, 0.0);
+    f.x += (hash12 (id) - 0.5) * 0.4;
+    float hgt = 0.75 + 0.25 * hash12 (id + 3.1);
+    float w = 0.48 * (hgt - f.y) / hgt;
+    float c = smoothstep (w + 0.06, w - 0.02, abs (f.x)) * step (f.y, hgt);
+    float lit = 0.45 + 0.55 * smoothstep (-0.2, 0.25, f.x * sunSide);
+    return vec2 (c, lit);
+}
+)GLSL" R"GLSL(
 vec3 scene (vec2 uv)
 {
     float L = uLight, asp = uRes.x / uRes.y;
     vec2 p = vec2 (uv.x * asp, uv.y);
-    float hor = 0.30;
-    vec3 col = skyGrad ((uv.y - hor) / (1.0 - hor), L);
-    vec3 low = skyGrad (0.0, L);
-    // sun / moon on the evolution clock
-    float ph = fract (uEvoT / 420.0 + fract (uSeed * 0.0137));
-    vec2 sp = vec2 ((0.1 + 0.8 * ph) * asp, hor + 0.03 + sin (ph * 3.14159) * 0.52);
-    vec3 sc = mix (vec3 (0.85, 0.9, 1.05), vec3 (1.25, 0.95, 0.6), step (0.5, L));
+    float hor = 0.33;
+    vec2 sp; vec3 sc; float el;
+    sunState (L, asp, hor, sp, sc, el);
+    float day = smoothstep (-0.06, 0.06, el), gold = 1.0 - smoothstep (0.04, 0.3, el);
+    float haze = wHaze(), rain = wRain();
+    vec3 col = valleySky (p, uv.y, hor, sp, sc, el);
+    vec3 low = valleySky (vec2 (p.x, 0.0), hor, hor, sp, sc, el);
+    // the sun (or the moon) and the stars at night
     float sd = length (p - sp);
-    col += sc * 0.018 / (sd * sd + 0.01) * (0.25 + 0.25 * uEnergy);
-    col = mix (col, sc * 1.6, smoothstep (0.042, 0.036, sd));
-    col += vec3 (stars (p * 110.0 + S, 0.09, 0.08)) * clamp ((0.6 - L) * 2.2, 0.0, 1.0);
-    // aurora veil (Shimmer) in the night sky
-    float au = uPres[3] * clamp ((0.65 - L) * 2.0, 0.0, 1.0);
-    if (au > 0.0)
-    {
-        float n = fbm (vec2 (p.x * 1.2 + uTime * 0.02, uTime * 0.03) + S);
-        float yb = 0.72 + (n - 0.5) * 0.3;
-        float a = exp (-abs (uv.y - yb) * 9.0) * fbm (vec2 (p.x * 6.0, uv.y * 2.0 - uTime * 0.05));
-        col += vec3 (0.2, 0.9, 0.65) * a * au * (0.5 + uGlow[3]);
-    }
-    // volumetric clouds lit by the sun
+    col = mix (col, sc * 1.7, smoothstep (0.038, 0.032, sd) * (1.0 - 0.6 * rain));
+    col += vec3 (stars (p * 110.0 + S, 0.09, 0.08)) * (1.0 - day) * (1.0 - haze * 0.7);
+    // volumetric clouds: lit from the sun side, golden at dusk, thicker with haze and rain
     vec2 cp = vec2 (p.x * 1.3 + uMus * 0.006, uv.y * 4.5) + S;
     float d1 = fbm (cp), d2 = fbm (cp + normalize (sp - p) * 0.06);
-    float cl = smoothstep (0.48, 0.82, d1) * smoothstep (hor, hor + 0.3, uv.y) * (0.6 + 0.5 * uDensity);
+    float cover = 0.48 - 0.12 * haze - 0.18 * rain;
+    float cl = smoothstep (cover, cover + 0.32, d1) * smoothstep (hor, hor + 0.25, uv.y) * (0.6 + 0.5 * uDensity);
     float lit = clamp ((d1 - d2) * 6.0 + 0.5, 0.0, 1.0);
-    vec3 cc = mix (low * 0.55 + 0.02, sc * mix (0.5, 1.1, L), lit);
-    col = mix (col, cc, cl * 0.85);
-    // mountain ranges: ridged fractal terrain with aerial perspective (Drone far, Pad middle, Texture near)
-    float layerY[3]; layerY[0] = hor + 0.20; layerY[1] = hor + 0.10; layerY[2] = hor + 0.02;
+    vec3 cc = mix (low * 0.5 + 0.015, sc * mix (0.35, 1.1, day) * (1.0 - 0.5 * rain), lit);
+    cc += sc * smoothstep (0.6, 0.0, sd) * (1.0 - cl) * 0.2 * day;                                  // silver lining
+    col = mix (col, cc, cl * 0.88);
+    float sunVis = (1.0 - cl) * step (0.0, el);
+    // flock of birds now and then (more when the Bells ring)
+    {
+        float w = fract (uTime / 55.0 + hash12 (S + 1.0));
+        if (w < 0.35 || uGlow[5] > 0.5)
+        {
+            vec2 fc = vec2 (mix (-0.3, asp + 0.3, w / 0.35), hor + 0.33 + 0.05 * sin (uTime * 0.1));
+            for (int k = 0; k < 9; k++)
+            {
+                float fk = float (k);
+                vec2 o = vec2 (-abs (fk - 4.0) * 0.022, -abs (fk - 4.0) * 0.012) + 0.004 * vec2 (sin (uTime * 0.7 + fk), cos (uTime * 0.9 + fk * 1.3));
+                vec2 q = (p - fc - o) / 0.01;
+                float flap = sin (uTime * 7.0 + fk * 1.7) * 0.5;
+                float wing = abs (abs (q.x) * (0.45 + flap * 0.3) - q.y) ;
+                float bird = smoothstep (0.18, 0.05, wing) * step (abs (q.x), 1.0);
+                col = mix (col, vec3 (0.02, 0.02, 0.03) + low * 0.15, bird * 0.85);
+            }
+        }
+    }
+    // mountain ranges: rock with sun-side shading, snow on the far peaks, alpenglow at dusk, blue shade in the valleys,
+    // conifer forests on the lower slopes, moving cloud shadows
+    float shadowC = cloudShadow (p.x);
+    float layerY[3]; layerY[0] = hor + 0.2; layerY[1] = hor + 0.1; layerY[2] = hor + 0.03;
+    float sunSide = sp.x > p.x ? 1.0 : -1.0;
     for (int i = 0; i < 3; i++)
     {
         float fi = float (i);
         float amp = (0.24 - 0.05 * fi) * (0.45 + 0.55 * uPres[i]);
         float x = p.x * (0.9 + 0.7 * fi) + uMus * (0.002 + 0.006 * fi) + S.x + fi * 11.0;
         float h = layerY[i] - 0.08 + amp * ridged (vec2 (x, fi * 3.7));
-        if (uv.y < h)
+        float edgeA = smoothstep (h + 1.2 / uRes.y, h - 1.2 / uRes.y, uv.y);
+        if (edgeA > 0.0)
         {
             float depthIn = h - uv.y;
-            float shade = rockShade (vec2 (x * 5.0, uv.y * 9.0 + fi * 4.0), sp.x > p.x ? 1.0 : -1.0);
+            float shade = mountainShade (vec2 (x * 3.5, uv.y * 6.0 + fi * 4.0), sunSide) * (0.75 + 0.35 * rockShade (vec2 (x * 9.0, uv.y * 16.0 + fi), sunSide));
             float tex = fbm (vec2 (x * 14.0, uv.y * 40.0));
-            vec3 rock = mix (vec3 (0.025, 0.03, 0.05), vec3 (0.13, 0.12, 0.16), tex) * shade * (1.0 - 0.5 * smoothstep (0.0, 0.2, depthIn));
-            rock *= 0.35 + 0.65 * L;
-            if (i == 0) rock = mix (rock, vec3 (0.85, 0.88, 0.95) * (0.35 + 0.65 * L) * shade, smoothstep (0.03, 0.0, h - uv.y) * smoothstep (0.45, 0.6, fbm3 (vec2 (x * 9.0, uv.y * 25.0))));
-            if (i == 2) { float trees = h - 0.012 * (0.6 + 0.8 * noise (vec2 (x * 140.0, 0.0))); if (uv.y > trees) rock = vec3 (0.01, 0.015, 0.02); }
-            float rim = smoothstep (0.01, 0.0, h - uv.y) * (0.3 + 0.7 * uGlow[i]);
-            float fog = (0.62 - 0.27 * fi) * (0.6 + 0.3 * uSpace) * (1.0 - 0.5 * smoothstep (0.0, 0.25, h - uv.y));
-            vec3 air = mix (skyGrad (0.75, L), low, 0.35) * (0.75 - 0.15 * fi);   // aerial perspective: distant ranges turn blue
-            col = mix (rock * (1.25 - 0.2 * fi), air, fog) + sc * rim * 0.15 * (1.0 - fi * 0.3);
+            vec3 rock = mix (vec3 (0.02, 0.02, 0.03), vec3 (0.22, 0.19, 0.18), tex) * shade * 1.15;
+            rock *= mix (vec3 (0.25, 0.3, 0.45), sc * 0.9, day * (0.4 + 0.6 * smoothstep (0.0, 0.25, 0.25 - depthIn)));
+            if (i == 0) rock = mix (rock, vec3 (0.85, 0.9, 1.0) * mix (0.25, 1.0, day) * shade * (0.8 + 0.4 * gold * vec3 (1.2, 0.85, 0.7)),
+                                    smoothstep (0.06, 0.0, depthIn) * smoothstep (0.38, 0.55, fbm3 (vec2 (x * 9.0, uv.y * 25.0)) + 0.15 * shade));
+            rock += sc * vec3 (1.0, 0.5, 0.35) * gold * day * smoothstep (0.05, 0.0, depthIn) * 0.35 * (0.5 + 0.5 * shade);   // alpenglow
+            if (i > 0)
+            {
+                vec2 fq = vec2 (x * (26.0 + 22.0 * fi), uv.y * (50.0 + 40.0 * fi));
+                vec2 tr = forest (fq, sunSide);
+                float zone = smoothstep (0.015, 0.05, depthIn) * smoothstep (0.4, 0.52, fbm3 (vec2 (x * 3.0, uv.y * 6.0) + S));
+                vec3 tc = mix (vec3 (0.012, 0.025, 0.015), vec3 (0.07, 0.11, 0.05) * mix (vec3 (0.6), sc, day), tr.y) * mix (0.35, 1.0, day);
+                rock = mix (rock, tc, tr.x * zone);
+            }
+            rock *= 1.0 - 0.4 * shadowC * day;
+            float fog = (0.45 - 0.18 * fi) * (0.55 + 0.25 * uSpace + 0.2 * haze) * (1.0 - 0.5 * smoothstep (0.0, 0.25, depthIn));
+            vec3 air = mix (valleySky (vec2 (p.x, 0.0), hor + 0.25, hor, sp, sc, el), low, 0.35) * (0.8 - 0.15 * fi);
+            col = mix (col, mix (rock, air, clamp (fog, 0.0, 0.92)), edgeA);
         }
-        // mist between the ranges (Wind)
-        float mist = uPres[4] * smoothstep (0.07, 0.0, abs (uv.y - (layerY[i] - 0.06))) * fbm3 (vec2 (p.x * 3.0 - uMus * 0.03 * (1.0 + fi), uv.y * 10.0));
-        col = mix (col, mix (low, skyGrad (0.6, L), 0.4) * 1.05 + 0.02, mist * 0.3);
+        // morning mist lifting from the valleys (Wind, Light near dawn, haze)
+        float morning = 1.0 - smoothstep (0.08, 0.35, abs (L - 0.32));
+        float my = layerY[i] - 0.07 + 0.03 * fract (uTime * 0.004 + fi * 0.37);
+        float mist = (uPres[4] * 0.35 + morning * 0.45 + haze * 0.25) * smoothstep (0.035, 0.0, abs (uv.y - my)) * smoothstep (0.35, 0.75, fbm3 (vec2 (p.x * 3.0 - uMus * 0.03 * (1.0 + fi) - uTime * 0.01, uv.y * 10.0)));
+        col = mix (col, mix (low, sc * 0.7, 0.4 * day) * 1.05 + 0.02, clamp (mist * 0.55, 0.0, 0.6));
     }
-    // lake: mirrored sky with ripples and a glittering path
-    float lakeTop = hor - 0.02;
-    if (uv.y < lakeTop && uv.y > 0.07)
+    // lake: sky and mountains mirrored, ripples (Wind and Bass), a glittering path under the sun
+    float lakeTop = hor - 0.015, meadow = 0.14 + 0.02 * fbm3 (vec2 (p.x * 3.0 + S.x, 0.5));
+    if (uv.y < lakeTop && uv.y > meadow)
     {
         float dd = lakeTop - uv.y;
-        float rip = (fbm3 (vec2 (p.x * 8.0, dd * 60.0 - uTime * 0.6)) - 0.5) * 0.04 * (0.4 + uPres[4]);
-        vec3 refl = skyGrad (dd * 2.2 + rip, L) * 0.55;
-        float glit = pow (noise (vec2 (p.x * 60.0, dd * 300.0 + uTime * 2.0)), 10.0) * exp (-abs (p.x - sp.x) * (6.0 - dd * 30.0));
-        col = mix (refl, col, 0.15) + sc * glit * 1.4 * (0.4 + uGlow[2]);
+        float rip = (fbm3 (vec2 (p.x * 9.0, dd * 70.0 - uTime * 0.6)) - 0.5) * 0.03 * (0.3 + uPres[4] + 0.8 * uGlow[6] + rain);
+        vec3 refl = valleySky (vec2 (p.x + rip, 0.0), hor + dd * 2.0, hor, sp, sc, el);
+        // the nearest range, mirrored exactly (same terrain function as above)
+        float mx = (p.x + rip) * 2.3 + uMus * 0.014 + S.x + 22.0;
+        float mh = hor + 0.03 - 0.08 + (0.14 * (0.45 + 0.55 * uPres[2])) * ridged (vec2 (mx, 7.4)) - lakeTop;
+        refl = mix (refl, (low * 0.2 + vec3 (0.07, 0.055, 0.05)) * mix (0.4, 1.0, day), smoothstep (mh + 0.003, mh - 0.003, dd));
+        float glit = pow (noise (vec2 (p.x * 70.0, dd * 320.0 + uTime * 2.0)), 9.0) * exp (-abs (p.x - sp.x) * (5.0 - dd * 20.0)) * sunVis;
+        col = refl * mix (0.55, 0.75, day) + sc * glit * 1.6 * (0.4 + uGlow[2]);
+        col += rainOverlay (p * vec2 (1.0, 3.0), uv, rain * 0.6, vec3 (0.25)) * 0.5;
     }
-    // foreground meadow
-    float gh = 0.07 + 0.025 * fbm3 (vec2 (p.x * 4.0 + uMus * 0.02, 1.0));
-    if (uv.y < gh) col = mix (vec3 (0.02, 0.025, 0.03), low * 0.15, 0.4) * (0.6 + 0.4 * fbm (p * 40.0));
+    // meadow with grass that sways in the wind, scattered flowers, a stream running to the lake
+    if (uv.y <= meadow)
+    {
+        float near = clamp ((meadow - uv.y) / meadow, 0.0, 1.0);
+        float wind = 0.3 + uPres[4] + 0.6 * uGlow[4];
+        float sway = sin (uTime * 1.3 + p.x * 6.0 + fbm3 (vec2 (p.x * 2.0, uTime * 0.2)) * 3.0) * wind * 0.004 * (0.3 + near);
+        float blades = noise (vec2 ((p.x + sway * (meadow - uv.y) * 40.0) * (250.0 + 600.0 * near), uv.y * 18.0));
+        vec3 grass = mix (vec3 (0.05, 0.09, 0.03), vec3 (0.22, 0.3, 0.09), blades) * mix (vec3 (0.35, 0.4, 0.5), sc * 0.9, day);
+        grass *= 0.6 + 0.6 * smoothstep (0.0, 1.0, near) * (1.0 - 0.4 * shadowC * day);
+        grass += sc * vec3 (1.0, 0.8, 0.4) * gold * day * pow (blades, 3.0) * 0.25;                    // backlit tips
+        vec2 fq = vec2 ((p.x + sway * 20.0) * 90.0, uv.y * 170.0);
+        vec2 fid = floor (fq), ff = fract (fq) - 0.5;
+        float fh = hash12 (fid + S);
+        if (fh > 0.9 && near > 0.2)
+        {
+            vec3 fcol = fh > 0.97 ? vec3 (0.75, 0.55, 0.95) : (fh > 0.94 ? vec3 (1.0, 0.85, 0.3) : vec3 (0.95, 0.95, 0.9));
+            grass = mix (grass, fcol * mix (0.3, 1.0, day), smoothstep (0.16, 0.05, length (ff - (hash22 (fid) - 0.5) * 0.4)));
+        }
+        float sx = (0.25 + 0.5 * hash12 (S + 4.0)) * asp + 0.05 * sin (uv.y * 25.0 + S.x) + 0.02 * sin (uv.y * 61.0);
+        float sw = 0.004 + (meadow - uv.y) * 0.12;
+        float stream = smoothstep (sw + 0.002, sw - 0.002, abs (p.x - sx));
+        vec3 water = valleySky (vec2 (p.x, 0.0), hor + 0.2 + near * 0.3, hor, sp, sc, el) * 0.55;
+        water += sc * pow (noise (vec2 (p.x * 200.0, uv.y * 80.0 + uTime * 3.0)), 8.0) * sunVis * 1.2;
+        col = mix (grass, water, stream);
+    }
+    // rain from the weather, dimmer haze over everything
+    col += rainOverlay (p, uv, rain, mix (vec3 (0.35, 0.4, 0.5), vec3 (0.8, 0.85, 0.95), day));
+    col = mix (col, low * 0.9 + 0.02, haze * 0.18 * smoothstep (0.0, hor + 0.3, uv.y));
+    // lens flare when the sun is in sight: ghosts along the line through the centre and a soft horizontal streak
+    if (el > 0.0)
+    {
+        vec2 cen = vec2 (0.5 * asp, 0.5), dir = cen - sp;
+        float vis = sunVis * smoothstep (-0.05, 0.05, sp.x) * smoothstep (asp + 0.05, asp - 0.05, sp.x);
+        col += sc * exp (-abs (p.y - sp.y) * 260.0) * exp (-abs (p.x - sp.x) * 2.2) * 0.12 * vis;
+        for (int g = 0; g < 4; g++)
+        {
+            float fg = float (g);
+            float kpos = 0.55 + 0.45 * fg;
+            vec2 gc = sp + dir * kpos;
+            float r = 0.02 + 0.025 * hash12 (vec2 (fg, 2.0));
+            float ring = smoothstep (r, r * 0.6, length (p - gc));
+            col += mix (vec3 (0.6, 0.8, 1.0), vec3 (1.0, 0.7, 0.4), hash12 (vec2 (fg, 5.0))) * ring * 0.035 * vis;
+        }
+    }
     return col;
 }
 )GLSL";
