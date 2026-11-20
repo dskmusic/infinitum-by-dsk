@@ -535,7 +535,8 @@ bool signOf (float id, float l, float ground, out vec2 lo, out vec2 hi, out vec3
     {
         kind = 1.0;
         float y0 = ground + hh * (0.45 + 0.2 * hash12 (vec2 (id, 4.4)));
-        lo = vec2 (bc - hw * 0.8, y0); hi = vec2 (bc + hw * 0.8, y0 + hh * 0.16);
+        float k = 0.6 + 0.2 * hash12 (vec2 (id, 4.9));          // 60-80 % of the old size
+        lo = vec2 (bc - hw * 0.8 * k, y0); hi = vec2 (bc + hw * 0.8 * k, y0 + hh * 0.16 * k);
         return true;
     }
     float side = hash12 (vec2 (id, 3.3)) < 0.5 ? -1.0 : 1.0;
@@ -543,6 +544,55 @@ bool signOf (float id, float l, float ground, out vec2 lo, out vec2 hi, out vec3
     float y0 = ground + hh * (0.2 + 0.35 * hash12 (vec2 (id, 4.0)));
     lo = vec2 (sx - sw * 0.5, y0); hi = vec2 (sx + sw * 0.5, y0 + hh * (0.22 + 0.2 * hash12 (vec2 (id, 4.7))));
     return true;
+}
+// content of a holographic billboard (0..1 light), cycling: koi, logo rings, music equaliser, scrolling signs
+float holoImg (vec2 g, float id)
+{
+    float slot = floor (uTime / 9.0 + hash12 (vec2 (id, 1.9)) * 4.0);
+    float kind = mod (slot + floor (hash12 (vec2 (id, 2.7)) * 4.0), 4.0);
+    float t = uTime;
+    float v = 0.0;
+    if (kind < 0.5)            // two koi circling
+    {
+        for (int k = 0; k < 2; k++)
+        {
+            float a = t * 0.6 + float (k) * 3.14159;
+            vec2 c = vec2 (0.5 + 0.28 * cos (a), 0.5 + 0.25 * sin (a));
+            vec2 dir = normalize (vec2 (-sin (a), cos (a) * 0.9));
+            vec2 q = g - c;
+            vec2 lq = vec2 (dot (q, dir), dot (q, vec2 (-dir.y, dir.x)));
+            lq.y += 0.025 * sin (lq.x * 30.0 - t * 6.0) * smoothstep (0.0, -0.12, lq.x);
+            float body = length (lq / vec2 (0.13, 0.045));
+            float tail = length ((lq + vec2 (0.15, 0.0)) / vec2 (0.05, 0.05));
+            v = max (v, smoothstep (1.0, 0.75, body) * (0.7 + 0.3 * sin (lq.x * 60.0)) + smoothstep (1.0, 0.6, tail) * step (lq.x, -0.11) * 0.8);
+        }
+    }
+    else if (kind < 1.5)       // abstract logo: rotating broken rings
+    {
+        vec2 q = (g - 0.5) * vec2 (1.6, 1.0);
+        float r = length (q), an = atan (q.y, q.x);
+        for (int k = 0; k < 3; k++)
+        {
+            float fk = float (k);
+            float rr = 0.16 + 0.1 * fk;
+            float arc = step (0.35, fract ((an + t * (0.6 - 0.25 * fk) * (mod (fk, 2.0) * 2.0 - 1.0)) / 6.2832 * (2.0 + fk)));
+            v += smoothstep (0.025, 0.0, abs (r - rr)) * arc;
+        }
+        v += smoothstep (0.07, 0.0, r) * (0.6 + 0.4 * sin (t * 3.0));
+    }
+    else if (kind < 2.5)       // equaliser that follows the music
+    {
+        float bi = floor (g.x * 12.0), bf = fract (g.x * 12.0);
+        float lvl = 0.15 + 0.45 * noise (vec2 (bi * 1.7, t * 4.0)) + 0.5 * uGlow[int (mod (bi, 8.0))];
+        float seg = step (0.25, fract (g.y * 14.0));
+        v = step (0.15, bf) * step (bf, 0.85) * step (g.y, lvl) * seg * (0.6 + 0.4 * g.y);
+    }
+    else                       // columns of invented signs scrolling down
+    {
+        vec2 q = vec2 (g.x * 5.0, g.y * 3.0 + t * 0.4 * (0.6 + 0.4 * hash12 (vec2 (floor (g.x * 5.0), id))));
+        v = glyph (fract (q), floor (q.y) * 3.1 + floor (q.x) * 7.7 + id);
+    }
+    return clamp (v, 0.0, 1.0);
 }
 // one layer of the city (0 far ... 4 near): colour + coverage, and the light its signs throw around
 vec4 city (vec2 p, vec2 uv, float l, float ground, out vec3 glowAdd)
@@ -562,7 +612,7 @@ vec4 city (vec2 p, vec2 uv, float l, float ground, out vec3 glowAdd)
             vec2 q = vec2 (fx - float (n), uv.y);
             vec2 d = max (max (lo - q, q - hi), 0.0) * vec2 (cw, 1.0);
             float dist = length (d);
-            glowAdd += sc * on * (exp (-dist * 45.0) * 0.32 + exp (-dist * 12.0) * 0.045) * (0.7 + 0.3 * uPres[1]) * (kind > 0.5 ? 0.6 : 1.0);
+            glowAdd += sc * on * (exp (-dist * 45.0) * 0.32 + exp (-dist * 12.0) * 0.045) * (0.7 + 0.3 * uPres[1]) * (kind > 0.5 ? 0.35 : 1.0);
         }
     }
     float hgt, bc, hw;
@@ -608,11 +658,18 @@ vec4 city (vec2 p, vec2 uv, float l, float ground, out vec3 glowAdd)
     if (signOf (id, l, ground, lo, hi, sc, kind, on) && fx > lo.x && fx < hi.x && uv.y > lo.y && uv.y < hi.y)
     {
         vec2 g = (vec2 (fx, uv.y) - lo) / (hi - lo);
-        if (kind > 0.5)   // holographic billboard: drifting colour, scanlines, a soft face of light
+        if (kind > 0.5)   // holographic billboard: translucent, detailed, chromatic fringe, thin neon frame, rare glitches
         {
-            float img = fbm3 (g * vec2 (3.0, 1.5) + vec2 (uTime * 0.12, sin (uTime * 0.2)) + id);
-            vec3 hc = mix (sc, signColour (fract (hash12 (vec2 (id, 2.2)) * 5.0)), smoothstep (0.35, 0.75, img));
-            c = hc * (0.75 + 0.25 * sin (uv.y * uRes.y * 2.2)) * (0.45 + 0.7 * img) * on * 0.9 * (0.85 + 0.15 * noise (vec2 (uTime * 3.0, id)));
+            float gl = step (0.97, fract (uTime * 0.23 + hash12 (vec2 (id, 6.6))));                 // a glitch now and then
+            g.x += gl * 0.06 * (step (0.5, fract (g.y * 7.0 + uTime * 20.0)) - 0.5);
+            float ca = 0.012;
+            vec3 img = vec3 (holoImg (g + vec2 (ca, 0.0), id), holoImg (g, id), holoImg (g - vec2 (ca, 0.0), id));
+            vec3 sc2 = signColour (fract (hash12 (vec2 (id, 2.2)) * 5.0));
+            vec3 hc = mix (sc, sc2, g.y) * img.g + vec3 (img.r - img.g, 0.0, img.b - img.g) * 0.6;
+            float scan = 0.8 + 0.2 * sin (uv.y * uRes.y * 2.6);
+            float frame = 1.0 - smoothstep (0.0, 0.025, min (min (g.x, 1.0 - g.x), min (g.y, 1.0 - g.y)) * vec2 (1.0, 0.6).x);
+            vec3 holo = (hc * scan * 0.85 + sc * 0.06 + sc * frame * 0.5) * on * (0.9 + 0.1 * noise (vec2 (uTime * 5.0, id))) * (1.0 - 0.6 * gl);
+            c = c * 0.55 + holo;                                    // translucent: the facade shows through
         }
         else
         {
@@ -802,70 +859,176 @@ vec3 scene (vec2 uv)
 
 // ------------------------------------------------------------------ Aurora
 const char* aurora = R"GLSL(
-vec3 auroraAt (vec2 p, float y)
+// one aurora curtain: a folded ribbon in the sky; sharp lower edge, rays rising from it, green fading to magenta above,
+// folds brighter where the ribbon turns towards us, waves running along it
+vec3 curtain (vec2 p, float y, float depth, float seed)
+{
+    float t = uTime * (0.6 - 0.2 * depth);
+    float x = p.x * (1.0 + 0.6 * depth);
+    float base = 0.58 + 0.12 * depth + 0.16 * (fbm3 (vec2 (x * 0.7 + seed, t * 0.03)) - 0.5) + 0.05 * sin (x * 2.3 + t * 0.12 + seed);
+    float e = 0.01;
+    float base2 = 0.58 + 0.12 * depth + 0.16 * (fbm3 (vec2 ((x + e) * 0.7 + seed, t * 0.03)) - 0.5) + 0.05 * sin ((x + e) * 2.3 + t * 0.12 + seed);
+    float fold = clamp (abs (base2 - base) / e * 0.35, 0.0, 1.5);
+    float dy = y - base;
+    if (dy < -0.03) return vec3 (0.0);
+    float h = 0.16 + 0.12 * noise (vec2 (x * 1.5 + seed, t * 0.05));
+    float lower = smoothstep (-0.012, 0.004, dy);
+    float upper = exp (-max (dy, 0.0) / h);
+    float drift = x * 90.0 - t * 0.9 + 4.0 * sin (x * 3.0 + t * 0.4);
+    float rays = 0.55 + 0.45 * pow (noise (vec2 (drift * 0.6, t * 0.25 + seed)), 1.4) * (0.7 + 0.3 * noise (vec2 (drift * 0.15, dy * 4.0 - t * 0.3)));
+    float patch = smoothstep (0.35, 0.7, fbm3 (vec2 (x * 0.45 + seed * 2.0 - t * 0.02, seed)));   // the curtain is not everywhere
+    float wave = 0.65 + 0.35 * sin (x * 6.0 - t * 0.7 + seed) * sin (x * 2.1 + t * 0.33);
+    vec3 green = vec3 (0.16, 1.0, 0.48), magenta = vec3 (0.85, 0.22, 0.75);
+    vec3 c = mix (green, magenta, smoothstep (0.04, h * 1.6, dy));
+    c = mix (c, vec3 (1.0, 0.35, 0.65), smoothstep (0.012, 0.0, abs (dy)) * 0.35);       // pink lower fringe
+    return c * lower * upper * rays * wave * patch * (0.6 + 0.7 * fold) * (1.0 - 0.45 * depth) * 1.4;
+}
+vec3 auroraSky (vec2 p, float y, float power)
 {
     vec3 a = vec3 (0.0);
-    for (int i = 0; i < 18; i++)
+    for (int k = 0; k < 3; k++) a += curtain (p, y, float (k) * 0.5, float (k) * 13.7 + S.x * 3.0);
+    // soft glow around the curtains
+    a += vec3 (0.03, 0.2, 0.11) * smoothstep (0.35, 0.75, y) * smoothstep (0.4, 0.8, fbm3 (vec2 (p.x * 0.6 + uTime * 0.01, y * 2.0))) * 0.25;
+    return a * power;
+}
+vec3 nightSky (vec2 p, float y, float L, float power)
+{
+    vec3 col = mix (vec3 (0.018, 0.04, 0.08), vec3 (0.004, 0.008, 0.022), smoothstep (0.3, 1.0, y)) * (0.8 + 0.5 * L);
+    // Milky Way: a faint band with dust lanes
+    float d = (y - 0.55 - (p.x - 0.9) * 0.35);
+    float mw = exp (-d * d / 0.012) * (0.4 + 0.6 * fbm (vec2 (p.x * 3.0, y * 6.0) + S));
+    mw *= 1.0 - 0.7 * smoothstep (0.5, 0.7, fbm3 (vec2 (p.x * 6.0, y * 14.0) + S * 2.0));
+    col += vec3 (0.12, 0.13, 0.2) * mw * (1.0 - 0.6 * L);
+    float tw = 0.75 + 0.25 * sin (uTime * 3.0 + hash12 (floor (p * 140.0)) * 30.0);
+    col += vec3 (0.9, 0.93, 1.0) * stars (p * 140.0 + S, 0.12, 0.07) * tw * (0.9 - 0.4 * L);
+    col += vec3 (0.8, 0.85, 1.0) * stars (p * 60.0 + S * 2.0, 0.03, 0.1) * 0.6;
+    col += auroraSky (p, y, power);
+    return col;
+}
+// snowy range: snow on the gentle slopes, dark rock on the steep faces, moon-lit and aurora-tinted, blue shadows
+float rangeH (float x, float fi, float hor)
+{
+    return hor + 0.1 - 0.05 * fi + (0.22 - 0.06 * fi) * ridged (vec2 (x, fi * 3.1));
+}
+vec4 mountains (vec2 p, float y, float hor, float L, float power)
+{
+    vec4 res = vec4 (0.0);
+    for (int i = 0; i < 3; i++)
     {
         float fi = float (i);
-        float base = 0.52 + fi * 0.018;
-        float n = fbm3 (vec2 (p.x * 1.1 + fi * 0.09 + uTime * 0.025, uTime * 0.04 + fi * 0.13) + S);
-        float yb = base + (n - 0.5) * 0.35;
-        float dy = y - yb;
-        float rays = 0.35 + 0.65 * pow (noise (vec2 (p.x * 55.0 + fi * 3.0 + n * 6.0, uTime * 0.3)), 2.0);
-        float band = smoothstep (-0.01, 0.01, dy) * exp (-dy * 5.5) * rays;
-        vec3 c = mix (vec3 (0.12, 1.0, 0.5), vec3 (0.7, 0.25, 1.0), smoothstep (0.02, 0.3, dy) * 0.9);
-        a += c * band * 0.07;
+        float x = p.x * (1.0 + 0.8 * fi) + S.y + fi * 9.0 + uMus * 0.002 * (1.0 + fi);
+        float h = rangeH (x, fi, hor);
+        float edgeA = smoothstep (h + 1.2 / uRes.y, h - 1.2 / uRes.y, y);   // anti-aliased ridge line
+        if (edgeA > 0.0)
+        {
+            float e = 0.03;
+            float slope = (rangeH (x + e, fi, hor) - rangeH (x - e, fi, hor)) / (2.0 * e) / (1.0 + 0.8 * fi);
+            vec2 q = vec2 (x * 5.0, y * 12.0 + fi * 3.0);
+            float n = fbm (q + S);
+            float faces = rockShade (q * 0.9 + fi, 1.0);
+            float gullies = fbm3 (vec2 (x * 9.0 + n * 0.6, y * 5.0) + S * 1.3);
+            float snow = smoothstep (0.18, -0.12, (n - 0.5) * 0.9 + (gullies - 0.5) * 0.8 - 0.25 * smoothstep (0.0, 0.08, h - y) + 0.1);
+            float lit = clamp (0.1 + 0.9 * faces, 0.0, 1.2);
+            vec3 snowC = mix (vec3 (0.05, 0.08, 0.17), vec3 (0.52, 0.6, 0.76), lit) * (0.3 + 0.45 * L);
+            snowC += vec3 (0.12, 0.6, 0.35) * power * 0.12 * (0.5 + 0.5 * lit);
+            vec3 rockC = vec3 (0.02, 0.025, 0.04) * (0.5 + 0.9 * faces);
+            vec3 m = mix (rockC, snowC, snow);
+            float haze = 0.45 - 0.18 * fi;
+            m = mix (m, vec3 (0.05, 0.09, 0.16) * (0.8 + 0.5 * L) + vec3 (0.02, 0.1, 0.06) * power, haze);
+            res = vec4 (mix (res.rgb, m, edgeA), max (res.a, edgeA));
+        }
     }
-    return a;
+    return res;
+}
+// a snowy conifer forest along the shore, and a small cabin with a warm window
+vec4 shore (vec2 p, float y, float hor, out vec3 warm)
+{
+    warm = vec3 (0.0);
+    vec4 res = vec4 (0.0);
+    float cw = 0.018;
+    float xi = p.x / cw;
+    for (int n = -1; n <= 1; n++)
+    {
+        float id = floor (xi) + float (n);
+        float clump = smoothstep (0.35, 0.6, noise (vec2 (id * 0.12, 7.0) + S));
+        float th = (0.015 + 0.075 * pow (hash12 (vec2 (id, 3.0)), 1.5)) * clump * step (0.2, hash12 (vec2 (id, 4.0)));
+        if (th < 0.012) continue;
+        float cx = (id + 0.5 + (hash12 (vec2 (id, 5.0)) - 0.5) * 0.6) * cw;
+        float ty = (y - hor) / th;
+        if (ty > 0.0 && ty < 1.0)
+        {
+            float tiers = fract (ty * (4.0 + 3.0 * hash12 (vec2 (id, 6.0))) + hash12 (vec2 (id, 7.0)));
+            float wdt = th * 0.32 * (1.0 - ty) * (0.7 + 0.4 * (1.0 - tiers)) * (0.85 + 0.3 * noise (vec2 (ty * 30.0, id)));
+            float inT = smoothstep (wdt + 0.0015, wdt - 0.0015, abs (p.x - cx));
+            if (inT > 0.0)
+            {
+                float snowy = smoothstep (0.82, 0.97, tiers) * smoothstep (wdt * 0.3, wdt, abs (p.x - cx)) * 0.45 + 0.04;
+                res = vec4 (mix (vec3 (0.006, 0.012, 0.016), vec3 (0.35, 0.42, 0.52), snowy), max (res.a, inT));
+            }
+        }
+    }
+    float ground = smoothstep (hor + 0.006, hor, y);
+    if (ground > 0.0 && res.a < 0.5) res = vec4 (vec3 (0.25, 0.3, 0.4), ground);
+    // cabin
+    float cx0 = (0.2 + 0.6 * hash12 (S + 2.0)) * uRes.x / uRes.y;
+    vec2 q = p - vec2 (cx0, hor);
+    float body = step (abs (q.x), 0.022) * step (0.0, q.y) * step (q.y, 0.018);
+    float roof = step (0.018, q.y) * step (q.y, 0.034) * step (abs (q.x), 0.028 - (q.y - 0.018) * 1.6);
+    if (body + roof > 0.0)
+        res = vec4 (roof > 0.0 ? mix (vec3 (0.05, 0.06, 0.08), vec3 (0.6, 0.66, 0.75), smoothstep (0.026, 0.033, q.y + abs (q.x) * 0.4)) : vec3 (0.03, 0.02, 0.02), 1.0);
+    float win = step (abs (q.x - 0.006), 0.005) * step (abs (q.y - 0.009), 0.004);
+    float flick = 0.9 + 0.1 * noise (vec2 (uTime * 4.0, 1.0));
+    if (win > 0.0) res.rgb = vec3 (1.0, 0.72, 0.36) * flick;
+    warm = vec3 (1.0, 0.6, 0.28) * exp (-length (q - vec2 (0.006, 0.009)) * 55.0) * 0.35 * flick;
+    return res;
 }
 vec3 scene (vec2 uv)
 {
     float L = uLight, asp = uRes.x / uRes.y;
     vec2 p = vec2 (uv.x * asp, uv.y);
-    float hor = 0.34;
-    vec3 col = mix (vec3 (0.02, 0.05, 0.11), vec3 (0.006, 0.01, 0.03), uv.y) * (0.8 + 0.6 * L);
-    col += vec3 (stars (p * 120.0 + S, 0.11, 0.08)) * (0.9 - 0.4 * L);
-    float power = 0.45 + 0.6 * uPres[3] + 0.3 * uPres[1] + 0.5 * uGlow[3];
-    col += auroraAt (p, uv.y) * power;
-    // crescent moon
-    vec2 mc = vec2 (asp * (0.15 + 0.7 * hash12 (S)), 0.84);
+    float hor = 0.3;
+    float power = 0.55 + 0.55 * uPres[3] + 0.3 * uPres[1] + 0.6 * uGlow[3];
+    vec3 col = nightSky (p, uv.y, L, power);
+    // small moon with a halo
+    vec2 mc = vec2 (asp * (0.12 + 0.76 * hash12 (S)), 0.86);
     float md = length (p - mc);
-    col += vec3 (0.8, 0.85, 1.0) * 0.004 / (md * md + 0.002);
-    col = mix (col, vec3 (0.92, 0.95, 1.0), smoothstep (0.03, 0.026, md) * smoothstep (0.022, 0.03, length (p - mc - vec2 (0.012, 0.008))));
-    // snowy mountains lit by the moon and the aurora
-    for (int i = 0; i < 2; i++)
+    col += vec3 (0.75, 0.82, 1.0) * (0.0025 / (md * md + 0.0025)) * 0.4;
+    col = mix (col, vec3 (0.93, 0.95, 1.0), smoothstep (0.02, 0.017, md) * smoothstep (0.014, 0.021, length (p - mc - vec2 (0.008, 0.005))));
+    vec4 m = mountains (p, uv.y, hor, L, power);
+    col = mix (col, m.rgb, m.a);
+    vec3 warm;
+    vec4 sh = shore (p, uv.y, hor, warm);
+    col = mix (col, sh.rgb, sh.a) + warm;
+    // still lake: a dark mirror of the sky, the mountains and the window, broken by slow ripples, under drifting mist
+    if (uv.y < hor)
     {
-        float fi = float (i);
-        float x = p.x * (1.0 + 0.8 * fi) + S.y + fi * 9.0 + uMus * 0.002 * (1.0 + fi);
-        float h = hor + 0.12 - 0.07 * fi + (0.2 - 0.06 * fi) * ridged (vec2 (x, fi)) * (0.5 + 0.5 * uPres[i]);
-        if (uv.y < h)
-        {
-            float lightSide = rockShade (vec2 (x * 4.0, uv.y * 8.0 + fi * 3.0), 1.0);
-            float snowMask = smoothstep (0.42, 0.58, fbm (vec2 (x * 7.0, uv.y * 18.0) + S) + 0.45 - (h - uv.y) * 3.0);
-            vec3 rockC = vec3 (0.05, 0.07, 0.12) * (0.6 + 0.6 * lightSide);
-            vec3 snowC = vec3 (0.7, 0.78, 0.92) * (0.35 + 0.75 * lightSide);
-            vec3 m = mix (rockC, snowC, snowMask);
-            m *= 0.45 + 0.45 * L;
-            m += vec3 (0.1, 0.55, 0.35) * power * 0.1 * snowMask;
-            col = mix (m, vec3 (0.05, 0.09, 0.16), 0.35 - 0.2 * fi);
-        }
+        float dd = hor - uv.y;
+        float rip = (fbm3 (vec2 (p.x * 8.0, dd * 60.0 - uTime * 0.2)) - 0.5) * 0.012 * (0.4 + dd * 4.0);
+        vec2 rp = vec2 (p.x + rip, 0.0);
+        float ry = hor + dd * 1.05;
+        vec3 refl = nightSky (rp, ry, L, power);
+        vec4 rm = mountains (rp, ry, hor, L, power);
+        refl = mix (refl, rm.rgb, rm.a);
+        vec3 rw;
+        vec4 rs = shore (rp, ry, hor, rw);
+        refl = mix (refl, rs.rgb, rs.a) + rw * 1.3;
+        float fres = 0.55 + 0.35 * smoothstep (0.0, 0.25, 0.3 - dd);
+        col = vec3 (0.006, 0.012, 0.02) + refl * fres * 0.8;
+        col *= 1.0 - smoothstep (0.0, 0.004, dd) * 0.0;
     }
-    // frozen lake reflecting the aurora
-    if (uv.y < hor - 0.02)
-    {
-        float dd = hor - 0.02 - uv.y;
-        float rip = (fbm3 (vec2 (p.x * 10.0, dd * 40.0)) - 0.5) * 0.02;
-        vec3 refl = auroraAt (p + vec2 (rip, 0.0), hor + dd * 1.6 + 0.1) * power * 0.55;
-        vec3 ice = mix (vec3 (0.03, 0.06, 0.1), vec3 (0.12, 0.18, 0.25), fbm (p * vec2 (3.0, 12.0) + S));
-        col = ice + refl;
-    }
-    // snowfall (Wind)
-    for (int k = 0; k < 2; k++)
+    // mist drifting over the water and the shore (Wind)
+    float mist = smoothstep (0.12, 0.0, abs (uv.y - hor + 0.01)) * fbm3 (vec2 (p.x * 2.5 - uTime * 0.02, uv.y * 12.0) + S);
+    col = mix (col, vec3 (0.25, 0.32, 0.42) * (0.5 + 0.5 * L) + vec3 (0.02, 0.12, 0.07) * power, mist * (0.18 + 0.35 * uPres[4]));
+    // snowfall at three depths, the nearest flakes soft and large
+    for (int k = 0; k < 3; k++)
     {
         float fk = float (k);
-        vec2 q = vec2 (p.x + sin (uTime * 0.4 + p.y * 5.0) * 0.02, p.y + uTime * (0.03 + 0.02 * fk)) * (30.0 + 25.0 * fk) + S;
-        col += vec3 (0.9) * stars (q, 0.06 + 0.12 * uPres[4], 0.1) * 0.5;
+        vec2 q = vec2 (p.x + sin (uTime * 0.3 + p.y * 4.0 + fk) * 0.02, p.y + uTime * (0.02 + 0.02 * fk)) * (45.0 - 12.0 * fk) + S + fk * 7.0;
+        vec2 id = floor (q), f = fract (q) - 0.5;
+        vec2 o = (hash22 (id + fk) - 0.5) * 0.6;
+        float has = step (0.92 - 0.08 * uPres[4], hash12 (id * 1.31 + fk));
+        float r = 0.06 + 0.06 * fk;
+        col += vec3 (0.85, 0.9, 1.0) * has * smoothstep (r, r * (0.3 - 0.1 * fk), length (f - o)) * (0.35 + 0.1 * fk);
     }
     return col;
 }

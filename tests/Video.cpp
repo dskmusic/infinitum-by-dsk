@@ -76,6 +76,10 @@ public:
         }
         ed->videoFrame();
         juce::MessageManager::getInstance()->runDispatchLoopUntil (2);
+        {   // any preset change (loads, the generator, memories) gets the soft fade in finishAudio
+            const auto name = proc.currentMeta.name + juce::String (proc.presetGeneration.load());
+            if (name != lastPresetSeen) { if (lastPresetSeen.isNotEmpty() && (switches.empty() || L.size() - switches.back() > (size_t) kSr)) markSwitch(); lastPresetSeen = name; }
+        }
         writeFrame();
     }
     void wait (double sec) { for (int i = 0, n = (int) std::lround (sec * kFps); i < n; ++i) frame(); }
@@ -150,6 +154,14 @@ public:
         for (int i = 0; i < 15 * kFps && ed->generatorPage().isBusy(); ++i) frame();
         wait (0.4);
     }
+    // the demo flows like one piece: a new preset keeps the key that is already sounding (same root, its own scale)
+    bool keySet = false;
+    void matchKey (gx::Preset& p)
+    {
+        if (trailerMode) return;
+        if (keySet) p.params[(size_t) gx::P::key] = proc.getParam (gx::P::key);
+        keySet = true;
+    }
     // load the first factory preset of a sub-mood (keeps playing: live change)
     void loadName (const juce::String& name)
     {
@@ -159,6 +171,7 @@ public:
                 auto p = gx::Preset::fromVar (v);
                 if (p.meta.name != name) continue;
                 markSwitch();
+                matchKey (p);
                 p.applyTo (proc);
                 proc.presetGeneration.fetch_add (1);
                 return;
@@ -185,7 +198,9 @@ public:
         if (ranked.empty()) return;
         std::sort (ranked.begin(), ranked.end(), [] (auto& a, auto& b) { return a.first > b.first; });
         markSwitch();
-        ranked[(size_t) juce::jmin (nth, (int) ranked.size() - 1)].second.applyTo (proc);
+        auto& chosen = ranked[(size_t) juce::jmin (nth, (int) ranked.size() - 1)].second;
+        matchKey (chosen);
+        chosen.applyTo (proc);
         proc.presetGeneration.fetch_add (1);
     }
 
@@ -244,17 +259,19 @@ public:
         cardFrom = cardTo = -1;
     }
 
+    juce::String lastPresetSeen;
     std::vector<size_t> switches;   // audio positions where the preset changes (softened with a short dip)
     void markSwitch() { if (! trailerMode) switches.push_back (L.size()); }
     void finishAudio()
     {
         {   // ~0.6 s fade down before each preset change, ~1.2 s fade back up after: no abrupt jumps between scenes
-            const size_t pre = (size_t) (kSr * 0.6), post = (size_t) (kSr * 1.2);
+            // a long, gentle fade out (1.6 s) before each preset change and a slower fade in (2.6 s) after it
+            const size_t pre = (size_t) (kSr * 1.6), post = (size_t) (kSr * 2.6);
             for (auto s : switches)
                 for (size_t i = s > pre ? s - pre : 0; i < juce::jmin (L.size(), s + post); ++i)
                 {
-                    const float t = i < s ? (float) (s - i) / (float) pre : (float) (i - s) / (float) post;
-                    const float g = 0.12f + 0.88f * t * t * (3.0f - 2.0f * t);
+                    const float t = juce::jlimit (0.0f, 1.0f, i < s ? (float) (s - i) / (float) pre : (float) (i - s) / (float) post);
+                    const float g = 0.04f + 0.96f * std::sin (t * 1.5707963f) * std::sin (t * 1.5707963f);
                     L[i] *= g; R[i] *= g;
                 }
         }
