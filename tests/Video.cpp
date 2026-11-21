@@ -539,76 +539,56 @@ int runVideo (int argc, char** argv)
     d.turn (P::space, 0.95f, 1.4);
     d.wait (0.8);
 
-    // ---- landscapes (every preset change dips smoothly: no clicks)
+    // ---- one preset, six landscapes: the sound stays, only the scenery changes
     d.caption ("Six living landscapes", "Valley · Starfield · Underwater · Neon · Ocean · Aurora", "Seis paisajes vivos", "Valle · Campo estelar · Bajo el agua · Neón · Océano · Aurora");
-    d.load ("Deep Blue");
-    d.click (d.button ("Underwater"), 4.0);
-    d.load ("Celestial");
-    d.click (d.button ("Aurora"), 3.4);
-    d.load ("Deep Space");
-    d.click (d.button ("Starfield"), 3.0);
-
-    // ---- neo-noir
-    d.caption ("Neon nights", "Analog 80s pads, ensemble chorus, glassy bell phrases", "Noches de neón", "pads analógicos de los 80, chorus de ensemble y frases de campanas de cristal");
-    d.load ("Neo-Noir");
-    d.click (d.button ("Neon Rain"), 6.0);
-
-    // ---- new: melodic moods with a composed melody layer
-    d.caption ("New: melodic moods", "Fairytale and Film Score: themes that repeat, answer and resolve", "Nuevo: estados de ánimo melódicos", "Cuento y Banda sonora: temas que se repiten, se responden y resuelven");
-    d.load ("Music Box");
-    d.click (d.button ("Aurora"), 7.0);
-    d.caption ("Film Score", "A lyrical lead over lush chords and a bass line", "Banda sonora", "una melodía lírica sobre acordes amplios y un bajo");
-    d.load ("Main Theme");
-    d.click (d.button ("Valley"), 6.5);
+    d.click (d.button ("Underwater"), 3.6);
+    d.click (d.button ("Aurora"), 3.2);
+    d.click (d.button ("Starfield"), 3.2);
+    d.click (d.button ("Ocean"), 3.2);
     d.caption ("One click: a new variation of the landscape", "Same sound, new scenery", "Un clic: una nueva variación del paisaje", "mismo sonido, otro paisaje");
     if (auto* vb = d.find<juce::Button> (d.ed.get(), [] (juce::Button* b) { return b->getTooltip().startsWith ("New variation"); }))
     {
         d.click (vb, 1.8);
         d.click (vb, 1.8);
     }
-
-    // ---- derelict
-    d.caption ("Or a derelict ship in deep space...", "", "O una nave abandonada en el espacio...");
-    d.load ("Derelict");
-    d.click (d.button ("Starfield"), 4.0);
     d.caption ("Freeze the moment", "", "Congela el momento");
     d.click (d.button ("FREEZE"), 2.4);
     d.click (d.button ("FREEZE"), 0.6);
 
-    // ---- relax mode: full screen, nothing but the landscape
-    d.load ("Deep Space");
+    // ---- melodic moods (second and only other preset before the finale)
+    d.caption ("Melodic moods", "Fairytale and Film Score: themes that repeat, answer and resolve", "Estados de ánimo melódicos", "Cuento y Banda sonora: temas que se repiten, se responden y resuelven");
+    d.load ("Music Box");
+    d.click (d.button ("Aurora"), 7.0);
+
+    // ---- relax mode: full screen, nothing but the landscape (same music)
     d.click (d.button ("Starfield"), 1.0);
     d.caption ("Relax mode", "Full screen, no texts: just the landscape", "Modo relax", "pantalla completa, sin textos: solo el paisaje");
     d.relax (2.5);
     d.clearCaption();
     d.relax (5.5);
 
-    // ---- sound page
+    // ---- sound page (same music)
     d.caption ("Drone · Pad · Texture · Shimmer · Wind · Bells · Bass · Melody", "Noise generator: pink, brown, white, ocean waves, vinyl",
                "Drone · Pad · Textura · Shimmer · Viento · Campanas · Bajo · Melodía", "generador de ruido: rosa, marrón, blanco, olas, vinilo");
-    d.load ("Glow");
     d.click (d.button ("SOUND"), 4.0);
 
-    // ---- generator
+    // ---- generator: one new landscape
     d.caption ("14 moods, 292 presets", "Fairytale · Film Score · Epic · Forest · Desert · Sleep · Ethereal...", "14 estados de ánimo, 292 presets", "Cuento · Banda sonora · Épico · Bosque · Desierto · Dormir · Etéreo...");
     d.click (d.button ("GENERATOR"), 0.4);
-    d.click (d.button ("Epic", &d.ed->generatorPage()), 0.3);
+    d.click (d.button ("Film Score", &d.ed->generatorPage()), 0.3);
     d.generate();
-    d.wait (3.0);
-    d.click (d.button ("Fairytale", &d.ed->generatorPage()), 0.3);
-    d.generate();
-    d.wait (3.0);
+    d.wait (3.5);
 
     // ---- export
     d.caption ("Export audio up to 3 hours, or an MP4 of the landscape", "Sleep mode · session timer · 432 Hz · tempo sync",
                "Exporta audio de hasta 3 horas o un MP4 del paisaje", "modo Dormir · temporizador · 432 Hz · sincronía con el tempo");
     d.click (d.button ("EXPORT"), 3.4);
 
-    // ---- the finale: Rising Citadel over the neon city
+    // ---- the finale: Blade Runner nights over the neon city
     d.caption ("Follows your DAW. Bounces match playback.", "VST3 · AU · Standalone", "Sigue a tu DAW: lo que exportas suena igual que lo que oíste", "");
-    d.loadName ("Rising Citadel");
+    d.load ("Neo-Noir");
     d.click (d.button ("LANDSCAPE"), 0.3);
-    d.click (d.button ("Neon Rain"), 6.0);
+    d.click (d.button ("Neon Rain"), 7.0);
     d.clearCaption();
     d.wait (1.5);
     d.proc.setParamPlain (P::fadeOut, 3.0f);

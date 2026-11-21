@@ -303,6 +303,14 @@ vec3 planetPal (float k, float t)
     if (k < 0.75) return mix (vec3 (0.10, 0.05, 0.22), vec3 (0.6, 0.45, 0.85), t);
     return mix (vec3 (0.02, 0.12, 0.10), vec3 (0.35, 0.75, 0.62), t);
 }
+// how opaque the rings are at a distance re from the centre (in planet radii): divisions, a Cassini gap, fine dust
+float ringDensity (float re)
+{
+    float rr = smoothstep (1.32, 1.38, re) * smoothstep (2.0, 1.92, re);
+    float divisions = 0.55 + 0.45 * sin (re * 38.0) * sin (re * 11.0 + 1.0);
+    float cassini = 1.0 - 0.85 * smoothstep (0.03, 0.0, abs (re - 1.7));
+    return rr * cassini * (0.45 + 0.55 * divisions) * (0.7 + 0.3 * fbm3 (vec2 (re * 60.0, 0.0)));
+}
 vec3 atmoColour (float k)   // the colour of the scattered light at the limb
 {
     if (k < 0.25) return vec3 (0.35, 0.6, 1.0);
@@ -383,16 +391,11 @@ vec3 scene (vec2 uv)
     float re = length (vec2 (rd.x, rd.y / 0.24));
     // rings with divisions and fine dust, in the planet's shadow behind it
     float ringBand = 0.0;
-    if (hasRing)
-    {
-        float rr = smoothstep (1.32, 1.38, re) * smoothstep (2.0, 1.92, re);
-        float divisions = 0.55 + 0.45 * sin (re * 38.0) * sin (re * 11.0 + 1.0);
-        float cassini = 1.0 - 0.85 * smoothstep (0.03, 0.0, abs (re - 1.7));
-        ringBand = rr * cassini * (0.45 + 0.55 * divisions) * (0.7 + 0.3 * fbm3 (vec2 (re * 60.0, 0.0)));
-    }
+    if (hasRing) ringBand = ringDensity (re);
     vec3 ringCol = planetPal (k, 0.85) * 0.9;
     float pulse = 0.4 + 0.6 * uGlow[0] + 0.4 * uGlow[6];
-    if (ringBand > 0.0 && rd.y > 0.0 && r2 > 1.0) col = mix (col, ringCol * 0.55, ringBand * 0.8);
+    float lightOnRing = 0.35 + 0.65 * clamp (0.5 + 0.5 * rd.x * sign (ldir.x), 0.0, 1.0);   // same light on both halves: no seam
+    if (ringBand > 0.0 && rd.y > 0.0 && r2 > 1.0) col = mix (col, ringCol * lightOnRing, ringBand * 0.85);
     float atm = exp (-max (sqrt (r2) - 1.0, 0.0) * 14.0);   // also under the anti-aliased edge (no dark outline)
     float litSide = clamp (dot (normalize (vec3 (d, 0.0)), ldir) * 0.7 + 0.45, 0.0, 1.0);
     col += atmoColour (k) * atm * litSide * (0.35 + 0.35 * pulse);
@@ -417,16 +420,33 @@ vec3 scene (vec2 uv)
         vec2 cell = floor (vec2 (lon * 6.0, lat * 8.0));
         float flash = step (0.985, hash12 (cell + floor (uTime * 6.0))) * smoothstep (0.6, 0.75, fbm3 (vec2 (lon * 4.0, lat * 6.0)));
         pc += vec3 (0.7, 0.8, 1.0) * flash * night * (0.5 + uGlow[5]);
-        float pole = smoothstep (0.78, 0.9, abs (lat)) * (0.5 + 0.5 * sin (lon * 18.0 + uTime * 0.5));
-        pc += vec3 (0.2, 1.0, 0.55) * pole * night * (0.25 + 0.6 * uPres[3]);
+        float pole = smoothstep (0.8, 0.93, abs (lat)) * smoothstep (1.0, 0.96, abs (lat)) * (0.6 + 0.4 * fbm3 (vec2 (lon * 3.0 + uTime * 0.05, lat * 20.0)));
+        pc += vec3 (0.2, 1.0, 0.55) * pole * night * (0.06 + 0.15 * uPres[3]);   // a faint auroral oval
         // the rings' shadow across the planet
-        if (hasRing) pc *= 1.0 - 0.45 * smoothstep (0.04, 0.0, abs (rd.y - 0.08 * sign (ldir.y) - 0.0)) * step (0.0, ndl) * smoothstep (0.0, 0.3, abs (rd.x));
+        if (hasRing)
+        {   // true projection: from this point on the sphere, follow the sunlight back to the ring plane;
+            // where it crosses the rings, their density becomes shadow (curved with the sphere, with the same divisions)
+            vec3 P = vec3 (ca * n.x - sa * n.y, sa * n.x + ca * n.y, n.z);
+            vec3 Lr = vec3 (ca * ldir.x - sa * ldir.y, sa * ldir.x + ca * ldir.y, ldir.z);
+            vec3 ey = vec3 (0.0, 0.24, 0.9708);                 // the ring plane is tilted: it looks squashed to 0.24
+            vec3 N = vec3 (0.0, -0.9708, 0.24);
+            float ln = dot (Lr, N);
+            if (abs (ln) > 1.0e-3)
+            {
+                float t = -dot (P, N) / ln;
+                if (t > 0.0)
+                {
+                    vec3 H = P + Lr * t;
+                    float shadow = ringDensity (length (vec2 (H.x, dot (H, ey))));
+                    pc *= 1.0 - 0.75 * shadow * smoothstep (-0.1, 0.2, ndl);
+                }
+            }
+        }
         col = mix (col, pc, smoothstep (1.0, 0.985, r2));
     }
     // ring in front of the planet (lower half)
     if (ringBand > 0.0 && (rd.y <= 0.0 || r2 > 1.0) && !(rd.y > 0.0 && r2 > 1.0))
     {
-        float lightOnRing = 0.35 + 0.65 * clamp (0.5 + 0.5 * rd.x * sign (ldir.x), 0.0, 1.0);
         col = mix (col, ringCol * lightOnRing, ringBand * 0.85);
     }
     // two moons at different distances: their phases follow the sunlight
