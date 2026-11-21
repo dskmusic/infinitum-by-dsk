@@ -557,7 +557,7 @@ int runVideo (int argc, char** argv)
 
     // ---- melodic moods (second and only other preset before the finale)
     d.caption ("Melodic moods", "Fairytale and Film Score: themes that repeat, answer and resolve", "Estados de ánimo melódicos", "Cuento y Banda sonora: temas que se repiten, se responden y resuelven");
-    d.load ("Music Box");
+    d.loadName ("Sleeping Castle");   // sweet music-box theme, little ambient wash
     d.click (d.button ("Aurora"), 7.0);
 
     // ---- relax mode: full screen, nothing but the landscape (same music)

@@ -423,25 +423,6 @@ vec3 scene (vec2 uv)
         float pole = smoothstep (0.8, 0.93, abs (lat)) * smoothstep (1.0, 0.96, abs (lat)) * (0.6 + 0.4 * fbm3 (vec2 (lon * 3.0 + uTime * 0.05, lat * 20.0)));
         pc += vec3 (0.2, 1.0, 0.55) * pole * night * (0.06 + 0.15 * uPres[3]);   // a faint auroral oval
         // the rings' shadow across the planet
-        if (hasRing)
-        {   // true projection: from this point on the sphere, follow the sunlight back to the ring plane;
-            // where it crosses the rings, their density becomes shadow (curved with the sphere, with the same divisions)
-            vec3 P = vec3 (ca * n.x - sa * n.y, sa * n.x + ca * n.y, n.z);
-            vec3 Lr = vec3 (ca * ldir.x - sa * ldir.y, sa * ldir.x + ca * ldir.y, ldir.z);
-            vec3 ey = vec3 (0.0, 0.24, 0.9708);                 // the ring plane is tilted: it looks squashed to 0.24
-            vec3 N = vec3 (0.0, -0.9708, 0.24);
-            float ln = dot (Lr, N);
-            if (abs (ln) > 1.0e-3)
-            {
-                float t = -dot (P, N) / ln;
-                if (t > 0.0)
-                {
-                    vec3 H = P + Lr * t;
-                    float shadow = ringDensity (length (vec2 (H.x, dot (H, ey))));
-                    pc *= 1.0 - 0.75 * shadow * smoothstep (-0.1, 0.2, ndl);
-                }
-            }
-        }
         col = mix (col, pc, smoothstep (1.0, 0.985, r2));
     }
     // ring in front of the planet (lower half)
