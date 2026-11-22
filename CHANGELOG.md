@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-11-22
+
 ### Added
 - Realism pass on every landscape: bloom, cinematic camera, weather that changes with Evolution, day / night with Light.
 - Valley: golden hour, ridged mountains with snow and alpenglow, cloud shadows, forests, meadow, stream, birds, lens flare.
