@@ -4,6 +4,12 @@
 
 Instrumento gratuito VST3 / AU / Standalone de [DSK Music](https://www.dskmusic.com/infinitum/) para ambient, cine y meditación.
 **[Descarga](#descarga)** · [Página del producto](https://www.dskmusic.com/infinitum/) · [Última versión](https://github.com/dskmusic/infinitum-by-dsk/releases/latest)
+
+[![build](https://github.com/dskmusic/infinitum-by-dsk/actions/workflows/build.yml/badge.svg)](https://github.com/dskmusic/infinitum-by-dsk/actions/workflows/build.yml)
+[![release](https://img.shields.io/github/v/release/dskmusic/infinitum-by-dsk)](https://github.com/dskmusic/infinitum-by-dsk/releases/latest)
+[![descargas](https://img.shields.io/github/downloads/dskmusic/infinitum-by-dsk/total?label=descargas)](https://github.com/dskmusic/infinitum-by-dsk/releases)
+![licencia](https://img.shields.io/badge/licencia-GPLv3-blue)
+
 Pulsa **Play** y seis capas (un drone que muta, un pad, una textura granular, shimmer, viento y campanas) entran y salen solas,
 mientras la armonía, la luz y el espacio evolucionan despacio durante minutos u horas sin repetirse nunca.
 
