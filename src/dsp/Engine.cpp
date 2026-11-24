@@ -116,7 +116,7 @@ void Engine::reset (uint32_t s)
     {
         auto& vc = pad[(size_t) v];
         vc = PadVoice();
-        for (int k = 0; k < 4; ++k) vc.ph[k] = hashUni (seed, 200u + (uint32_t) (v * 4 + k));
+        for (int k = 0; k < 8; ++k) vc.ph[k] = hashUni (seed, 200u + (uint32_t) (v * 4 + k));
         vc.midi = v >= kChordVoices;
         vc.attackCoef = coefFor (vc.midi ? 0.25f : 2.2f, sr);
         vc.releaseCoef = coefFor (vc.midi ? 2.5f : 3.0f, sr);
@@ -662,7 +662,7 @@ void Engine::control()
             if (pvc.vib >= 1.0f) pvc.vib -= 1.0f;
             const float vb = vibDepth * fastSin (pvc.vib);
             const float d[4] { -cents + vb, cents * 0.15f + vb, cents + vb, -1200.0f + vb };
-            for (int k = 0; k < 4; ++k) pvc.inc[k] = juce::jmin (0.45f, f * std::exp2 (d[k] / 1200.0f) / (float) sr);
+            for (int k = 0; k < 8; ++k) pvc.inc[k] = juce::jmin (0.45f, f * std::exp2 (d[k] / 1200.0f) / (float) sr);
             const float wob = evoNoise (lyPad * 4 + 2, evoT * 2.0 + v * 17.0);
             const float cut = juce::jlimit (60.0f, (float) sr * 0.45f, f * (1.5f + 10.0f * tone * tone) * lightMul * (0.75f + 0.5f * wob) * (1.0f + swell * ch * 2.5f));
             for (auto& flt : pvc.f) flt.set (std::tan (kPi * cut / (float) sr), 1.5f);
@@ -1016,8 +1016,12 @@ void Engine::renderChunk (float* L, float* R, int n)
         energyAcc[lyBass] += 2.0f * bsl * bsl; energyAcc[lyMelody] += ml * ml + mr * mr;
 
         // ---- mix: layers (faded by the transport) + MIDI voices
-        float xl = (dl + padL + tl + wl + bl + rl + bsl + ml) * rg + sl + midiL;
-        float xr = (dr + padR + tr + wr + br + rr + bsl + mr) * rg + sr2 + midiR;
+        // stems (multi-out), one per layer: drone, pad, texture, shimmer, wind (+noise), bells, bass, melody. A stem with an output
+        // leaves the main mix (dry, no shared reverb: the user adds their own); the delay send still hears bells/texture/melody.
+        const float gL[8] { dl * rg, padL * rg, tl * rg, sl, (wl + rl) * rg, bl * rg, bsl * rg, ml * rg };
+        const float gR[8] { dr * rg, padR * rg, tr * rg, sr2, (wr + rr) * rg, br * rg, bsl * rg, mr * rg };
+        float xl = midiL, xr = midiR;
+        for (int k = 0; k < 8; ++k) if (! stemL[k]) { xl += gL[k]; xr += gR[k]; }
 
         // ---- delay (bells + texture send), cross feedback
         {
@@ -1084,6 +1088,14 @@ void Engine::renderChunk (float* L, float* R, int n)
         xr = fastTanh (xr * limGain * 1.05f) * 0.95f;
         if (! std::isfinite (xl) || ! std::isfinite (xr)) { xl = xr = 0; }
         L[i] = xl; R[i] = xr;
+        for (int k = 0; k < 8; ++k)
+            if (stemL[k])
+            {
+                const float sg = tailGain * mg;
+                const float a = fastTanh (gL[k] * sg * 1.05f) * 0.95f, b = fastTanh (gR[k] * sg * 1.05f) * 0.95f;
+                stemL[k][stemOff + i] = std::isfinite (a) ? a : 0.0f;
+                stemR[k][stemOff + i] = std::isfinite (b) ? b : 0.0f;
+            }
     }
 }
 
@@ -1125,6 +1137,7 @@ void Engine::process (float* L, float* R, int n, const juce::MidiBuffer& midi, c
     {
         std::fill (L, L + n, 0.0f);
         std::fill (R, R + n, 0.0f);
+        for (int k = 0; k < 8; ++k) if (stemL[k]) { std::fill (stemL[k], stemL[k] + n, 0.0f); std::fill (stemR[k], stemR[k] + n, 0.0f); }
         tele.running.store (false);
         tele.runGain.store (0);
         return;
@@ -1149,6 +1162,7 @@ void Engine::process (float* L, float* R, int n, const juce::MidiBuffer& midi, c
         }
         int chunk = juce::jmin (n - pos, ctrlLeft);
         if (it != midi.end()) chunk = juce::jmin (chunk, juce::jmax (1, (*it).samplePosition - pos));
+        stemOff = pos;
         renderChunk (L + pos, R + pos, chunk);
         ctrlLeft -= chunk;
         pos += chunk;

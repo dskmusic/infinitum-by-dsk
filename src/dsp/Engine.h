@@ -73,6 +73,8 @@ public:
     void reset (uint32_t seed);                    // full state reset (fresh, deterministic)
     void reseed (uint32_t seed);                   // live seed change: keeps voices and tails
     void process (float* L, float* R, int n, const juce::MidiBuffer& midi, const float* params, const HostInfo& host);
+    // multi-out: up to 8 stereo stems (one per layer) (null = that stem stays in the main mix). Set before every process(); buffers n samples long.
+    void setStem (int k, float* l, float* r) { stemL[(size_t) k] = l; stemR[(size_t) k] = r; }
     Telemetry tele;
     double getSampleRate() const { return sr; }
 
@@ -92,6 +94,8 @@ private:
     void playBell (int note, float vel, float pan);
     void spawnGrain();
 
+    std::array<float*, 8> stemL {}, stemR {};
+    int stemOff = 0;
     double sr = 48000.0;
     int maxBlock = 512;
     const float* p = nullptr;

@@ -6,7 +6,15 @@
 #endif
 
 InfinitumProcessor::InfinitumProcessor()
-    : AudioProcessor (BusesProperties().withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
+    : AudioProcessor (BusesProperties().withOutput ("Output", juce::AudioChannelSet::stereo(), true)
+                                       .withOutput ("Drone", juce::AudioChannelSet::stereo(), false)
+                                       .withOutput ("Pad", juce::AudioChannelSet::stereo(), false)
+                                       .withOutput ("Texture", juce::AudioChannelSet::stereo(), false)
+                                       .withOutput ("Shimmer", juce::AudioChannelSet::stereo(), false)
+                                       .withOutput ("Wind", juce::AudioChannelSet::stereo(), false)
+                                       .withOutput ("Bells", juce::AudioChannelSet::stereo(), false)
+                                       .withOutput ("Bass", juce::AudioChannelSet::stereo(), false)
+                                       .withOutput ("Melody", juce::AudioChannelSet::stereo(), false)),
       apvts (*this, nullptr, "INFINITUM", gx::createLayout())
 {
     for (auto& d : gx::paramDefs())
@@ -14,6 +22,7 @@ InfinitumProcessor::InfinitumProcessor()
         raw.push_back (apvts.getRawParameterValue (d.id));
         paramPtrs.push_back (apvts.getParameter (d.id));
     }
+    multiOut.store (gx::ui::Settings().multiOut());   // global setting, remembered between sessions
     clearMidiLearn();
     snapshot.assign (raw.size(), 0.0f);
 #if GX_HAS_BINARYDATA
@@ -43,13 +52,27 @@ void InfinitumProcessor::prepareToPlay (double sampleRate, int maxBlock)
 
 bool InfinitumProcessor::isBusesLayoutSupported (const BusesLayout& l) const
 {
-    return l.getMainOutputChannelSet() == juce::AudioChannelSet::stereo();
+    if (l.getMainOutputChannelSet() != juce::AudioChannelSet::stereo()) return false;
+    for (int i = 1; i < l.outputBuses.size(); ++i)   // extra outputs: off or stereo
+        if (! l.outputBuses.getReference (i).isDisabled() && l.outputBuses.getReference (i) != juce::AudioChannelSet::stereo()) return false;
+    return true;
 }
 
 void InfinitumProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midi)
 {
     juce::ScopedNoDenormals nd;
-    for (int c = 2; c < buffer.getNumChannels(); ++c) buffer.clear (c, 0, buffer.getNumSamples());
+    // multi-out: each enabled extra output gets its stem (Settings switch can force everything into the main mix)
+    float* stems[8][2] {};
+    for (int k = 0; k < 8; ++k)
+    {
+        auto* bus = getBus (false, k + 1);
+        if (multiOut.load() && bus != nullptr && bus->isEnabled() && bus->getNumberOfChannels() == 2)
+        {
+            auto b = getBusBuffer (buffer, false, k + 1);
+            stems[k][0] = b.getWritePointer (0); stems[k][1] = b.getWritePointer (1);
+        }
+        engine.setStem (k, stems[k][0], stems[k][1]);
+    }
     keyboardState.processNextMidiBuffer (midi, 0, buffer.getNumSamples(), true);
     for (const auto meta : midi)
     {
@@ -95,6 +118,7 @@ void InfinitumProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::M
             const float g = duckGain * duckGain * (3.0f - 2.0f * duckGain);
             buffer.getWritePointer (0)[i] *= g;
             buffer.getWritePointer (1)[i] *= g;
+            for (auto& st : stems) if (st[0]) { st[0][i] *= g; st[1][i] *= g; }
         }
         if (duck == Duck::Out && duckGain <= 0.0f) duck = Duck::In;      // next block takes the new parameters
         else if (duck == Duck::In && duckGain >= 1.0f) duck = Duck::None;
@@ -144,6 +168,7 @@ void InfinitumProcessor::getStateInformation (juce::MemoryBlock& mb)
     juce::Array<juce::var> mem;
     for (auto& m : memories) mem.add (m);
     v.getDynamicObject()->setProperty ("memories", mem);
+
     const auto json = juce::JSON::toString (v, true);
     mb.replaceAll (json.toRawUTF8(), json.getNumBytesAsUTF8());
 }

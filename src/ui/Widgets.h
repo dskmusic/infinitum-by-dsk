@@ -14,6 +14,8 @@ public:
     void setScale (float s) { props->setValue ("scale", s); props->saveIfNeeded(); }
     int animation() const { return props->getIntValue ("animation", 0); } // 0 full, 1 reduced, 2 off
     void setAnimation (int a) { props->setValue ("animation", a); props->saveIfNeeded(); }
+    bool multiOut() const { return props->getBoolValue ("multiOut", false); }   // separate outputs: off by default
+    void setMultiOut (bool b) { props->setValue ("multiOut", b); props->saveIfNeeded(); }
     bool aiMessages() const { return props->getBoolValue ("aiMessages", true); }
     void setAiMessages (bool b) { props->setValue ("aiMessages", b); props->saveIfNeeded(); }
     int historyLimit() const { return props->getIntValue ("historyLimit", 200); }

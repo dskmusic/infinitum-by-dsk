@@ -262,6 +262,7 @@ public:
 private:
     juce::ComboBox scaleBox, animBox, langBox;
     juce::ToggleButton gpuToggle { L ("Paisajes en alta calidad (tarjeta gráfica)", "High-quality landscapes (graphics card)") };
+    juce::ToggleButton multiToggle { L ("Una salida por capa (Drone, Pad, Texture, Shimmer, Wind, Bells, Bass, Melody): actívalas en tu DAW", "One output per layer (Drone, Pad, Texture, Shimmer, Wind, Bells, Bass, Melody): enable them in your DAW") };
     juce::ToggleButton fpsToggle { L ("Mostrar FPS en el paisaje", "Show FPS on the landscape") };
     juce::ToggleButton aiMsgs { L ("Mensajes de la IA al generar", "AI messages while generating") }, preview { L ("Al elegir un preset, empezar a sonar", "Start playing when a preset is selected") };
     juce::Slider historyLimit, starAmount;

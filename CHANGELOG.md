@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-24
+
+### Added
+- Optional multi-output: one stereo output per layer (Drone, Pad, Texture, Shimmer, Wind + noise, Bells, Bass, Melody). Off by default; switch in Settings (remembered between sessions), then enable the outputs in the DAW.
+
 ## [1.0.0] - 2026-11-22
 
 ### Added

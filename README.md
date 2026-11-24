@@ -33,6 +33,8 @@ their own, while harmony, light and space evolve slowly for minutes and hours wi
   flute themes that repeat, answer and resolve over the chords). The generator renders several candidates, checks them and keeps the most alive one.
 - **Long audio export:** 1 minute to 3 hours in WAV, FLAC or OGG. **Landscape video export:** an MP4 with the animated landscape and
   its sound, ready for YouTube (uses the free ffmpeg; Infinitum finds it or helps you install it).
+- **Multi-output (optional):** one stereo output per layer (Drone, Pad, Texture, Shimmer, Wind + noise, Bells, Bass, Melody) to mix each one on its own
+  track. Off by default (single stereo output); turn it on in Settings and enable the outputs in your DAW.
 - **Sleep mode** and session timer, **432 Hz** tuning, **noise generator** (pink, brown, white, ocean waves, vinyl).
 - **8 quick memories** with smooth 2-second crossfades, preset browser with tags and favourites, A/B, undo/redo, MIDI learn,
   and every preset change is click-free.
@@ -72,6 +74,8 @@ All files and release notes: [latest release](https://github.com/dskmusic/infini
 1. Load **Infinitum** as an instrument and press **Play** (in the plugin, or your DAW's transport).
 2. Turn **Evolution**, **Density**, **Light** and **Space**, pick a landscape, or press **GENERATE** on the Generator page.
 3. Long render for videos or meditation: **Export** page → duration → WAV, FLAC or OGG.
+
+4. Separate tracks per layer: **Settings** → *One output per layer*, then enable the extra outputs in your DAW (FL Studio: plugin wrapper → Outputs).
 
 Presets and settings are stored in `Documents/DSK Music/Infinitum/`.
 

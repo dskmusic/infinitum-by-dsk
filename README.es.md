@@ -33,6 +33,8 @@ mientras la armonía, la luz y el espacio evolucionan despacio durante minutos u
   o flauta suave que se repiten, se responden y resuelven sobre los acordes). El generador prueba varios candidatos, los comprueba y se queda con el más vivo.
 - **Exportación de audio largo:** de 1 minuto a 3 horas en WAV, FLAC u OGG. **Vídeo del paisaje:** un MP4 con el paisaje animado y su sonido,
   listo para YouTube (usa ffmpeg, gratuito; Infinitum lo encuentra o te ayuda a instalarlo).
+- **Multisalida (opcional):** una salida estéreo por capa (Drone, Pad, Texture, Shimmer, Wind + ruido, Bells, Bass, Melody) para mezclar cada una
+  en su pista. Desactivada por defecto (una sola salida estéreo); se activa en Ajustes y se habilitan las salidas en tu DAW.
 - **Modo Dormir** y temporizador, afinación a **432 Hz**, **generador de ruido** (rosa, marrón, blanco, olas, vinilo).
 - **8 memorias rápidas** con fundido de 2 segundos, navegador de presets con etiquetas y favoritos, A/B, deshacer/rehacer, MIDI learn,
   y cambios de preset sin chasquidos.
@@ -63,6 +65,8 @@ Todos los archivos y notas: [última versión](https://github.com/dskmusic/infin
 1. Carga **Infinitum** como instrumento y pulsa **Play** (en el plugin o en el transporte de tu DAW).
 2. Gira **Evolución**, **Densidad**, **Luz** y **Espacio**, elige un paisaje o pulsa **GENERAR** en la página Generador.
 3. Render largo para vídeos o meditación: página **Exportar** → duración → WAV, FLAC u OGG.
+
+4. Pistas separadas por capa: **Ajustes** → *Una salida por capa* y habilita las salidas extra en tu DAW (FL Studio: wrapper del plugin → Outputs).
 
 Los presets y ajustes se guardan en `Documentos/DSK Music/Infinitum/`.
 

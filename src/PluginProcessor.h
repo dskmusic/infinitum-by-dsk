@@ -62,6 +62,8 @@ public:
     void clearMidiLearn() { for (auto& c : ccMap) c.store (-1); }
     // UI-injected MIDI (on-screen keyboard)
     juce::MidiKeyboardState keyboardState;
+    // Multi-out: Drone / Pad / Ambient / Bells go to their own outputs when the host enables them (Settings page, remembered between sessions)
+    std::atomic<bool> multiOut { false };
 
 private:
     void pushScope (const float* L, const float* R, int n);
